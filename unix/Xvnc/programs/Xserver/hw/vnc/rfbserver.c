@@ -1934,10 +1934,6 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
   REGION_SUBTRACT(pScreen, &cl->modifiedRegion, &cl->modifiedRegion,
                   &updateCopyRegion);
 
-  REGION_EMPTY(pScreen, &cl->requestedRegion);
-  REGION_EMPTY(pScreen, &cl->copyRegion);
-  cl->copyDX = 0;
-  cl->copyDY = 0;
 
   /*
    * Now send the update.
@@ -2052,6 +2048,24 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
        pixels in this update, we send a 1-pixel FBU rather than an empty
        one. */
     if (REGION_NUM_RECTS(updateRegion) == 0) {
+
+      /*
+       * Don't send an FBU at all for the case when the interframe
+       * detects no change.
+       */
+      if (!sendCursorShape && REGION_NUM_RECTS(&updateCopyRegion) == 0) {
+        if (sendCursorPos) {
+          cl->cursorWasMoved = FALSE;
+          if (!rfbSendCursorPos(cl, pScreen))
+            goto abort;
+        }
+
+        REGION_UNINIT(pScreen, updateRegion);
+        REGION_UNINIT(pScreen, &updateCopyRegion);
+        rfbUncorkSock(cl->sock);
+        return TRUE;
+      }
+
       BoxRec box;
       box.x1 = box.y1 = 0;
       box.x2 = box.y2 = 1;
@@ -2060,6 +2074,11 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
       redundantUpdate = TRUE;
     }
   }
+
+  REGION_EMPTY(pScreen, &cl->requestedRegion);
+  REGION_EMPTY(pScreen, &cl->copyRegion);
+  cl->copyDX = 0;
+  cl->copyDY = 0;
 
   if (!rfbSendRTTPing(cl))
     goto abort;
