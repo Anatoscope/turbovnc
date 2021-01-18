@@ -1,0 +1,67 @@
+---
+stages:
+  - build-upload
+  - release
+
+variables:
+  LIBJPEG_VERSION: "1.5.2"
+  DESTINATION: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/$CI_PROJECT_NAME/"
+
+# Resulting file example: turbovnc_2.2.6-anatoscope-1.0.0_amd64.deb
+# Format: turbovnc_<turbovnc_version>-anatoscope-<turbovnc_anatoscope_version>_amd64.deb
+# Version showed in package registry: turbovnc_anatoscope_version
+build-upload:
+  stage: build-upload
+  image: registry.gitlab.com/anatoscope/interne/system/anatodocker/ci:latest
+  only:
+    - master
+  cache:
+    paths:
+      - libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
+      - .ccache
+  script:
+    - |
+      # Build deps.
+      apt-get update
+      apt-get install -y --no-install-recommends default-jdk libpam-dev
+      [ -r "libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb" ] || curl -fsSL -O https://sourceforge.net/projects/libjpeg-turbo/files/${LIBJPEG_VERSION}/libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
+      dpkg -i libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
+      # Build deb package.
+      src_dir=$PWD
+      export CCACHE_DIR="$src_dir"/.ccache
+      mkdir -p "$CCACHE_DIR"
+      ccache -M 100M
+      build_dir=$(mktemp -d)
+      cd "$build_dir"
+      cmake -DCMAKE_C{,XX}_COMPILER_LAUNCHER=ccache "$src_dir"
+      make -j deb
+      # Extract version number.
+      PKG_FILE_NAME="$(ls turbovnc_*.deb | head -n1)"
+      FULL_VERSION="$(echo "$PKG_FILE_NAME" | sed -nre "s/turbovnc_(.*)_[^_]+\\.deb/\\1/p")"
+      TURBOVNC_ANATOSCOPE_VERSION="$(echo "$PKG_FILE_NAME" | sed -nre "s/turbovnc_.*-([[:digit:].]+)_[^_]+\\.deb/\\1/p")"
+      [ -n "$FULL_VERSION" -a -n "$TURBOVNC_ANATOSCOPE_VERSION" ]
+      # Upload to GitLab as a generic package.
+      http_response_file=$(mktemp)
+      http_status="$(curl --silent --write-out "%{http_code}" --output "$http_response_file" --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$PKG_FILE_NAME" "$DESTINATION$TURBOVNC_ANATOSCOPE_VERSION/")"
+      cat $http_response_file
+      echo $http_status
+      [[ "$http_status" =~ 2[[:digit:]]{2} ]]
+      # Save version number and packaage file name for the next stage.
+      echo "FULL_VERSION=\"$FULL_VERSION\"" > "$src_dir"/build-upload.env
+      echo "TURBOVNC_ANATOSCOPE_VERSION=\"$TURBOVNC_ANATOSCOPE_VERSION\"" >> "$src_dir"/build-upload.env
+      echo "PKG_FILE_NAME=\"$PKG_FILE_NAME\"" >> "$src_dir"/build-upload.env
+  artifacts:
+    reports:
+      dotenv: build-upload.env
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  only:
+    - master
+  variables:
+    GIT_STRATEGY: none
+  script:
+    - |
+      [ -n "$FULL_VERSION" -a -n "$PKG_FILE_NAME" ]
+      release-cli create --tag-name "$FULL_VERSION" --name "Release $FULL_VERSION" --description "Release $FULL_VERSION (Anatoscope fork version)" --assets-link "{\"name\": \"$PKG_FILE_NAME\", \"url\": \"$DESTINATION$TURBOVNC_ANATOSCOPE_VERSION/$PKG_FILE_NAME\"}"
