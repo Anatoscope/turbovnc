@@ -474,6 +474,22 @@ typedef struct rfbClientRec {
 #endif
   wsCtx     *wsctx;
 
+  /* Adaptive quality based on desired delay */
+  CARD32 staleFBUThresholdMs;       /* if FBU is waiting for longer then
+                                       decrease the quality (0 - disabled) */
+  OsTimerPtr staleUpdateTimer;      /* decrease the quality if FBU is held for
+                                       longer than this time period */
+  OsTimerPtr usualUpdateTimer;      /* note that FBU is held for at least as
+                                       usual */
+  OsTimerPtr qualReassessTimer;     /* up the quality if FBU is held for less
+                                       than usual */
+  OsTimerPtr firstQualityAdaptTimer;
+  Bool staleUpdateTimerRunning;
+  Bool usualUpdateTimerRunning;
+  Bool qualReassessTimerRunning;
+  Bool firstQualityAdaptTimerRunning;
+  Bool firstQualityAdaptAllowed;
+
   /* Extended input device support */
   rfbDevInfo devices[MAXDEVICES];
   int numDevices;
