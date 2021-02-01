@@ -58,6 +58,7 @@ Bool rfbDontDisconnect = TRUE;
 Bool rfbViewOnly = FALSE;  /* run server in view only mode - Ehud Karni SW */
 Bool rfbSyncCutBuffer = TRUE;
 Bool rfbCongestionControl = TRUE;
+Bool rfbAutoQuality = TRUE;
 double rfbAutoLosslessRefresh = 0.0;
 int rfbALRQualityLevel = -1;
 int rfbALRSubsampLevel = TVNC_1X;
@@ -74,6 +75,27 @@ Bool rfbMT = TRUE;
 Bool rfbMT = FALSE;
 #endif
 int rfbNumThreads = 0;
+
+/*
+ * If FBU is waiting for longer than this then decrease the quality.
+ */
+static const CARD32 ADAPT_STALE_FBU_THRESHOLD_MS = 200;
+
+/*
+ * If FBU is waiting for shorter than this during
+ * reassessment time then increase the quality.
+ */
+static const CARD32 ADAPT_USUAL_FBU_THRESHOLD_MS = 100;
+
+/*
+ * Time for taking a decision about increasing the quality.
+ */
+static const CARD32 ADAPT_REASSES_TIME_MS = 1000;
+
+/*
+ * Time before start measuring for adapting the quality.
+ */
+static const CARD32 BEFORE_FIRST_ADAPT_TIME_MS = 2000;
 
 static rfbClientPtr rfbNewClient(int sock);
 static void rfbProcessClientProtocolVersion(rfbClientPtr cl);
@@ -510,6 +532,10 @@ void rfbClientConnectionGone(rfbClientPtr cl)
   TimerFree(cl->deferredUpdateTimer);
   TimerFree(cl->updateTimer);
   TimerFree(cl->congestionTimer);
+  TimerFree(cl->staleUpdateTimer);
+  TimerFree(cl->usualUpdateTimer);
+  TimerFree(cl->qualReassessTimer);
+  TimerFree(cl->firstQualityAdaptTimer);
 
 #ifdef XVNC_AuthPAM
   rfbPAMEnd(cl);
@@ -925,6 +951,10 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       cl->tightSubsampLevel = TIGHT_DEFAULT_SUBSAMP;
       cl->tightQualityLevel = -1;
       cl->imageQualityLevel = -1;
+
+      if (rfbCongestionControl && rfbAutoQuality &&
+          cl->firstQualityAdaptAllowed)
+        cl->qualityIsSetByClient = TRUE;
 
       for (i = 0; i < msg.se.nEncodings; i++) {
         READ((char *)&enc, 4)
@@ -1756,6 +1786,84 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 }
 
 
+static void stepQualityLevel(rfbClientPtr cl, Bool stepUp)
+{
+  if (cl->imageQualityLevel != -1) {
+    if ((stepUp && cl->imageQualityLevel < 9) ||
+        (!stepUp && cl->imageQualityLevel > 0)) {
+      const int newLevel = cl->imageQualityLevel + (stepUp ? 1 : -1);
+      cl->tightQualityLevel = JPEG_QUAL[newLevel];
+      cl->tightSubsampLevel = JPEG_SUBSAMP[newLevel];
+      cl->imageQualityLevel = newLevel;
+      if (cl->preferredEncoding == rfbEncodingTight)
+        rfbLog("Using JPEG subsampling %d, Q%d for client %s\n",
+               cl->tightSubsampLevel, cl->tightQualityLevel, cl->host);
+      else
+        rfbLog("Using image quality level %d for client %s\n",
+               cl->imageQualityLevel, cl->host);
+    }
+  } else {
+    rfbLog("adaptive quality for this encoding is not implemented\n");
+  }
+}
+
+
+/*
+ * An FBU is waiting for the congestion to clear for too long.
+ */
+
+static CARD32 staleUpdateCallback(OsTimerPtr timer, CARD32 time, pointer arg)
+{
+  rfbClientPtr cl = (rfbClientPtr)arg;
+  cl->staleUpdateTimerRunning = FALSE;
+  stepQualityLevel(cl, FALSE);
+  cl->qualReassessTimerRunning = FALSE;
+  TimerCancel(cl->qualReassessTimer);
+  return 0;
+}
+
+
+/*
+ * An FBU is waiting for the congestion to clear for just the right amount.
+ */
+
+static CARD32 usualUpdateCallback(OsTimerPtr timer, CARD32 time, pointer arg)
+{
+  rfbClientPtr cl = (rfbClientPtr)arg;
+  cl->usualUpdateTimerRunning = FALSE;
+  cl->qualReassessTimerRunning = FALSE;
+  TimerCancel(cl->qualReassessTimer);
+  return 0;
+}
+
+
+/*
+ * If the FBUs were waiting less than usual during this time then increase
+ * the quality.
+ */
+
+static CARD32 qualReassessCallback(OsTimerPtr timer, CARD32 time, pointer arg)
+{
+  rfbClientPtr cl = (rfbClientPtr)arg;
+  cl->qualReassessTimerRunning = FALSE;
+  stepQualityLevel(cl, TRUE);
+  return 0;
+}
+
+
+/*
+ * When ended the wait before the first measures for quality adaptation.
+ */
+
+static CARD32 firstQualityAdaptCallback(OsTimerPtr timer, CARD32 time, pointer arg)
+{
+  rfbClientPtr cl = (rfbClientPtr)arg;
+  cl->firstQualityAdaptTimerRunning = FALSE;
+  cl->firstQualityAdaptAllowed = TRUE;
+  return 0;
+}
+
+
 /*
  * rfbSendFramebufferUpdate - send the currently pending framebuffer update to
  * the RFB client.
@@ -1799,8 +1907,36 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
 
   if (rfbCongestionControl && rfbIsCongested(cl)) {
     cl->updateTimer = TimerSet(cl->updateTimer, 0, 50, updateCallback, cl);
+    /* if the quality wasn't set after init */
+    if (rfbAutoQuality && !cl->qualityIsSetByClient) {
+      if (cl->firstQualityAdaptAllowed) {
+        if (!cl->staleUpdateTimerRunning) {
+          cl->staleUpdateTimerRunning = TRUE;
+          cl->staleUpdateTimer =
+              TimerSet(cl->staleUpdateTimer, 0,
+                       ADAPT_STALE_FBU_THRESHOLD_MS, staleUpdateCallback, cl);
+        }
+        if (!cl->usualUpdateTimerRunning && cl->qualReassessTimerRunning) {
+          cl->usualUpdateTimerRunning = TRUE;
+          cl->usualUpdateTimer =
+              TimerSet(cl->usualUpdateTimer, 0,
+                       ADAPT_USUAL_FBU_THRESHOLD_MS, usualUpdateCallback, cl);
+        }
+      } else {
+        if (!cl->firstQualityAdaptTimerRunning) {
+          cl->firstQualityAdaptTimerRunning = TRUE;
+          cl->firstQualityAdaptTimer =
+                TimerSet(cl->firstQualityAdaptTimer, 0,
+                         BEFORE_FIRST_ADAPT_TIME_MS, firstQualityAdaptCallback, cl);
+        }
+      }
+    }
     return TRUE;
   }
+  cl->staleUpdateTimerRunning = FALSE;
+  TimerCancel(cl->staleUpdateTimer);
+  cl->usualUpdateTimerRunning = FALSE;
+  TimerCancel(cl->usualUpdateTimer);
 
   /* In continuous mode, we will be outputting at least three distinct
      messages.  We need to aggregate these in order to not clog up TCP's
@@ -2180,6 +2316,32 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
         if (!rfbSendRectEncodingTight(cl, x, y, w, h))
           goto abort;
         break;
+    }
+  }
+
+  if (rfbCongestionControl && rfbAutoQuality && !cl->qualityIsSetByClient) {
+    /*
+     * If the update is substantial then start assessing the delay to determine
+     * whether to increase the quality.
+     */
+    const float updRegionW = updateRegion->extents.x2 - updateRegion->extents.x1;
+    const float updRegionH = updateRegion->extents.y2 - updateRegion->extents.y1;
+    if ((pScreen->width / updRegionW) * (pScreen->height / updRegionH) < 5) {
+      if (cl->firstQualityAdaptAllowed) {
+        if (!cl->qualReassessTimerRunning) {
+          cl->qualReassessTimerRunning = TRUE;
+          cl->qualReassessTimer =
+              TimerSet(cl->qualReassessTimer, 0,
+                       ADAPT_REASSES_TIME_MS, qualReassessCallback, cl);
+        }
+      } else {
+        if (!cl->firstQualityAdaptTimerRunning) {
+          cl->firstQualityAdaptTimerRunning = TRUE;
+          cl->firstQualityAdaptTimer =
+                TimerSet(cl->firstQualityAdaptTimer, 0,
+                         BEFORE_FIRST_ADAPT_TIME_MS, firstQualityAdaptCallback, cl);
+        }
+      }
     }
   }
 
