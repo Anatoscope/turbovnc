@@ -577,6 +577,23 @@ typedef struct _rfbInteractionCapsMsg {
 #define rfbEncodingLastRect             0xFFFFFF20  /* -224 */
 #define rfbEncodingNewFBSize            0xFFFFFF21  /* -223 */
 
+#define rfbEncodingMaxDelay20           0xFFFFFCF0  /* -784 */
+#define rfbEncodingMaxDelay40           0xFFFFFCF1  /* -783 */
+#define rfbEncodingMaxDelay60           0xFFFFFCF2  /* -782 */
+#define rfbEncodingMaxDelay80           0xFFFFFCF3  /* -781 */
+#define rfbEncodingMaxDelay100          0xFFFFFCF4  /* -780 */
+#define rfbEncodingMaxDelay120          0xFFFFFCF5  /* -779 */
+#define rfbEncodingMaxDelay140          0xFFFFFCF6  /* -778 */
+#define rfbEncodingMaxDelay160          0xFFFFFCF7  /* -777 */
+#define rfbEncodingMaxDelay180          0xFFFFFCF8  /* -776 */
+#define rfbEncodingMaxDelay200          0xFFFFFCF9  /* -775 */
+#define rfbEncodingMaxDelay220          0xFFFFFCFA  /* -774 */
+#define rfbEncodingMaxDelay240          0xFFFFFCFB  /* -773 */
+#define rfbEncodingMaxDelay260          0xFFFFFCFC  /* -772 */
+#define rfbEncodingMaxDelay280          0xFFFFFCFD  /* -771 */
+#define rfbEncodingMaxDelay300          0xFFFFFCFE  /* -770 */
+#define rfbEncodingMaxDelay320          0xFFFFFCFF  /* -769 */
+
 #define rfbEncodingQualityLevel0        0xFFFFFFE0  /* -32 */
 #define rfbEncodingQualityLevel1        0xFFFFFFE1  /* -31 */
 #define rfbEncodingQualityLevel2        0xFFFFFFE2  /* -30 */
@@ -597,6 +614,7 @@ typedef struct _rfbInteractionCapsMsg {
 #define sig_rfbEncodingNewFBSize         "NEWFBSIZ"
 #define sig_rfbEncodingFineQualityLevel0 "FINEQLVL"
 #define sig_rfbEncodingSubsamp1X         "SSAMPLVL"
+#define sig_rfbEncodingMaxDelay20        "MAXDELAY"
 #define sig_rfbEncodingQualityLevel0     "JPEGQLVL"
 #define sig_rfbEncodingGII               "GII_____"
 

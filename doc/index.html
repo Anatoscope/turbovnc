@@ -137,6 +137,10 @@
             <li class="Itemize-3 hd">
                 <a href="#hd007005" class="hd">7.5 Multithreading</a>
             </li>
+            <li class="Itemize-3 hd">
+                <a href="#hd007006" class="hd">7.6 Automatic Quality</a>
+            </li>
+
         </ul>
     </li>
     <li class="Itemize-1 hd">
@@ -1664,6 +1668,30 @@ as there are cores on the TurboVNC host (up to a maximum of 4), but you
 can set the <code>TVNC_NTHREADS</code> environment variable or pass an 
 argument of <code>-nthreads</code> to <code>vncserver</code> to override 
 this.</p>
+
+
+
+<h2 id="hd007006">7.6&nbsp;Automatic Quality</h2>
+
+<p><a name="AutomaticQuality"></a></p>
+
+<p>To automatically adapt the quality if the image to the available
+bandwidth there is an alternative to the <code>JPEGQLVL</code>
+extension: the <code>MAXDELAY</code> extension. Instead of 9 quality
+levels it has 15 timing levels which roughly correspond to the value of
+the delay that is induced by the network congestion created by the
+framebuffer updates. Quality is gradually increased if the delay drops
+below half of the specified level. Quality is gradually decreased if the
+delay exceeds the specified level. Internally the 9 quality levels of
+the <code>JPEGQLVL</code> extension are used to encode the framebuffer
+updates.</p>
+
+<p>Client may switch at any time between using <code>JPEGQLVL</code>
+extension and <code>MAXDELAY</code> extensions by setting a
+corresponding pseudoencoding.</p>
+
+<p>Flow control must be active on the server to support
+<code>MAXDELAY</code> extension.</p>
 
 <p><br /></p>
 
