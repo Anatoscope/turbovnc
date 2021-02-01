@@ -3,6 +3,7 @@
  */
 
 /*
+ *  Copyright (C) 2021 AnatoScope SA.  All Rights Reserved.
  *  Copyright (C) 2012, 2014, 2017-2018, 2021 D. R. Commander.
  *                                            All Rights Reserved.
  *  Copyright (C) 2011 Pierre Ossman for Cendio AB.  All Rights Reserved.
@@ -172,6 +173,11 @@ static void HandleRTTPong(rfbClientPtr cl, RTTInfo *rttInfo)
      (and even approve of) bursts. */
   if (rtt < cl->minRTT)
     cl->minRTT = rtt;
+
+  /* As a wire latency we take the minimal latency over a longer period */
+  for (int i = 0; i != BASE_RTT_WINDOW - 1; ++i)
+      cl->RTT[i] = cl->RTT[i + 1];
+  cl->RTT[BASE_RTT_WINDOW - 1] = cl->minRTT;
 }
 
 
@@ -217,6 +223,14 @@ static void UpdateCongestion(rfbClientPtr cl)
   struct tcp_info tcp_info;
   socklen_t tcp_info_length;
 #endif
+
+  unsigned long long sumBaseRTT = 0;
+#define STATIC_ASSERT_UpdateCongestion(cond) switch(0){case 0:case (cond):;}
+  STATIC_ASSERT_UpdateCongestion(BASE_RTT_WINDOW < 1ULL << (sizeof(sumBaseRTT) - sizeof(cl->RTT[0])) * 8)
+#undef STATIC_ASSERT_UpdateCongestion
+  for (int i = 0; i != BASE_RTT_WINDOW; ++i)
+    sumBaseRTT += cl->RTT[i];
+  cl->baseRTT = sumBaseRTT / BASE_RTT_WINDOW;
 
   if (!cl->seenCongestion)
     return;
@@ -317,9 +331,7 @@ Bool rfbIsCongested(rfbClientPtr cl)
   /* Idle for too long? (and no data on the wire)
 
      FIXME: This should really just be one baseRTT, but we're getting
-            problems with triggering the idle timeout on each update.
-            Maybe we need to use a moving average for the wire latency
-            instead of baseRTT. */
+            problems with triggering the idle timeout on each update. */
   if ((cl->sentOffset == cl->ackedOffset) &&
       (sockIdleTime > 2 * cl->baseRTT)) {
 
