@@ -494,6 +494,8 @@ static rfbClientPtr rfbNewClient(int sock)
     IdleTimerCancel();
 
   cl->baseRTT = cl->minRTT = (unsigned)-1;
+  for (int i = 0; i != BASE_RTT_WINDOW; ++i)
+    cl->RTT[i] = (unsigned)-1;
   gettimeofday(&cl->lastWrite, NULL);
   REGION_INIT(pScreen, &cl->cuRegion, NullBox, 0);
 

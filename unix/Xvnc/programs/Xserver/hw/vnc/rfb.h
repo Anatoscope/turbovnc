@@ -4,6 +4,7 @@
 
 /*
  *  Copyright (C) 2010-2021 D. R. Commander.  All Rights Reserved.
+ *  Copyright (C) 2021 AnatoScope SA.  All Rights Reserved.
  *  Copyright (C) 2011 Gernot Tenchio
  *  Copyright (C) 2011 Joel Martin
  *  Copyright (C) 2010 University Corporation for Atmospheric Research.
@@ -97,6 +98,8 @@
 #define MAX_MAX_CONNECTIONS 500
 
 #define DEFAULT_MAX_CLIENT_WAIT 20000
+
+#define BASE_RTT_WINDOW 64
 
 
 /*
@@ -433,6 +436,7 @@ typedef struct rfbClientRec {
   char fenceData[64];
 
   unsigned baseRTT;
+  unsigned RTT[BASE_RTT_WINDOW];
   unsigned congWindow;
   int ackedOffset, sentOffset, sockOffset;
   unsigned minRTT;
