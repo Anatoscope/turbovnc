@@ -90,6 +90,8 @@
 #define DEFAULT_MAX_CONNECTIONS 100
 #define MAX_MAX_CONNECTIONS 500
 
+#define BASE_RTT_WINDOW 64
+
 
 /*
  * Per-screen (framebuffer) structure.  There is only one of these, since we
@@ -424,6 +426,7 @@ typedef struct rfbClientRec {
   char fenceData[64];
 
   unsigned baseRTT;
+  unsigned RTT[BASE_RTT_WINDOW];
   unsigned congWindow;
   int ackedOffset, sentOffset, sockOffset;
   unsigned minRTT;
