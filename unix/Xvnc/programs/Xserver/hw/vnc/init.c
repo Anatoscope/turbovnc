@@ -5,6 +5,7 @@
  */
 
 /*
+ *  Copyright (C) 2021 AnatoScope SA.  All Rights Reserved.
  *  Copyright (C) 2009-2020 D. R. Commander.  All Rights Reserved.
  *  Copyright (C) 2010 University Corporation for Atmospheric Research.
  *                     All Rights Reserved.
@@ -348,6 +349,11 @@ int ddxProcessArgument(int argc, char *argv[], int i)
 
   if (strcasecmp(argv[i], "-noflowcontrol") == 0) {
     rfbCongestionControl = FALSE;
+    return 1;
+  }
+
+  if (strcasecmp(argv[i], "-noautoquality") == 0) {
+    rfbAutoQuality = FALSE;
     return 1;
   }
 
@@ -1607,6 +1613,8 @@ void ddxUseMsg(void)
   ErrorF("                       that use the (obsolete) X cut buffer\n");
   ErrorF("-noflowcontrol         when continuous updates are enabled, send updates whether\n");
   ErrorF("                       or not the client is ready to receive them\n");
+  ErrorF("-noautoquality         disable automatic quality adaptation,\n");
+  ErrorF("                       needs flow control to be enabled\n");
   ErrorF("-noprimarysync         disable clipboard synchronization with the PRIMARY\n");
   ErrorF("                       selection (typically used when pasting with the middle\n");
   ErrorF("                       mouse button)\n");
