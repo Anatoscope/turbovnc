@@ -4,6 +4,7 @@
 
 /*
  *  Copyright (C) 2009-2021 D. R. Commander.  All Rights Reserved.
+ *  Copyright (C) 2021 AnatoScope SA.  All Rights Reserved.
  *  Copyright (C) 2010 University Corporation for Atmospheric Research.
  *                     All Rights Reserved.
  *  Copyright (C) 2005-2008 Sun Microsystems, Inc.  All Rights Reserved.
@@ -74,6 +75,17 @@ Bool rfbMT = TRUE;
 Bool rfbMT = FALSE;
 #endif
 int rfbNumThreads = 0;
+
+
+/*
+ * Time for taking a decision about increasing the quality.
+ */
+static const CARD32 ADAPT_REASSES_TIME_MS = 1000;
+
+/*
+ * Time before start measuring for adapting the quality.
+ */
+static const CARD32 BEFORE_FIRST_ADAPT_TIME_MS = 2000;
 
 static rfbClientPtr rfbNewClient(int sock);
 static void rfbProcessClientProtocolVersion(rfbClientPtr cl);
@@ -512,6 +524,10 @@ void rfbClientConnectionGone(rfbClientPtr cl)
   TimerFree(cl->deferredUpdateTimer);
   TimerFree(cl->updateTimer);
   TimerFree(cl->congestionTimer);
+  TimerFree(cl->staleUpdateTimer);
+  TimerFree(cl->usualUpdateTimer);
+  TimerFree(cl->qualReassessTimer);
+  TimerFree(cl->firstQualityAdaptTimer);
 
 #ifdef XVNC_AuthPAM
   rfbPAMEnd(cl);
@@ -764,18 +780,19 @@ static void rfbProcessClientInitMessage(rfbClientPtr cl)
 /* Update these constants on changing capability lists below! */
 #define N_SMSG_CAPS  0
 #define N_CMSG_CAPS  0
-#define N_ENC_CAPS  17
+#define N_ENC_CAPS  18
 
 void rfbSendInteractionCaps(rfbClientPtr cl)
 {
   rfbInteractionCapsMsg intr_caps;
+  const int nEncCaps = rfbCongestionControl ? N_ENC_CAPS : N_ENC_CAPS - 1;
   rfbCapabilityInfo enc_list[N_ENC_CAPS];
   int i;
 
   /* Fill in the header structure sent prior to capability lists. */
   intr_caps.nServerMessageTypes = Swap16IfLE(N_SMSG_CAPS);
   intr_caps.nClientMessageTypes = Swap16IfLE(N_CMSG_CAPS);
-  intr_caps.nEncodingTypes = Swap16IfLE(N_ENC_CAPS);
+  intr_caps.nEncodingTypes = Swap16IfLE(nEncCaps);
   intr_caps.pad = 0;
 
   /* Supported server->client message types. */
@@ -819,6 +836,8 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   SetCapInfo(&enc_list[i++],  rfbEncodingZYWRLE,         rfbTridiaVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingTight,          rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingCompressLevel0, rfbTightVncVendor);
+  if (rfbCongestionControl)
+    SetCapInfo(&enc_list[i++],  rfbEncodingMaxDelay20,     rfbTurboVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingQualityLevel0,  rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingFineQualityLevel0, rfbTurboVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingSubsamp1X,         rfbTurboVncVendor);
@@ -827,8 +846,8 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   SetCapInfo(&enc_list[i++],  rfbEncodingPointerPos,     rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingLastRect,       rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbGIIServer,              rfbGIIVendor);
-  if (i != N_ENC_CAPS) {
-    rfbLog("rfbSendInteractionCaps: assertion failed, i != N_ENC_CAPS\n");
+  if (i != nEncCaps) {
+    rfbLog("rfbSendInteractionCaps: assertion failed, i != nEncCaps\n");
     rfbCloseClient(cl);
     return;
   }
@@ -837,7 +856,7 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   if (WriteExact(cl, (char *)&intr_caps,
                  sz_rfbInteractionCapsMsg) < 0 ||
       WriteExact(cl, (char *)&enc_list[0],
-                 sz_rfbCapabilityInfo * N_ENC_CAPS) < 0) {
+                 sz_rfbCapabilityInfo * nEncCaps) < 0) {
     rfbLogPerror("rfbSendInteractionCaps: write");
     rfbCloseClient(cl);
     return;
@@ -1084,8 +1103,19 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               cl->tightSubsampLevel = enc & 0xFF;
               rfbLog("Using JPEG subsampling %d for client %s\n",
                      cl->tightSubsampLevel, cl->host);
+            } else if (enc >= (CARD32)rfbEncodingMaxDelay20 &&
+                       enc <= (CARD32)rfbEncodingMaxDelay320) {
+              if (rfbCongestionControl) {
+                cl->staleFBUThresholdMs = ((enc & 0x0F) + 1) * 20;
+                if (cl->imageQualityLevel == -1) {
+                  cl->tightQualityLevel = JPEG_QUAL[5];
+                  cl->tightSubsampLevel = JPEG_SUBSAMP[5];
+                  cl->imageQualityLevel = 5;
+                }
+              }
             } else if (enc >= (CARD32)rfbEncodingQualityLevel0 &&
                        enc <= (CARD32)rfbEncodingQualityLevel9) {
+              cl->staleFBUThresholdMs = 0;
               cl->tightQualityLevel = JPEG_QUAL[enc & 0x0F];
               cl->tightSubsampLevel = JPEG_SUBSAMP[enc & 0x0F];
               cl->imageQualityLevel = enc & 0x0F;
@@ -1758,6 +1788,84 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 }
 
 
+static void stepQualityLevel(rfbClientPtr cl, Bool stepUp)
+{
+  if (cl->imageQualityLevel != -1) {
+    if ((stepUp && cl->imageQualityLevel < 9) ||
+        (!stepUp && cl->imageQualityLevel > 0)) {
+      const int newLevel = cl->imageQualityLevel + (stepUp ? 1 : -1);
+      cl->tightQualityLevel = JPEG_QUAL[newLevel];
+      cl->tightSubsampLevel = JPEG_SUBSAMP[newLevel];
+      cl->imageQualityLevel = newLevel;
+      if (cl->preferredEncoding == rfbEncodingTight)
+        rfbLog("Using JPEG subsampling %d, Q%d for client %s\n",
+               cl->tightSubsampLevel, cl->tightQualityLevel, cl->host);
+      else
+        rfbLog("Using image quality level %d for client %s\n",
+               cl->imageQualityLevel, cl->host);
+    }
+  } else {
+    rfbLog("adaptive quality for this encoding is not implemented\n");
+  }
+}
+
+
+/*
+ * An FBU is waiting for the congestion to clear for too long.
+ */
+
+static CARD32 staleUpdateCallback(OsTimerPtr timer, CARD32 time, pointer arg)
+{
+  rfbClientPtr cl = (rfbClientPtr)arg;
+  cl->staleUpdateTimerRunning = FALSE;
+  stepQualityLevel(cl, FALSE);
+  cl->qualReassessTimerRunning = FALSE;
+  TimerCancel(cl->qualReassessTimer);
+  return 0;
+}
+
+
+/*
+ * An FBU is waiting for the congestion to clear for just the right amount.
+ */
+
+static CARD32 usualUpdateCallback(OsTimerPtr timer, CARD32 time, pointer arg)
+{
+  rfbClientPtr cl = (rfbClientPtr)arg;
+  cl->usualUpdateTimerRunning = FALSE;
+  cl->qualReassessTimerRunning = FALSE;
+  TimerCancel(cl->qualReassessTimer);
+  return 0;
+}
+
+
+/*
+ * If the FBUs were waiting less than usual during this time then increase
+ * the quality.
+ */
+
+static CARD32 qualReassessCallback(OsTimerPtr timer, CARD32 time, pointer arg)
+{
+  rfbClientPtr cl = (rfbClientPtr)arg;
+  cl->qualReassessTimerRunning = FALSE;
+  stepQualityLevel(cl, TRUE);
+  return 0;
+}
+
+
+/*
+ * When ended the wait before the first measures for quality adaptation.
+ */
+
+static CARD32 firstQualityAdaptCallback(OsTimerPtr timer, CARD32 time, pointer arg)
+{
+  rfbClientPtr cl = (rfbClientPtr)arg;
+  cl->firstQualityAdaptTimerRunning = FALSE;
+  cl->firstQualityAdaptAllowed = TRUE;
+  return 0;
+}
+
+
 /*
  * rfbSendFramebufferUpdate - send the currently pending framebuffer update to
  * the RFB client.
@@ -1801,8 +1909,36 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
 
   if (rfbCongestionControl && rfbIsCongested(cl) && !cl->inALR) {
     cl->updateTimer = TimerSet(cl->updateTimer, 0, 50, updateCallback, cl);
+    /* if the quality wasn't set after init */
+    if (cl->staleFBUThresholdMs) {
+      if (cl->firstQualityAdaptAllowed) {
+        if (!cl->staleUpdateTimerRunning) {
+          cl->staleUpdateTimerRunning = TRUE;
+          cl->staleUpdateTimer =
+              TimerSet(cl->staleUpdateTimer, 0,
+                       cl->staleFBUThresholdMs, staleUpdateCallback, cl);
+        }
+        if (!cl->usualUpdateTimerRunning && cl->qualReassessTimerRunning) {
+          cl->usualUpdateTimerRunning = TRUE;
+          cl->usualUpdateTimer =
+              TimerSet(cl->usualUpdateTimer, 0,
+                       cl->staleFBUThresholdMs / 2, usualUpdateCallback, cl);
+        }
+      } else {
+        if (!cl->firstQualityAdaptTimerRunning) {
+          cl->firstQualityAdaptTimerRunning = TRUE;
+          cl->firstQualityAdaptTimer =
+                TimerSet(cl->firstQualityAdaptTimer, 0,
+                         BEFORE_FIRST_ADAPT_TIME_MS, firstQualityAdaptCallback, cl);
+        }
+      }
+    }
     return TRUE;
   }
+  cl->staleUpdateTimerRunning = FALSE;
+  TimerCancel(cl->staleUpdateTimer);
+  cl->usualUpdateTimerRunning = FALSE;
+  TimerCancel(cl->usualUpdateTimer);
 
   /* In continuous mode, we will be outputting at least three distinct
      messages.  We need to aggregate these in order to not clog up TCP's
@@ -2182,6 +2318,32 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
         if (!rfbSendRectEncodingTight(cl, x, y, w, h))
           goto abort;
         break;
+    }
+  }
+
+  if (rfbCongestionControl && cl->staleFBUThresholdMs) {
+    /*
+     * If the update is substantial then start assessing the delay to determine
+     * whether to increase the quality.
+     */
+    const float updRegionW = updateRegion->extents.x2 - updateRegion->extents.x1;
+    const float updRegionH = updateRegion->extents.y2 - updateRegion->extents.y1;
+    if ((pScreen->width / updRegionW) * (pScreen->height / updRegionH) < 5) {
+      if (cl->firstQualityAdaptAllowed) {
+        if (!cl->qualReassessTimerRunning) {
+          cl->qualReassessTimerRunning = TRUE;
+          cl->qualReassessTimer =
+              TimerSet(cl->qualReassessTimer, 0,
+                       ADAPT_REASSES_TIME_MS, qualReassessCallback, cl);
+        }
+      } else {
+        if (!cl->firstQualityAdaptTimerRunning) {
+          cl->firstQualityAdaptTimerRunning = TRUE;
+          cl->firstQualityAdaptTimer =
+                TimerSet(cl->firstQualityAdaptTimer, 0,
+                         BEFORE_FIRST_ADAPT_TIME_MS, firstQualityAdaptCallback, cl);
+        }
+      }
     }
   }
 
