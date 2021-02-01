@@ -428,6 +428,7 @@ typedef struct rfbClientRec {
   unsigned baseRTT;
   unsigned RTT[BASE_RTT_WINDOW];
   unsigned congWindow;
+  int congWindowStep;
   int ackedOffset, sentOffset, sockOffset;
   unsigned minRTT;
   Bool seenCongestion;
