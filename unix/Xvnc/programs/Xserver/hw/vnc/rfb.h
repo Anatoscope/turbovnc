@@ -445,7 +445,9 @@ typedef struct rfbClientRec {
   rfbSslCtx *sslctx;
 #endif
 
-  /* Adaptive quality */
+  /* Adaptive quality based on desired delay */
+  CARD32 staleFBUThresholdMs;       /* if FBU is waiting for longer then
+                                       decrease the quality (0 - disabled) */
   OsTimerPtr staleUpdateTimer;      /* decrease the quality if FBU is held for
                                        longer than this time period */
   OsTimerPtr usualUpdateTimer;      /* note that FBU is held for at least as
@@ -458,7 +460,6 @@ typedef struct rfbClientRec {
   Bool qualReassessTimerRunning;
   Bool firstQualityAdaptTimerRunning;
   Bool firstQualityAdaptAllowed;
-  Bool qualityIsSetByClient;        /* if set after init then don't autoadapt */
 
   /* Extended input device support */
   rfbDevInfo devices[MAXDEVICES];
@@ -869,7 +870,6 @@ extern Bool rfbDontDisconnect;
 extern Bool rfbViewOnly;  /* run server in view-only mode - Ehud Karni SW */
 extern Bool rfbSyncCutBuffer;
 extern Bool rfbCongestionControl;
-extern Bool rfbAutoQuality;
 extern double rfbAutoLosslessRefresh;
 extern int rfbALRQualityLevel;
 extern int rfbALRSubsampLevel;

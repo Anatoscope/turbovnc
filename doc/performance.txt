@@ -317,3 +317,20 @@ to ''0'' on the host prior to starting ''vncserver'', or pass an argument of
 there are cores on the TurboVNC host (up to a maximum of 4), but you can set
 the ''TVNC_NTHREADS'' environment variable or pass an argument of ''-nthreads''
 to ''vncserver'' to override this.
+
+** Automatic Quality
+{anchor: AutomaticQuality}
+
+To automatically adapt the quality if the image to the available bandwidth
+there is an alternative to the ''JPEGQLVL'' extension: the ''MAXDELAY''
+extension. Instead of 9 quality levels it has 15 timing levels which roughly
+correspond to the value of the delay that is induced by the network congestion
+created by the framebuffer updates. Quality is gradually increased if the
+delay drops below half of the specified level. Quality is gradually decreased
+if the delay exceeds the specified level. Internally the 9 quality levels of
+the ''JPEGQLVL'' extension are used to encode the framebuffer updates.
+
+Client may switch at any time between using ''JPEGQLVL'' extension and
+''MAXDELAY'' extensions by setting a corresponding pseudoencoding.
+
+Flow control must be active on the server to support ''MAXDELAY'' extension.
