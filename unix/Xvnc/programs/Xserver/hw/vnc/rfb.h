@@ -412,11 +412,14 @@ typedef struct rfbClientRec {
   Bool enableExtDesktopSize;        /* client supports extended desktop size
                                        extension */
   Bool enableGII;                   /* client supports GII extension */
+  unsigned char warnEventMask;      /* which warning to send to client */
   Bool useRichCursorEncoding;       /* rfbEncodingRichCursor is preferred */
   Bool cursorWasChanged;            /* cursor shape update should be sent */
   Bool cursorWasMoved;              /* cursor position update should be sent */
 
   int cursorX, cursorY;             /* client's cursor position */
+
+  Bool needSendFirstInactWarn;
 
   Bool firstUpdate, inALR;
   OsTimerPtr alrTimer;
@@ -883,6 +886,12 @@ extern CARD32 rfbMaxIdleTimeout;
 extern CARD32 rfbIdleTimeout;
 extern void IdleTimerSet(void);
 extern void IdleTimerCheck(void);
+extern int rfbInactSignal;
+extern CARD32 rfbInactTimeout;
+extern CARD32 rfbInactWarnTimeout;
+extern void InactTimerSet(void);
+extern void InactTimerCancel(void);
+extern void InactTimerCheck(void);
 extern Bool InterframeOn(rfbClientPtr cl);
 extern void InterframeOff(rfbClientPtr);
 

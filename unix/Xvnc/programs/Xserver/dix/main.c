@@ -286,6 +286,8 @@ dix_main(int argc, char *argv[], char *envp[])
 
         Dispatch();
 
+        InactTimerCancel();
+
         UndisplayDevices();
         DisableAllDevices();
 

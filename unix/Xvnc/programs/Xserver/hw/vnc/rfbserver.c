@@ -33,6 +33,7 @@
 #include <dix-config.h>
 #endif
 
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -96,6 +97,8 @@ static const CARD32 ADAPT_REASSES_TIME_MS = 1000;
  */
 static const CARD32 BEFORE_FIRST_ADAPT_TIME_MS = 2000;
 
+static const unsigned char INACT_WARN_EVENT_MASK = 1;
+
 static rfbClientPtr rfbNewClient(int sock);
 static void rfbProcessClientProtocolVersion(rfbClientPtr cl);
 static void rfbProcessClientInitMessage(rfbClientPtr cl);
@@ -143,6 +146,149 @@ void IdleTimerCheck(void)
   if (idleTimeout >= 0.0 && gettime() >= idleTimeout)
     FatalError("TurboVNC session has been idle for %u seconds.  Exiting.",
                (unsigned int)rfbIdleTimeout);
+}
+
+
+/*
+ * Inactivity timeout
+ */
+
+static Bool rfbSendInactWarnTimeout(rfbClientPtr cl, CARD32 timeLeftMs, CARD32 reasonCode)
+{
+  struct {
+    rfbFramebufferUpdateMsg fu;
+    rfbFramebufferUpdateRectHeader rh;
+    rfbWarnEventTimedHeader e;
+  } fbu;
+
+#define STATIC_ASSERT_InactWarn(cond) switch(0){case 0:case (cond):;}
+  STATIC_ASSERT_InactWarn(sizeof(fbu) ==
+    sz_rfbFramebufferUpdateMsg + sz_rfbFramebufferUpdateRectHeader + sz_rfbWarnEventTimed)
+#undef STATIC_ASSERT_InactWarn
+
+  memset(&fbu.fu, 0, sz_rfbFramebufferUpdateMsg);
+  fbu.fu.type = rfbFramebufferUpdate;
+  fbu.fu.nRects = Swap16IfLE(1);
+
+  memset(&fbu.rh, 0, sz_rfbFramebufferUpdateRectHeader);
+  fbu.rh.encoding = Swap32IfLE(rfbEncodingWarnEventAllOff | INACT_WARN_EVENT_MASK);
+
+  const CARD32 inactTimeoutMs = rfbInactTimeout * 1000;
+  const CARD32 inactWarnTimeoutMs = rfbInactWarnTimeout * 1000;
+
+  fbu.e.header.infoLength = Swap32IfLE(sz_rfbWarnEventTimed - sizeof(CARD32));
+  fbu.e.header.infoKind = Swap32IfLE(reasonCode);
+  fbu.e.timeLeftMs = Swap32IfLE(timeLeftMs);
+  fbu.e.totalTimeoutMs = Swap32IfLE(inactTimeoutMs);
+  fbu.e.totalWarnTimeoutMs = Swap32IfLE(inactWarnTimeoutMs);
+
+  if (WriteExact(cl, (char *)&fbu, sizeof(fbu)) < 0) {
+    rfbLogPerror("rfbSendInactWarnTimeout: write");
+    rfbCloseClient(cl);
+    return FALSE;
+  }
+
+  return TRUE;
+}
+
+int rfbInactSignal = SIGTERM;
+CARD32 rfbInactTimeout = 0;
+CARD32 rfbInactWarnTimeout = 0;
+
+static double inactTimeout = -1.0;
+static Bool inact;
+static double inactWarnTimeout = -1.0;
+static Bool inactWarn;
+
+static Bool seenInput;
+static OsTimerPtr inactRearm;
+
+static void InactTimerRearm(void);
+
+static CARD32 InactTimerRearmCallback(OsTimerPtr timer, CARD32 time, void *arg)
+{
+  if (seenInput) {
+    seenInput = FALSE;
+    InactTimerSet();
+  }
+
+  /* every half a second rearm the inactivity timer if saw input */
+  InactTimerRearm();
+
+  return 0;
+}
+
+static void InactTimerRearm(void)
+{
+  inactRearm = TimerSet(inactRearm, 0, (CARD32)500, InactTimerRearmCallback, NULL);
+}
+
+void InactTimerSet(void)
+{
+  const double currTime = gettime();
+
+  if (rfbInactTimeout > 0) {
+    inactTimeout = currTime + (double)rfbInactTimeout;
+    inact = FALSE;
+  }
+
+  if (rfbInactWarnTimeout > 0) {
+    inactWarnTimeout = currTime + (double)rfbInactWarnTimeout;
+
+    if (inactWarn) {
+      rfbLog("TurboVNC session received input. Clearing warnings for clients.\n");
+
+      inactWarn = FALSE;
+
+      rfbClientPtr cl;
+      for (cl = rfbClientHead; cl; cl = cl->next) {
+        if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
+          rfbSendInactWarnTimeout(cl, 0, 1);
+      }
+    }
+  }
+
+  InactTimerRearm();
+}
+
+void InactTimerCancel(void)
+{
+  TimerFree(inactRearm);
+  inactTimeout = -1.0;
+  inactWarnTimeout = -1.0;
+}
+
+void InactTimerCheck(void)
+{
+  const Bool needGetTime = (inactTimeout >= 0.0 && !inact) ||
+                           inactWarnTimeout >= 0.0;
+  const double currTime = needGetTime ? gettime() : 0.0;
+
+  if (inactTimeout >= 0.0 && !inact && currTime >= inactTimeout) {
+
+    inact = TRUE;
+
+    rfbLog("TurboVNC session received no input for %u seconds. Sending signal %d to parent process.\n",
+               (unsigned int)rfbInactTimeout, rfbInactSignal);
+
+    kill(getppid(), rfbInactSignal);
+  }
+
+  if (inactWarnTimeout >= 0.0 && !inactWarn && currTime >= inactWarnTimeout) {
+
+    inactWarn = TRUE;
+
+    rfbLog("TurboVNC session received no input for %u seconds. Sending warnings to clients.\n",
+               (unsigned int)rfbInactWarnTimeout);
+
+    const CARD32 timeLeftMs = inactTimeout > 0.0 ? (inactTimeout - currTime) * 1000 : 0;
+
+    rfbClientPtr cl;
+    for (cl = rfbClientHead; cl; cl = cl->next) {
+      if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
+        rfbSendInactWarnTimeout(cl, timeLeftMs, 0);
+    }
+  }
 }
 
 
@@ -420,6 +566,8 @@ static rfbClientPtr rfbNewClient(int sock)
   cl->tightSubsampLevel = TIGHT_DEFAULT_SUBSAMP;
   cl->tightQualityLevel = -1;
   cl->imageQualityLevel = -1;
+
+  cl->needSendFirstInactWarn = TRUE;
 
   cl->next = rfbClientHead;
   cl->prev = NULL;
@@ -798,7 +946,7 @@ static void rfbProcessClientInitMessage(rfbClientPtr cl)
 /* Update these constants on changing capability lists below! */
 #define N_SMSG_CAPS  0
 #define N_CMSG_CAPS  0
-#define N_ENC_CAPS  18
+#define N_ENC_CAPS  19
 
 void rfbSendInteractionCaps(rfbClientPtr cl)
 {
@@ -864,6 +1012,7 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   SetCapInfo(&enc_list[i++],  rfbEncodingPointerPos,     rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingLastRect,       rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbGIIServer,              rfbGIIVendor);
+  SetCapInfo(&enc_list[i++],  rfbEncodingWarnEventAllOff,rfbTurboVncVendor);
   if (i != nEncCaps) {
     rfbLog("rfbSendInteractionCaps: assertion failed, i != nEncCaps\n");
     rfbCloseClient(cl);
@@ -1148,6 +1297,11 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               cl->tightQualityLevel = enc & 0xFF;
               rfbLog("Using JPEG quality %d for client %s\n",
                      cl->tightQualityLevel, cl->host);
+            } else if (enc >= (CARD32)rfbEncodingWarnEventAllOff &&
+                       enc <= (CARD32)rfbEncodingWarnEventAllOn) {
+              rfbLog("Setting WarnEvent mask 0x%x for client %s\n", enc & 0xFF, cl->host);
+              cl->warnEventMask = enc & 0xFF;
+              cl->needSendFirstInactWarn = cl->warnEventMask & INACT_WARN_EVENT_MASK;
             } else {
               rfbLog("rfbProcessClientNormalMessage: ignoring unknown encoding %d (%x)\n",
                      (int)enc, (int)enc);
@@ -1252,8 +1406,10 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 
       READ(((char *)&msg) + 1, sz_rfbKeyEventMsg - 1)
 
-      if (!rfbViewOnly && !cl->viewOnly)
+      if (!rfbViewOnly && !cl->viewOnly) {
         KeyEvent((KeySym)Swap32IfLE(msg.ke.key), msg.ke.down);
+        seenInput = TRUE;
+      }
 
       return;
 
@@ -1284,6 +1440,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
           pointerOwner = NULL;
 
         PtrAddEvent(msg.pe.buttonMask, cl->cursorX, cl->cursorY, cl);
+        seenInput = TRUE;
 
         pointerOwner = cl;
       }
@@ -1712,6 +1869,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 #endif
                 ExtInputAddEvent(dev, eventType == rfbGIIButtonPress ?
                                  ButtonPress : ButtonRelease, b.buttonNumber);
+                seenInput = TRUE;
                 break;
               }
 
@@ -1785,6 +1943,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
                   dev->mode = eventType == rfbGIIValuatorAbsolute ?
                               Absolute : Relative;
                   ExtInputAddEvent(dev, MotionNotify, 0);
+                  seenInput = TRUE;
                 }
                 break;
               }
@@ -2020,6 +2179,19 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
     if (!rfbFB.cursorIsDrawn)
       rfbSpriteRestoreCursorAllDev(pScreen);
   }
+
+  /*
+   * If just connected to a session that has no activity then immediately send
+   * a separate FBU about inactivity.
+   */
+
+  if (cl->needSendFirstInactWarn && (cl->warnEventMask & INACT_WARN_EVENT_MASK) && inactWarn) {
+    const double currTime = gettime();
+    const CARD32 timeLeftMs = inactTimeout > currTime ? (inactTimeout - currTime) * 1000 : 0;
+    rfbSendInactWarnTimeout(cl, timeLeftMs, 0);
+  }
+
+  cl->needSendFirstInactWarn = FALSE;
 
   /*
    * Do we plan to send cursor position update?
@@ -3041,8 +3213,10 @@ void rfbProcessUDPInput(int sock)
         rfbDisconnectUDPSock();
         return;
       }
-      if (!rfbViewOnly)
+      if (!rfbViewOnly) {
         KeyEvent((KeySym)Swap32IfLE(msg.ke.key), msg.ke.down);
+        seenInput = TRUE;
+      }
       break;
 
     case rfbPointerEvent:
@@ -3051,9 +3225,11 @@ void rfbProcessUDPInput(int sock)
         rfbDisconnectUDPSock();
         return;
       }
-      if (!rfbViewOnly)
+      if (!rfbViewOnly) {
         PtrAddEvent(msg.pe.buttonMask, Swap16IfLE(msg.pe.x),
                     Swap16IfLE(msg.pe.y), 0);
+        seenInput = TRUE;
+      }
       break;
 
     default:
