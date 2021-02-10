@@ -65,6 +65,7 @@ from the X Consortium.
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <netdb.h>
 #include "servermd.h"
@@ -245,6 +246,53 @@ int ddxProcessArgument(int argc, char *argv[], int i)
   if (strcasecmp(argv[i], "-idletimeout") == 0) {  /* -idletimeout sec */
     if (i + 1 >= argc) UseMsg();
     rfbIdleTimeout = atoi(argv[i + 1]);
+    return 2;
+  }
+
+  if (strcasecmp(argv[i], "-inactsignal") == 0) {
+    if (i + 1 >= argc) UseMsg();
+    if (strcmp(argv[i + 1], "HUP") == 0)
+      rfbInactSignal = SIGHUP;
+    else if (strcmp(argv[i + 1], "INT") == 0)
+      rfbInactSignal = SIGINT;
+    else if (strcmp(argv[i + 1], "QUIT") == 0)
+      rfbInactSignal = SIGQUIT;
+    else if (strcmp(argv[i + 1], "ABRT") == 0)
+      rfbInactSignal = SIGABRT;
+    else if (strcmp(argv[i + 1], "BUS") == 0)
+      rfbInactSignal = SIGBUS;
+    else if (strcmp(argv[i + 1], "KILL") == 0)
+      rfbInactSignal = SIGKILL;
+    else if (strcmp(argv[i + 1], "USR1") == 0)
+      rfbInactSignal = SIGUSR1;
+    else if (strcmp(argv[i + 1], "USR2") == 0)
+      rfbInactSignal = SIGUSR2;
+    else if (strcmp(argv[i + 1], "USR2") == 0)
+      rfbInactSignal = SIGUSR2;
+    else if (strcmp(argv[i + 1], "PIPE") == 0)
+      rfbInactSignal = SIGPIPE;
+    else if (strcmp(argv[i + 1], "ALRM") == 0)
+      rfbInactSignal = SIGALRM;
+    else if (strcmp(argv[i + 1], "TERM") == 0)
+      rfbInactSignal = SIGTERM;
+    else if (strcmp(argv[i + 1], "CHLD") == 0)
+      rfbInactSignal = SIGCHLD;
+    else
+      UseMsg();
+    return 2;
+  }
+
+  if (strcasecmp(argv[i], "-inacttimeout") == 0) {  /* -idletimeout sec */
+    if (i + 1 >= argc) UseMsg();
+    rfbInactTimeout = atoi(argv[i + 1]);
+    if (rfbInactTimeout > (CARD32)-1 / 1000) UseMsg();
+    return 2;
+  }
+
+  if (strcasecmp(argv[i], "-inactwarntimeout") == 0) {  /* -inactwarntimeout sec */
+    if (i + 1 >= argc) UseMsg();
+    rfbInactWarnTimeout = atoi(argv[i + 1]);
+    if (rfbInactWarnTimeout > (CARD32)-1 / 1000) UseMsg();
     return 2;
   }
 
@@ -1551,6 +1599,8 @@ void OsVendorInit(void)
   }
   if (rfbIdleTimeout > 0)
     IdleTimerSet();
+  if (rfbInactTimeout > 0 || rfbInactWarnTimeout > 0)
+    InactTimerSet();
   if (rfbFB.width > rfbMaxWidth || rfbFB.height > rfbMaxHeight) {
     rfbFB.width = min(rfbFB.width, rfbMaxWidth);
     rfbFB.height = min(rfbFB.height, rfbMaxHeight);
@@ -1590,6 +1640,9 @@ void ddxUseMsg(void)
   ErrorF("-httpd dir             serve files from the specified directory using HTTP\n");
   ErrorF("-httpport port         port for HTTP server\n");
   ErrorF("-idletimeout S         exit if S seconds elapse with no VNC viewer connections\n");
+  ErrorF("-inactsignal signal    signal to send to parent after timeout of no input (default: TERM)\n");
+  ErrorF("-inacttimeout S        send signal to parent after S seconds of no input\n");
+  ErrorF("-inactwarntimeout S    after S seconds of no input warn clients using WRNEVENT\n");
   ErrorF("-inetd                 Xvnc is launched by inetd\n");
   ErrorF("-interface ipaddr      only bind to specified interface address\n");
   ErrorF("-ipv6                  enable IPv6 support\n");

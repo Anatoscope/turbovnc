@@ -601,6 +601,8 @@ typedef struct _rfbInteractionCapsMsg {
 #define rfbEncodingQualityLevel8   0xFFFFFFE8
 #define rfbEncodingQualityLevel9   0xFFFFFFE9
 
+#define rfbEncodingWarnEvent       0xFFFFFCE0
+
 #define rfbEncodingGII             0xFFFFFECF
 
 /* signatures for "fake" encoding types */
@@ -615,6 +617,7 @@ typedef struct _rfbInteractionCapsMsg {
 #define sig_rfbEncodingMaxDelay20      "MAXDELAY"
 #define sig_rfbEncodingQualityLevel0   "JPEGQLVL"
 #define sig_rfbEncodingGII             "GII_____"
+#define sig_rfbEncodingWarnEvent       "WRNEVENT"
 
 /*****************************************************************************
  *
@@ -989,6 +992,23 @@ typedef struct {
 
 #define rfbZRLETileWidth 64
 #define rfbZRLETileHeight 64
+
+
+/*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * WarnEvent encoding to transmit warning messages about events like shutdowns.
+ * The warn event header is sent after a header of an all-zero rectangle. Warn
+ * event header may be followed by an UTF-8 string description of the event.
+ */
+
+typedef struct _rfbWarnEventHeader {
+  CARD32 timeLeftMs;         /* remaining time before the event */
+  CARD32 totalTimeoutMs;     /* timeout associated with the event */
+  CARD32 totalWarnTimeoutMs; /* time between the first warning and the event */
+  CARD32 reasonCode;         /* code of the reason */
+  CARD32 reasonStrLength;    /* length of the reason string */
+} rfbWarnEventHeader;
+
+#define sz_rfbWarnEventHeader 20
 
 
 /*-----------------------------------------------------------------------------
