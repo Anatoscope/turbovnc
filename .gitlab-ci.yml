@@ -15,6 +15,7 @@ build-upload:
   image: registry.gitlab.com/anatoscope/interne/system/anatodocker/ci:latest
   only:
     - anato
+    - merge_requests
   cache:
     paths:
       - libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
@@ -26,6 +27,10 @@ build-upload:
       apt-get install -y --no-install-recommends default-jdk libpam-dev
       [ -r "libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb" ] || curl -fsSL -O https://sourceforge.net/projects/libjpeg-turbo/files/${LIBJPEG_VERSION}/libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
       dpkg -i libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
+      # If it's a merge request then add source branch name to the version-string.
+      if [ -n "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" ]; then
+          sed -i -re "s/^(set\\((DOC)?VERSION .*anatoscope)/\\1-$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME/" CMakeLists.txt
+      fi
       # Build deb package.
       src_dir=$PWD
       export CCACHE_DIR="$src_dir"/.ccache
