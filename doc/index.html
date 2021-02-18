@@ -3,9 +3,9 @@
 <head>
 <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
 <meta name="language" content="en">
-<meta name="date" content="2020-05-06T17:37:58">
+<meta name="date" content="2021-02-10T15:28:05">
 <meta name="generator" content="deplate.rb 0.8.5">
-<title>User&rsquo;s Guide for TurboVNC 2.2.5</title>
+<title>User&rsquo;s Guide for TurboVNC 2.2.5-anatoscope-1.1.0</title>
 <link rel="start" href="index.html" title="Frontpage">
 <link rel="chapter" href="index.html#hd001" title="1 Legal Information">
 <link rel="chapter" href="index.html#hd002" title="2 Conventions Used in This Document">
@@ -23,7 +23,7 @@
 <body >
 <a name="#pagetop"></a>
 <div class="title">
-<p class="title">User&rsquo;s Guide for TurboVNC 2.2.5</p>
+<p class="title">User&rsquo;s Guide for TurboVNC 2.2.5-anatoscope-1.1.0</p>
 </div>
 <div id="hd">
 <div id="hdBlock" class="hd">
@@ -132,6 +132,9 @@
             </li>
             <li class="Itemize-3 hd">
                 <a href="#hd007005" class="hd">7.5 Multithreading</a>
+            </li>
+            <li class="Itemize-3 hd">
+                <a href="#hd007006" class="hd">7.6 Automatic Quality</a>
             </li>
         </ul>
     </li>
@@ -666,7 +669,8 @@ will not work when TurboVNC is installed in this manner.</p>
 <ol class="Ordered numeric">
     <li class="Ordered-1 Ordered">
         Download the TurboVNC Mac disk image 
-        (<strong class="filename">TurboVNC-2.2.5.dmg</strong>) from the 
+        (<strong class="filename">TurboVNC-2.2.5-anatoscope-1.1.0.dmg</strong>) 
+        from the 
         <span class="remote"><a href="http://sourceforge.net/projects/turbovnc/files/" class="remote">Files 
         area</a></span><a name="idx0027"></a> of the 
         <span class="remote"><a href="http://sourceforge.net/projects/turbovnc" class="remote">TurboVNC 
@@ -689,9 +693,10 @@ will not work when TurboVNC is installed in this manner.</p>
 <ol class="Ordered numeric">
     <li class="Ordered-1 Ordered">
         Download the TurboVNC Windows installer package 
-        (<strong class="filename">TurboVNC-2.2.5-x86.exe</strong> for 32-bit 
-        systems or <strong class="filename">TurboVNC-2.2.5-x64.exe</strong> for 
-        64-bit systems) from the 
+        (<strong class="filename">TurboVNC-2.2.5-anatoscope-1.1.0-x86.exe</strong> 
+        for 32-bit systems or 
+        <strong class="filename">TurboVNC-2.2.5-anatoscope-1.1.0-x64.exe</strong> 
+        for 64-bit systems) from the 
         <span class="remote"><a href="http://sourceforge.net/projects/turbovnc/files/" class="remote">Files 
         area</a></span><a name="idx0031"></a> of the 
         <span class="remote"><a href="http://sourceforge.net/projects/turbovnc" class="remote">TurboVNC 
@@ -710,13 +715,14 @@ will not work when TurboVNC is installed in this manner.</p>
 
 <p>If you are using a Linux/Un*x platform for which there is not a 
 pre-built TurboVNC binary package available, then download the TurboVNC 
-source tarball (<strong class="filename">turbovnc-2.2.5.tar.gz</strong>) 
+source tarball 
+(<strong class="filename">turbovnc-2.2.5-anatoscope-1.1.0.tar.gz</strong>) 
 from the 
 <span class="remote"><a href="http://sourceforge.net/projects/turbovnc/files/" class="remote">Files 
 area</a></span><a name="idx0033"></a> of the 
 <span class="remote"><a href="http://sourceforge.net/projects/turbovnc" class="remote">TurboVNC 
 SourceForge project page</a></span><a name="idx0034"></a>, uncompress 
-it, <code>cd turbovnc-2.2.5</code>, and read 
+it, <code>cd turbovnc-2.2.5-anatoscope-1.1.0</code>, and read 
 <strong class="filename">BUILDING.md</strong> for further instructions 
 on how to build TurboVNC from source.</p>
 
@@ -1046,8 +1052,8 @@ knowledge of web server administration.</p>
     <li class="Itemize-1 Itemize asterisk">
         <em>OPTIONAL:</em> Copy the TurboVNC Helper JAR files into that same 
         directory. You can obtain these from 
-        <strong class="filename">turbovnc-2.2.5-jws.zip</strong>, which is 
-        available in the 
+        <strong class="filename">turbovnc-2.2.5-anatoscope-1.1.0-jws.zip</strong>, 
+        which is available in the 
         <span class="remote"><a href="http://sourceforge.net/projects/turbovnc/files/" class="remote">Files 
         area</a></span><a name="idx0038"></a> of the 
         <span class="remote"><a href="http://sourceforge.net/projects/turbovnc" class="remote">TurboVNC 
@@ -1740,6 +1746,30 @@ as there are cores on the TurboVNC host (up to a maximum of 4), but you
 can set the <code>TVNC_NTHREADS</code> environment variable or pass an 
 argument of <code>-nthreads</code> to <code>vncserver</code> to override 
 this.</p>
+
+
+
+<h2 id="hd007006">7.6&nbsp;Automatic Quality</h2>
+
+<p><a name="AutomaticQuality"></a></p>
+
+<p>To automatically adapt the quality if the image to the available 
+bandwidth there is an alternative to the <code>JPEGQLVL</code> 
+extension: the <code>MAXDELAY</code> extension. Instead of 9 quality 
+levels it has 15 timing levels which roughly correspond to the value of 
+the delay that is induced by the network congestion created by the 
+framebuffer updates. Quality is gradually increased if the delay drops 
+below half of the specified level. Quality is gradually decreased if the 
+delay exceeds the specified level. Internally the 9 quality levels of 
+the <code>JPEGQLVL</code> extension are used to encode the framebuffer 
+updates.</p>
+
+<p>Client may switch at any time between using <code>JPEGQLVL</code> 
+extension and <code>MAXDELAY</code> extensions by setting a 
+corresponding pseudoencoding.</p>
+
+<p>Flow control must be active on the server to support 
+<code>MAXDELAY</code> extension.</p>
 
 <p><br /></p>
 
@@ -3261,7 +3291,7 @@ Java command-line arguments in a Java Web Start environment.</p>
         establishing a secure tunnel with the <code>Tunnel</code> and 
         <code>ExtSSH</code> parameters.  See the 
         <a href="#VNC_VIA_CMD"><code>VNC_TUNNEL_CMD</code> environment 
-        variable</a><a name="idx0046"></a> above for more details.
+        variable</a><a name="idx0047"></a> above for more details.
     </dd>
 </dl>
 
@@ -3315,7 +3345,7 @@ Java command-line arguments in a Java Web Start environment.</p>
         establishing a secure tunnel with the <code>Via</code> and 
         <code>ExtSSH</code> parameters.  See the 
         <a href="#VNC_VIA_CMD"><code>VNC_VIA_CMD</code> environment 
-        variable</a><a name="idx0047"></a> above for more details.
+        variable</a><a name="idx0048"></a> above for more details.
     </dd>
 </dl>
 

@@ -68,7 +68,6 @@ Bool rfbDontDisconnect = TRUE;
 Bool rfbViewOnly = FALSE;  /* run server in view only mode - Ehud Karni SW */
 Bool rfbSyncCutBuffer = TRUE;
 Bool rfbCongestionControl = TRUE;
-Bool rfbAutoQuality = TRUE;
 double rfbAutoLosslessRefresh = 0.0;
 int rfbALRQualityLevel = -1;
 int rfbALRSubsampLevel = TVNC_1X;
@@ -81,16 +80,6 @@ Bool rfbVirtualTablet = FALSE;
 Bool rfbMT = TRUE;
 int rfbNumThreads = 0;
 
-/*
- * If FBU is waiting for longer than this then decrease the quality.
- */
-static const CARD32 ADAPT_STALE_FBU_THRESHOLD_MS = 200;
-
-/*
- * If FBU is waiting for shorter than this during
- * reassessment time then increase the quality.
- */
-static const CARD32 ADAPT_USUAL_FBU_THRESHOLD_MS = 100;
 
 /*
  * Time for taking a decision about increasing the quality.
@@ -796,18 +785,19 @@ static void rfbProcessClientInitMessage(rfbClientPtr cl)
 /* Update these constants on changing capability lists below! */
 #define N_SMSG_CAPS  0
 #define N_CMSG_CAPS  0
-#define N_ENC_CAPS  17
+#define N_ENC_CAPS  18
 
 void rfbSendInteractionCaps(rfbClientPtr cl)
 {
   rfbInteractionCapsMsg intr_caps;
+  const int nEncCaps = rfbCongestionControl ? N_ENC_CAPS : N_ENC_CAPS - 1;
   rfbCapabilityInfo enc_list[N_ENC_CAPS];
   int i;
 
   /* Fill in the header structure sent prior to capability lists. */
   intr_caps.nServerMessageTypes = Swap16IfLE(N_SMSG_CAPS);
   intr_caps.nClientMessageTypes = Swap16IfLE(N_CMSG_CAPS);
-  intr_caps.nEncodingTypes = Swap16IfLE(N_ENC_CAPS);
+  intr_caps.nEncodingTypes = Swap16IfLE(nEncCaps);
   intr_caps.pad = 0;
 
   /* Supported server->client message types. */
@@ -851,6 +841,8 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   SetCapInfo(&enc_list[i++],  rfbEncodingZYWRLE,         rfbTridiaVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingTight,          rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingCompressLevel0, rfbTightVncVendor);
+  if (rfbCongestionControl)
+    SetCapInfo(&enc_list[i++],  rfbEncodingMaxDelay20,     rfbTurboVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingQualityLevel0,  rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingFineQualityLevel0, rfbTurboVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingSubsamp1X,         rfbTurboVncVendor);
@@ -859,8 +851,8 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   SetCapInfo(&enc_list[i++],  rfbEncodingPointerPos,     rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingLastRect,       rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbGIIServer,              rfbGIIVendor);
-  if (i != N_ENC_CAPS) {
-    rfbLog("rfbSendInteractionCaps: assertion failed, i != N_ENC_CAPS\n");
+  if (i != nEncCaps) {
+    rfbLog("rfbSendInteractionCaps: assertion failed, i != nEncCaps\n");
     rfbCloseClient(cl);
     return;
   }
@@ -869,7 +861,7 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   if (WriteExact(cl, (char *)&intr_caps,
                  sz_rfbInteractionCapsMsg) < 0 ||
       WriteExact(cl, (char *)&enc_list[0],
-                 sz_rfbCapabilityInfo * N_ENC_CAPS) < 0) {
+                 sz_rfbCapabilityInfo * nEncCaps) < 0) {
     rfbLogPerror("rfbSendInteractionCaps: write");
     rfbCloseClient(cl);
     return;
@@ -959,10 +951,6 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       cl->tightSubsampLevel = TIGHT_DEFAULT_SUBSAMP;
       cl->tightQualityLevel = -1;
       cl->imageQualityLevel = -1;
-
-      if (rfbCongestionControl && rfbAutoQuality &&
-          cl->firstQualityAdaptAllowed)
-        cl->qualityIsSetByClient = TRUE;
 
       for (i = 0; i < msg.se.nEncodings; i++) {
         READ((char *)&enc, 4)
@@ -1120,8 +1108,19 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               cl->tightSubsampLevel = enc & 0xFF;
               rfbLog("Using JPEG subsampling %d for client %s\n",
                      cl->tightSubsampLevel, cl->host);
+            } else if (enc >= (CARD32)rfbEncodingMaxDelay20 &&
+                       enc <= (CARD32)rfbEncodingMaxDelay320) {
+              if (rfbCongestionControl) {
+                cl->staleFBUThresholdMs = ((enc & 0x0F) + 1) * 20;
+                if (cl->imageQualityLevel == -1) {
+                  cl->tightQualityLevel = JPEG_QUAL[5];
+                  cl->tightSubsampLevel = JPEG_SUBSAMP[5];
+                  cl->imageQualityLevel = 5;
+                }
+              }
             } else if (enc >= (CARD32)rfbEncodingQualityLevel0 &&
                        enc <= (CARD32)rfbEncodingQualityLevel9) {
+              cl->staleFBUThresholdMs = 0;
               cl->tightQualityLevel = JPEG_QUAL[enc & 0x0F];
               cl->tightSubsampLevel = JPEG_SUBSAMP[enc & 0x0F];
               cl->imageQualityLevel = enc & 0x0F;
@@ -1927,19 +1926,19 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
   if (rfbCongestionControl && rfbIsCongested(cl)) {
     cl->updateTimer = TimerSet(cl->updateTimer, 0, 50, updateCallback, cl);
     /* if the quality wasn't set after init */
-    if (rfbAutoQuality && !cl->qualityIsSetByClient) {
+    if (cl->staleFBUThresholdMs) {
       if (cl->firstQualityAdaptAllowed) {
         if (!cl->staleUpdateTimerRunning) {
           cl->staleUpdateTimerRunning = TRUE;
           cl->staleUpdateTimer =
               TimerSet(cl->staleUpdateTimer, 0,
-                       ADAPT_STALE_FBU_THRESHOLD_MS, staleUpdateCallback, cl);
+                       cl->staleFBUThresholdMs, staleUpdateCallback, cl);
         }
         if (!cl->usualUpdateTimerRunning && cl->qualReassessTimerRunning) {
           cl->usualUpdateTimerRunning = TRUE;
           cl->usualUpdateTimer =
               TimerSet(cl->usualUpdateTimer, 0,
-                       ADAPT_USUAL_FBU_THRESHOLD_MS, usualUpdateCallback, cl);
+                       cl->staleFBUThresholdMs / 2, usualUpdateCallback, cl);
         }
       } else {
         if (!cl->firstQualityAdaptTimerRunning) {
@@ -2339,7 +2338,7 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
     }
   }
 
-  if (rfbCongestionControl && rfbAutoQuality && !cl->qualityIsSetByClient) {
+  if (rfbCongestionControl && cl->staleFBUThresholdMs) {
     /*
      * If the update is substantial then start assessing the delay to determine
      * whether to increase the quality.
