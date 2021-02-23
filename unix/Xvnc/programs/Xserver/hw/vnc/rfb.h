@@ -898,6 +898,8 @@ extern double rfbAutoLosslessRefresh;
 extern int rfbALRQualityLevel;
 extern int rfbALRSubsampLevel;
 extern int rfbInterframe;
+extern double rfbInterframeEps;
+extern BOOL rfbInterframeAllowConv;
 extern int rfbMaxClipboard;
 extern Bool rfbVirtualTablet;
 
@@ -1012,6 +1014,7 @@ extern void ShutdownTightThreads(void);
 
 extern Bool rfbEconomicTranslate;
 extern rfbPixelFormat rfbServerFormat;
+extern rfbPixelFormat rfbCmpFormat;
 
 extern void rfbTranslateNone(char *table, rfbPixelFormat *in,
                              rfbPixelFormat *out,
@@ -1019,6 +1022,8 @@ extern void rfbTranslateNone(char *table, rfbPixelFormat *in,
                              int bytesBetweenInputLines,
                              int width, int height);
 extern Bool rfbSetTranslateFunction(rfbClientPtr cl);
+extern Bool rfbSetCmpTranslateFunction(BOOL bigEndian);
+extern int rfbColorCmpWithEps(char *a1, char *a2, size_t size, double eps);
 extern void rfbSetClientColourMaps(int firstColour, int nColours);
 extern Bool rfbSetClientColourMap(rfbClientPtr cl, int firstColour,
                                   int nColours);

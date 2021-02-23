@@ -334,6 +334,16 @@ more CPU time and much more memory, and thus it is recommended that this
 feature be used only when needed.
 
 .TP
+\fB\-interframeeps\fR
+Allowed per-pixel per-channel colour variation in interframe comparison.
+0.0 - no variation allowed, 1.0 - any values are equivalent. Default: 0.0.
+
+.TP
+\fB\-interframeallowconv\fR
+Allow comparing on framebuffers that need color conversion to compare colors
+such as the ones with palettes. Fatal error otherwise.
+
+.TP
 \fB\-nointerframe\fR
 Specifying this option will disable interframe comparison, regardless of the
 compression level that was requested by the viewer.

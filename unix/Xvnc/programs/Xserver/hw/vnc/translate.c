@@ -37,6 +37,21 @@ Bool rfbEconomicTranslate = FALSE;
 
 rfbPixelFormat rfbServerFormat;
 
+/*
+ * Structure representing pixel format for approximate interframe comparison.
+ */
+
+rfbPixelFormat rfbCmpFormat;
+
+
+/*
+ * Points to the translation function which is used in interframe comparison.
+ */
+
+rfbTranslateFnType translateToCmpFn;
+
+char *translateToCmpLookupTable;
+
 
 /*
  * Some standard pixel formats.
@@ -301,6 +316,129 @@ Bool rfbSetTranslateFunction(rfbClientPtr cl)
     }
 
   return TRUE;
+}
+
+
+/*
+ * rfbSetCmpTranslateFunction sets the format and translation function for
+ * interframe comparison.
+ */
+
+Bool rfbSetCmpTranslateFunction(BOOL bigEndian)
+{
+  /* Format for approximate colour comparison, and the converter to it. */
+
+  rfbCmpFormat.bitsPerPixel = 32;
+  rfbCmpFormat.depth = 24;
+  rfbCmpFormat.bigEndian = bigEndian;
+  rfbCmpFormat.trueColour = TRUE;
+  rfbCmpFormat.redMax = 0xFF;
+  rfbCmpFormat.greenMax = 0xFF;
+  rfbCmpFormat.blueMax = 0xFF;
+  rfbCmpFormat.redShift = 16;
+  rfbCmpFormat.greenShift = 8;
+  rfbCmpFormat.blueShift = 0;
+
+  if (PF_EQ(rfbCmpFormat, rfbServerFormat)) {
+
+    /* client & server the same */
+
+    rfbLog("no translation needed for interframe rfbCompareFormat\n");
+    translateToCmpFn = rfbTranslateNone;
+    return TRUE;
+  }
+
+  if (!rfbInterframeAllowConv)
+    return FALSE;
+
+  if (!rfbServerFormat.trueColour) {
+
+    /* colour map -> truecolour */
+
+    rfbLog("Interframe rfbCompareFormat is %d-bit trueColour,"
+           " server has colour map\n", rfbCmpFormat.bitsPerPixel);
+
+    translateToCmpFn = rfbTranslateWithSingleTableFns
+                        [rfbServerFormat.bitsPerPixel / 16]
+                          [rfbCmpFormat.bitsPerPixel / 16];
+
+    (*rfbInitColourMapSingleTableFns[rfbCmpFormat.bitsPerPixel / 16])
+      (&translateToCmpLookupTable, &rfbServerFormat, &rfbCmpFormat);
+
+    return TRUE;
+  }
+
+  /* truecolour -> truecolour */
+
+  if ((rfbServerFormat.bitsPerPixel < 16) ||
+      (!rfbEconomicTranslate && (rfbServerFormat.bitsPerPixel == 16))) {
+
+    /* we can use a single lookup table for <= 16 bpp */
+
+    translateToCmpFn = rfbTranslateWithSingleTableFns
+                        [rfbServerFormat.bitsPerPixel / 16]
+                          [rfbCmpFormat.bitsPerPixel / 16];
+
+    (*rfbInitTrueColourSingleTableFns[rfbCmpFormat.bitsPerPixel / 16])
+      (&translateToCmpLookupTable, &rfbServerFormat, &rfbCmpFormat);
+
+  } else {
+
+    /* otherwise we use three separate tables for red, green and blue */
+
+    translateToCmpFn = rfbTranslateWithRGBTablesFns
+                        [rfbServerFormat.bitsPerPixel / 16]
+                          [rfbCmpFormat.bitsPerPixel / 16];
+
+    (*rfbInitTrueColourRGBTablesFns[rfbCmpFormat.bitsPerPixel / 16])
+      (&translateToCmpLookupTable, &rfbServerFormat, &rfbCmpFormat);
+  }
+
+  return TRUE;
+}
+
+/*
+ * Compare lines of pixels of server buffer allowing some color variation.
+ * Return 0 if the same.
+ * Return !=0 if different.
+ */
+
+int rfbColorCmpWithEps(char *a1, char *a2, size_t size, double eps)
+{
+  const int ps = rfbServerFormat.bitsPerPixel / 8;
+
+  size_t i = 0;
+  while (i < size)
+    if (a1[i] != a2[i]) {
+      const int orig = i / ps * ps;
+      CARD32 a1c;
+      CARD32 a2c;
+      (*translateToCmpFn)(translateToCmpLookupTable,
+                              &rfbServerFormat, &rfbCmpFormat,
+                              a1 + orig, (char *)&a1c, 0, 1, 1);
+      (*translateToCmpFn)(translateToCmpLookupTable,
+                              &rfbServerFormat, &rfbCmpFormat,
+                              a2 + orig, (char *)&a2c, 0, 1, 1);
+
+      const int a1Red   = (a1c >> rfbCmpFormat.redShift)   & rfbCmpFormat.redMax;
+      const int a1Green = (a1c >> rfbCmpFormat.greenShift) & rfbCmpFormat.greenMax;
+      const int a1Blue  = (a1c >> rfbCmpFormat.blueShift)  & rfbCmpFormat.blueMax;
+
+      const int a2Red   = (a2c >> rfbCmpFormat.redShift)   & rfbCmpFormat.redMax;
+      const int a2Green = (a2c >> rfbCmpFormat.greenShift) & rfbCmpFormat.greenMax;
+      const int a2Blue  = (a2c >> rfbCmpFormat.blueShift)  & rfbCmpFormat.blueMax;
+
+      if (abs(a1Red   - a2Red)   / (double)rfbCmpFormat.redMax   > eps ||
+          abs(a1Green - a2Green) / (double)rfbCmpFormat.greenMax > eps ||
+          abs(a1Blue  - a2Blue)  / (double)rfbCmpFormat.blueMax  > eps)
+        return 1;
+
+      i = orig + ps;
+    } else {
+      ++i;
+    }
+
+  return 0;
 }
 
 
