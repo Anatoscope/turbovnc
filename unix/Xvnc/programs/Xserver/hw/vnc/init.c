@@ -573,6 +573,18 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     return 1;
   }
 
+  if (strcasecmp(argv[i], "-interframeeps") == 0) {
+    if (i + 1 >= argc) UseMsg();
+    rfbInterframeEps = atof(argv[i + 1]);
+    if (rfbInterframeEps < 0.0 || rfbInterframeEps > 1.0) UseMsg();
+    return 2;
+  }
+
+  if (strcasecmp(argv[i], "-interframeallowconv") == 0) {
+    rfbInterframeAllowConv = 1;
+    return 1;
+  }
+
 #if !defined(__FreeBSD__) && !defined(__NetBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__)
   if (strcasecmp(argv[i], "-nomt") == 0) {
     rfbMT = FALSE;
@@ -979,6 +991,10 @@ static Bool rfbScreenInit(ScreenPtr pScreen, int argc, char **argv)
     rfbServerFormat.redShift = rfbServerFormat.greenShift =
       rfbServerFormat.blueShift = 0;
   }
+
+  if (rfbInterframe && rfbInterframeEps > 0.0 &&
+      !rfbSetCmpTranslateFunction(bigEndian))
+    return FALSE;
 
   ret = fbCreateDefColormap(pScreen);
 
@@ -1692,6 +1708,12 @@ void ddxUseMsg(void)
   ErrorF("-economictranslate     use less memory-hungry pixel format translation if\n");
   ErrorF("                       depth=16\n");
   ErrorF("-interframe            always use interframe comparison\n");
+  ErrorF("-interframeeps         allowed per-pixel per-channel colour variation in interframe\n");
+  ErrorF("                       comparison.\n");
+  ErrorF("                       0.0 - no variation allowed, 1.0 - any values are equivalent\n");
+  ErrorF("                       (default: 0.0)\n");
+  ErrorF("-interframeallowconv   allow comparing on framebuffers needing color conversion\n");
+  ErrorF("                       such as the ones with palettes, fatal error otherwise\n");
   ErrorF("-nointerframe          never use interframe comparison\n");
 #if !defined(__FreeBSD__) && !defined(__NetBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__)
   ErrorF("-nomt                  disable multithreaded Tight encoding\n");
