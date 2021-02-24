@@ -75,7 +75,7 @@ in this Software without prior written authorization from the X Consortium.
 
 extern WindowPtr *WindowTable;  /* Why isn't this in a header file? */
 
-int rfbDeferUpdateTime = 40;  /* ms */
+int rfbDeferUpdateTime = DEFAULT_DEFER_UPDATE_TIME;  /* ms */
 
 
 static inline Bool is_visible(DrawablePtr drawable)

@@ -1,6 +1,6 @@
-#!/usr/bin/perl
+#!/usr/bin/env perl
 #
-#  Copyright (C) 2009-2018 D. R. Commander.  All Rights Reserved.
+#  Copyright (C) 2009-2018, 2020-2021 D. R. Commander.  All Rights Reserved.
 #  Copyright (C) 2010 University Corporation for Atmospheric Research.
 #                     All Rights Reserved.
 #  Copyright (C) 2005-2006 Sun Microsystems, Inc.  All Rights Reserved.
@@ -124,13 +124,13 @@ if [ -x /usr/bin/gnome-session ]; then
       if [ -f /usr/share/gnome-session/sessions/gnome-flashback-metacity.session ]; then
         DESKTOP_SESSION=gnome-flashback-metacity;  export DESKTOP_SESSION
         grep -q "unity" /usr/share/gnome-session/sessions/gnome-flashback-metacity.session && {
-          XDG_CURRENT_DESKTOP="GNOME-Flashback:Unity";
-          export XDG_CURRENT_DESKTOP;
+          XDG_CURRENT_DESKTOP="GNOME-Flashback:Unity"
+          export XDG_CURRENT_DESKTOP
         } || {
-          XDG_CURRENT_DESKTOP="GNOME-Flashback:GNOME";
-          export XDG_CURRENT_DESKTOP;
-          GNOME_SHELL_SESSION_MODE=ubuntu;  export GNOME_SHELL_SESSION_MODE;
-          USESTARTUP=1;
+          XDG_CURRENT_DESKTOP="GNOME-Flashback:GNOME"
+          export XDG_CURRENT_DESKTOP
+          GNOME_SHELL_SESSION_MODE=ubuntu;  export GNOME_SHELL_SESSION_MODE
+          USESTARTUP=1
         }
       fi
       unset TVNC_WM
@@ -144,11 +144,11 @@ if [ -x /usr/bin/gnome-session ]; then
       if [ -f /usr/share/gnome-session/sessions/ubuntu.session -a "$TVNC_WM" = "" ]; then
         DESKTOP_SESSION=ubuntu;  export DESKTOP_SESSION
         grep -qE "DesktopName\s*=\s*Unity" /usr/share/gnome-session/sessions/ubuntu.session && {
-          XDG_CURRENT_DESKTOP=Unity;  export XDG_CURRENT_DESKTOP;
+          XDG_CURRENT_DESKTOP=Unity;  export XDG_CURRENT_DESKTOP
         } || {
-          XDG_CURRENT_DESKTOP=ubuntu:GNOME;  export XDG_CURRENT_DESKTOP;
-          GNOME_SHELL_SESSION_MODE=ubuntu;  export GNOME_SHELL_SESSION_MODE;
-          USESTARTUP=1;
+          XDG_CURRENT_DESKTOP=ubuntu:GNOME;  export XDG_CURRENT_DESKTOP
+          GNOME_SHELL_SESSION_MODE=ubuntu;  export GNOME_SHELL_SESSION_MODE
+          USESTARTUP=1
         }
       fi
       ;;
@@ -214,7 +214,7 @@ END_XSTARTUP
 $xauthorityFile = "$ENV{XAUTHORITY}";
 
 $vncUserDirUnderTmp = ($vncUserDir =~ m|^/tmp/.+|) ? 1 : 0;
-if (! $xstartup) {
+if (!$xstartup) {
   $xstartup = ($vncUserDirUnderTmp) ?
     "$ENV{HOME}/.turbovncstartup" : "$vncUserDir/xstartup.turbovnc";
 }
@@ -304,10 +304,12 @@ if ($bits eq "64") {
               '/usr/lib/x86_64-linux-gnu/dri',
               '/usr/lib/xorg/modules/dri/amd64',
               '/usr/lib/powerpc64-linux-gnu/dri',
-              '/usr/lib/powerpc64le-linux-gnu/dri');
+              '/usr/lib/powerpc64le-linux-gnu/dri',
+              '/usr/lib/aarch64-linux-gnu/dri');
 } else {
   @dridirs = ('/usr/lib/dri', '/usr/lib32/dri', '/usr/lib/i386-linux-gnu/dri',
-              '/usr/lib/xorg/modules/dri');
+              '/usr/lib/xorg/modules/dri', '/usr/lib/arm-linux-gnueabihf/dri',
+              '/usr/lib/arm-linux-gnueabi/dri');
 }
 push(@dridirs, '/usr/local/lib/dri');
 foreach $_dridir (@dridirs) {
@@ -394,6 +396,8 @@ $authTypeVNCPermitted = $authTypeVNC;
 $encTypeX509Permitted = $encTypeX509;
 if ($opt{'-securitytypes'}) {
   $securityTypes = $opt{'-securitytypes'};
+}
+if ($securityTypes) {
   my $enableVNC = 0;
   my $enableOTP = 0;
   my $enableX509 = 0;
@@ -473,18 +477,18 @@ unless (-e $vncUserDir) {
   }
 }
 ($z, $z, $mode) = lstat("$vncUserDir");
-if (!-d _ || !-o _ || ($vncUserDirUnderTmp && ($mode & 0777) != 0700)) {
+if (! -d _ || ! -o _ || ($vncUserDirUnderTmp && ($mode & 0777) != 0700)) {
   die "$prog: Wrong type or access mode of $vncUserDir.\n";
 }
 
 # Make sure the user has a password.
 if ($authTypeVNC && "$passwdFile" eq "$vncUserDir/passwd") {
   ($z, $z, $mode) = lstat("$vncUserDir/passwd");
-  if (-e _ && (!-f _ || !-o _ || ($mode & 077) != 0)) {
+  if (-e _ && (! -f _ || ! -o _ || ($mode & 077) != 0)) {
     die "$prog: Wrong type, ownership, or permissions on\n           $vncUserDir/passwd.\n";
   }
 
-  if (!-e _) {
+  if (! -e _) {
     if ($opt{'-quiet'}) {
       warn "$vncUserDir/passwd does not exist.\nRun ".$exedir."vncpasswd to create passwd file.\n";
       exit 1;
@@ -570,7 +574,7 @@ $cmd .= " -rfbwait 120000";
 $cmd .= " -rfbauth $passwdFile" if ($authTypeVNC);
 $cmd .= " -x509cert $x509CertFile" if ($encTypeX509);
 $cmd .= " -x509key $x509KeyFile" if ($encTypeX509);
-$cmd .= " -securitytypes $securityTypes" if ($securityTypes);
+$cmd .= " -securitytypes \"$securityTypes\"" if ($securityTypes);
 $cmd .= " -rfbport $vncPort";
 $cmd .= " -fp $fontPath" if ($fontPath);
 $cmd .= " -alr ".$autoLosslessRefresh if ($autoLosslessRefresh > 0.0);
@@ -633,7 +637,7 @@ if ($generateOTP == 1) {
 
 # Create the user's xstartup script if necessary.
 
-if (! $skipxstartup) {
+if (!$skipxstartup) {
   unless (-e "$xstartup" or $opt{'-xstartup'}) {
     warn "Creating default startup script $xstartup\n";
     open(XSTARTUP, ">$xstartup");
@@ -666,7 +670,7 @@ if (-e "/tmp/.X11-unix/X$displayNumber") {
 $ENV{VNCDESKTOP} = $desktopName;
 $ENV{VGL_COMPRESS} = "0";
 
-if (! $skipxstartup) {
+if (!$skipxstartup) {
   if ($opt{'-fg'}) {
     system("$xstartup >> " . &quotedString($desktopLog) . " 2>&1");
     if (kill 0, `cat $pidFile`) {
@@ -761,13 +765,13 @@ sub CheckDisplayNumber
   close(S);
 
   if (-e "/tmp/.X$n-lock") {
-    warn "\nWarning: $host:$n is taken because of /tmp/.X$n-lock\n";
+    warn "\nWARNING: $host:$n is taken because of /tmp/.X$n-lock\n";
     warn "Remove this file if there is no X server $host:$n\n";
     return 0;
   }
 
   if (-e "/tmp/.X11-unix/X$n") {
-    warn "\nWarning: $host:$n is taken because of /tmp/.X11-unix/X$n\n";
+    warn "\nWARNING: $host:$n is taken because of /tmp/.X11-unix/X$n\n";
     warn "Remove this file if there is no X server $host:$n\n";
     return 0;
   }

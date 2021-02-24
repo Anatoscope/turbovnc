@@ -29,12 +29,21 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
 set(RPMARCH ${CMAKE_SYSTEM_PROCESSOR})
 if(CPU_TYPE STREQUAL "x86_64")
 	set(DEBARCH amd64)
-elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "armv7*")
-	set(DEBARCH armhf)
 elseif(CPU_TYPE STREQUAL "arm64")
 	set(DEBARCH ${CPU_TYPE})
 elseif(CPU_TYPE STREQUAL "arm")
-	set(DEBARCH armel)
+	check_c_source_compiles("
+		#if __ARM_PCS_VFP != 1
+		#error \"float ABI = softfp\"
+		#endif
+		int main(void) { return 0; }" HAVE_HARD_FLOAT)
+	if(HAVE_HARD_FLOAT)
+		set(RPMARCH armv7hl)
+		set(DEBARCH armhf)
+	else()
+		set(RPMARCH armel)
+		set(DEBARCH armel)
+	endif()
 elseif(CMAKE_SYSTEM_PROCESSOR_LC STREQUAL "ppc64le")
 	set(DEBARCH ppc64el)
 else()
@@ -45,19 +54,19 @@ message(STATUS "RPM architecture = ${RPMARCH}, DEB architecture = ${DEBARCH}")
 configure_file(release/makerpm.in pkgscripts/makerpm)
 configure_file(release/rpm.spec.in pkgscripts/rpm.spec @ONLY)
 
-add_custom_target(rpm sh pkgscripts/makerpm
+add_custom_target(rpm pkgscripts/makerpm
 	SOURCES pkgscripts/makerpm)
 
 configure_file(release/makesrpm.in pkgscripts/makesrpm)
 
-add_custom_target(srpm sh pkgscripts/makesrpm
+add_custom_target(srpm pkgscripts/makesrpm
 	SOURCES pkgscripts/makesrpm
 	DEPENDS dist)
 
 configure_file(release/makedpkg.in pkgscripts/makedpkg)
 configure_file(release/deb-control.in pkgscripts/deb-control)
 
-add_custom_target(deb sh pkgscripts/makedpkg
+add_custom_target(deb pkgscripts/makedpkg
 	SOURCES pkgscripts/makedpkg)
 
 endif() # Linux
@@ -114,9 +123,9 @@ endif() # WIN32
 
 if(APPLE AND TVNC_BUILDJAVA AND TVNC_BUILDNATIVE)
 
-set(OSX_APP_CERT_NAME "" CACHE STRING
+set(MACOS_APP_CERT_NAME "" CACHE STRING
 	"Name of the Developer ID Application certificate (in the macOS keychain) that should be used to sign the TurboVNC Viewer app & DMG.  Leave this blank to generate an unsigned app/DMG.")
-set(OSX_INST_CERT_NAME "" CACHE STRING
+set(MACOS_INST_CERT_NAME "" CACHE STRING
 	"Name of the Developer ID Installer certificate (in the macOS keychain) that should be used to sign the TurboVNC installer package.  Leave this blank to generate an unsigned package.")
 
 string(REGEX REPLACE "/" ":" CMAKE_INSTALL_MACPREFIX ${CMAKE_INSTALL_PREFIX})
@@ -132,7 +141,7 @@ configure_file(release/uninstall.in pkgscripts/uninstall)
 configure_file(release/uninstall.applescript.in
 	pkgscripts/uninstall.applescript)
 
-add_custom_target(dmg sh pkgscripts/makemacpkg
+add_custom_target(dmg pkgscripts/makemacpkg
 	SOURCES pkgscripts/makemacpkg)
 
 endif() # APPLE
@@ -149,5 +158,5 @@ add_custom_target(dist
 
 configure_file(release/maketarball.in pkgscripts/maketarball)
 
-add_custom_target(tarball sh pkgscripts/maketarball
+add_custom_target(tarball pkgscripts/maketarball
 	SOURCES pkgscripts/maketarball)

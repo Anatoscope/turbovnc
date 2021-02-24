@@ -2,7 +2,7 @@
 # SETUP
 ###############################################################################
 
-cmake_minimum_required(VERSION 2.8.11)
+cmake_minimum_required(VERSION 2.8.12)
 # Shut up CMake 3.1 and later
 if(POLICY CMP0053)
 	cmake_policy(SET CMP0053 NEW)
@@ -14,10 +14,10 @@ endif()
 
 project(TurboVNC NONE)
 string(TOLOWER ${CMAKE_PROJECT_NAME} CMAKE_PROJECT_NAME_LC)
-set(VERSION 2.2.5-anatoscope-1.1.0)
-set(DOCVERSION 2.2.5-anatoscope-1.1.0)
-set(RCVERSION 2,2,5,0)
-set(COPYRIGHT_YEAR "1999-2020")
+set(VERSION 2.2.6-anatoscope-1.1.1)
+set(DOCVERSION 2.2.6-anatoscope-1.1.1)
+set(RCVERSION 2,2,6,0)
+set(COPYRIGHT_YEAR "1999-2021")
 set(COPYRIGHT "The VirtualGL Project and many others (see README.txt)")
 set(URLTEXT "Visit http://www.TurboVNC.org for more information on TurboVNC")
 
@@ -169,6 +169,13 @@ if(USEC)
 		endif()
 		if(NOT CMAKE_SYSTEM_PROCESSOR STREQUAL ${CPU_TYPE})
 			set(CMAKE_SYSTEM_PROCESSOR ${CPU_TYPE})
+		endif()
+	elseif(CMAKE_SYSTEM_PROCESSOR_LC STREQUAL "aarch64" OR
+		CMAKE_SYSTEM_PROCESSOR_LC MATCHES "arm*")
+		if(BITS EQUAL 64)
+			set(CPU_TYPE arm64)
+		else()
+			set(CPU_TYPE arm)
 		endif()
 	elseif(CMAKE_SYSTEM_PROCESSOR STREQUAL "ppc64" AND BITS EQUAL 32)
 		set(CPU_TYPE ppc)
