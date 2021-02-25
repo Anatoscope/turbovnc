@@ -39,7 +39,7 @@ build-upload:
       build_dir=$(mktemp -d)
       cd "$build_dir"
       cmake -DCMAKE_C{,XX}_COMPILER_LAUNCHER=ccache "$src_dir"
-      make -j deb
+      make -j4 deb
       # Extract version number.
       PKG_FILE_NAME="$(ls turbovnc_*.deb | head -n1)"
       FULL_VERSION="$(echo "$PKG_FILE_NAME" | sed -nre "s/turbovnc_(.*)_[^_]+\\.deb/\\1/p")"
