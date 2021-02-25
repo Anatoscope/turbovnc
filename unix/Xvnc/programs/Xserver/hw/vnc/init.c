@@ -244,6 +244,12 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     return 2;
   }
 
+  if (strcasecmp(argv[i], "-congtraceintervalms") == 0) {
+    REQUIRE_ARG();
+    rfbCongTraceIntervalMs = atoi(argv[i + 1]);
+    return 2;
+  }
+
   if (strcasecmp(argv[i], "-deferupdate") == 0) {  /* -deferupdate ms */
     REQUIRE_ARG();
     rfbDeferUpdateTime = atoi(argv[i + 1]);
@@ -1887,6 +1893,8 @@ void ddxUseMsg(void)
   ErrorF("                       the specified file\n");
   ErrorF("-clsrvverfile file     JSON file with object with \"version\" field for AnatoScope\n"
          "                       CLSRVVER extension\n");
+  ErrorF("-congtraceintervalms t trace biggest RTT over interval (0 - off) [default: %d]\n",
+         DEFAULT_CONG_TRACE_INTERVAL_MS);
   ErrorF("-deferupdate time      time in ms to defer updates [default: %d]\n",
          DEFAULT_DEFER_UPDATE_TIME);
   ErrorF("-desktop name          VNC desktop name [default: %s]\n",

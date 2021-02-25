@@ -110,6 +110,8 @@
 #define UVNCGII_IF_FLAG 0x20000000  /* Primary flag */
 #define UVNCGII_PF_FLAG 0x80000000  /* Pressed flag */
 
+#define DEFAULT_CONG_TRACE_INTERVAL_MS 10000
+
 
 /*
  * Per-screen (framebuffer) structure.  There is only one of these, since we
@@ -227,6 +229,13 @@ typedef struct {
   char congested;
   struct xorg_list entry;
 } rfbRTTInfo;
+
+typedef struct {
+  unsigned minRTT;
+  unsigned baseRTT;
+  unsigned congWindow;
+  int sockOffset;
+} rfbCongInfo;
 
 
 /*
@@ -500,6 +509,9 @@ typedef struct rfbClientRec {
   int measurements;
   struct timeval lastAdjustment;
   unsigned minRTT, minCongestedRTT;
+
+  rfbCongInfo congInfoToTrace; /* biggest RTT over period of time */
+  struct timeval lastCongTrace; /* last congestion summary trace time */
 
   Bool pendingDesktopResize, pendingExtDesktopResize;
   int reason, result;
@@ -917,6 +929,8 @@ extern void rfbDRI3SyncDrawableToBO(DrawablePtr drawable);
 
 
 /* flowcontrol.c */
+
+extern CARD32 rfbCongTraceIntervalMs;
 
 extern void rfbInitFlowControl(rfbClientPtr cl);
 extern void rfbUpdatePosition(rfbClientPtr cl, unsigned pos);

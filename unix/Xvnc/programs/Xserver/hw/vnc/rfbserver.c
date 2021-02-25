@@ -807,6 +807,10 @@ static rfbClientPtr rfbNewClient(int sock)
     IdleTimerCancel();
 
   cl->baseRTT = cl->minRTT = cl->minCongestedRTT = (unsigned)-1;
+
+  cl->congInfoToTrace.minRTT = (unsigned)-1;
+  memset(&cl->lastCongTrace, 0, sizeof(cl->lastCongTrace));
+
   REGION_INIT(pScreen, &cl->cuRegion, NullBox, 0);
 
   if (rfbInterframe == 1) {
