@@ -210,6 +210,12 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     return 2;
   }
 
+  if (strcasecmp(argv[i], "-congtraceintervalms") == 0) {
+    if (i + 1 >= argc) UseMsg();
+    rfbCongTraceIntervalMs = atoi(argv[i + 1]);
+    return 2;
+  }
+
   if (strcasecmp(argv[i], "-deferupdate") == 0) {  /* -deferupdate ms */
     if (i + 1 >= argc) UseMsg();
     rfbDeferUpdateTime = atoi(argv[i + 1]);
@@ -1602,6 +1608,8 @@ void ddxUseMsg(void)
   ErrorF("-alwaysshared          always treat new connections as shared\n");
   ErrorF("-capture file          capture the data sent to the first connected viewer to\n");
   ErrorF("                       the specified file\n");
+  ErrorF("-congtraceintervalms t trace biggest RTT over interval (0 - off) [default: %d]\n",
+         DEFAULT_CONG_TRACE_INTERVAL_MS);
   ErrorF("-deferupdate time      time in ms to defer updates [default: %d]\n",
          DEFAULT_DEFER_UPDATE_TIME);
   ErrorF("-desktop name          VNC desktop name [default: %s]\n",
