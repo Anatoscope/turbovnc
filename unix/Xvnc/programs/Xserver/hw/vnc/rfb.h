@@ -100,6 +100,8 @@
 
 #define BASE_RTT_WINDOW 64
 
+#define DEFAULT_CONG_TRACE_INTERVAL_MS 10000
+
 
 /*
  * Per-screen (framebuffer) structure.  There is only one of these, since we
@@ -199,6 +201,13 @@ typedef struct {
     struct sockaddr_in6 sin6;
   } u;
 } rfbSockAddr;
+
+typedef struct {
+  unsigned minRTT;
+  unsigned baseRTT;
+  unsigned congWindow;
+  int sockOffset;
+} rfbCongInfo;
 
 
 /*
@@ -445,6 +454,9 @@ typedef struct rfbClientRec {
   OsTimerPtr congestionTimer;
   Bool congestionTimerRunning;
   struct timeval lastWrite;
+
+  rfbCongInfo congInfoToTrace; /* biggest RTT over period of time */
+  struct timeval lastCongTrace; /* last congestion summary trace time */
 
   Bool pendingDesktopResize, pendingExtDesktopResize;
   int reason, result;
@@ -744,6 +756,8 @@ extern RegionPtr rfbRestoreAreas(WindowPtr, RegionPtr);
 
 
 /* flowcontrol.c */
+
+extern CARD32 rfbCongTraceIntervalMs;
 
 extern void HandleFence(rfbClientPtr cl, CARD32 flags, unsigned len,
                         const char *data);

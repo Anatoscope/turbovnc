@@ -60,6 +60,10 @@ that is already occupied.
 Specify a file to which to capture the data sent to the first connected viewer.
 
 .TP
+\fB\-congtraceintervalms\fR \fItime\fR
+Trace the biggest RTT over a period of time (0 - disabled) [default: 10000].
+
+.TP
 \fB\-deferupdate\fR \fItime\fR
 Amount of time, in milliseconds, for which to defer screen updates [default:
 40].  Deferring updates helps to coalesce many small desktop changes into a few

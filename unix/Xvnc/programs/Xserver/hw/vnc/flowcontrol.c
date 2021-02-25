@@ -30,6 +30,9 @@
 #include <netinet/tcp.h>
 #include <sys/time.h>
 
+/* Trace the biggest RTT value over a period of time (0 - don't trace). */
+CARD32 rfbCongTraceIntervalMs = DEFAULT_CONG_TRACE_INTERVAL_MS;
+static struct timeval lastPingTime;
 
 /* This window should get us going fairly quickly on a network with decent
    bandwidth.  If it's too high, then it will rapidly be reduced and stay
@@ -78,6 +81,19 @@ static time_t msSince(const struct timeval *then)
   diff = (now.tv_sec - then->tv_sec) * 1000;
 
   diff += now.tv_usec / 1000;
+  diff -= then->tv_usec / 1000;
+
+  return diff;
+}
+
+
+static time_t msBetween(const struct timeval *now, const struct timeval *then)
+{
+  time_t diff;
+
+  diff = (now->tv_sec - then->tv_sec) * 1000;
+
+  diff += now->tv_usec / 1000;
   diff -= then->tv_usec / 1000;
 
   return diff;
@@ -194,6 +210,7 @@ Bool rfbSendRTTPing(rfbClientPtr cl)
   memset(&rttInfo, 0, sizeof(RTTInfo));
 
   gettimeofday(&rttInfo.tv, NULL);
+  lastPingTime = rttInfo.tv;
   rttInfo.offset = cl->sockOffset;
   rttInfo.inFlight = rttInfo.offset - cl->ackedOffset;
 
@@ -265,6 +282,27 @@ static void UpdateCongestion(rfbClientPtr cl)
     cl->congWindow = MINIMUM_WINDOW;
   if (cl->congWindow > MAXIMUM_WINDOW)
     cl->congWindow = MAXIMUM_WINDOW;
+
+  if (rfbCongTraceIntervalMs > 0) {
+
+    rfbCongInfo *info = &cl->congInfoToTrace;
+
+    if (cl->minRTT < info->minRTT) {
+      info->minRTT = cl->minRTT;
+      info->baseRTT = cl->baseRTT;
+      info->congWindow = cl->congWindow;
+      info->sockOffset = cl->sockOffset;
+    }
+
+    if (msBetween(&lastPingTime, &cl->lastCongTrace) > rfbCongTraceIntervalMs) {
+
+      cl->lastCongTrace = lastPingTime;
+
+      rfbLog("RTT: %u ms (%u ms), Window: %d KB, Offset: %d KB, Bandwidth: %g Mbps (0x%x)\n",
+             info->minRTT, info->baseRTT, info->congWindow / 1024, info->sockOffset / 1024,
+             info->congWindow * 8.0 / info->baseRTT / 1000.0, cl);
+    }
+  }
 
 #ifdef CONGESTION_DEBUG
   rfbLog("RTT: %d ms (%d ms), Window: %d KB, Offset: %d KB, Bandwidth: %g Mbps\n",

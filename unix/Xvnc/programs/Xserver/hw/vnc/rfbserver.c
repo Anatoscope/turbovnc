@@ -499,6 +499,10 @@ static rfbClientPtr rfbNewClient(int sock)
   for (int i = 0; i != BASE_RTT_WINDOW; ++i)
     cl->RTT[i] = (unsigned)-1;
   gettimeofday(&cl->lastWrite, NULL);
+
+  cl->congInfoToTrace.minRTT = (unsigned)-1;
+  memset(&cl->lastCongTrace, 0, sizeof(cl->lastCongTrace));
+
   REGION_INIT(pScreen, &cl->cuRegion, NullBox, 0);
 
   if (rfbInterframe == 1) {
