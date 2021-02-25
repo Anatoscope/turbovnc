@@ -223,9 +223,11 @@ static void UpdateCongestion(rfbClientPtr cl)
 #define STATIC_ASSERT_UpdateCongestion(cond) switch(0){case 0:case (cond):;}
   STATIC_ASSERT_UpdateCongestion(BASE_RTT_WINDOW < 1ULL << (sizeof(sumBaseRTT) - sizeof(cl->RTT[0])) * 8)
 #undef STATIC_ASSERT_UpdateCongestion
-  for (int i = 0; i != BASE_RTT_WINDOW; ++i)
-    sumBaseRTT += cl->RTT[i];
-  cl->baseRTT = sumBaseRTT / BASE_RTT_WINDOW;
+  int i;
+  for (i = 0; i != BASE_RTT_WINDOW && cl->RTT[i] != (unsigned)-1; ++i)
+      sumBaseRTT += cl->RTT[i];
+  if (i)
+    cl->baseRTT = sumBaseRTT / i;
 
   if (!cl->seenCongestion)
     return;
