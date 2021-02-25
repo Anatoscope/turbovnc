@@ -46,6 +46,9 @@
 
 /* #define CONGESTION_DEBUG */
 
+/* Trace the biggest RTT value over a period of time (0 - don't trace). */
+CARD32 rfbCongTraceIntervalMs = DEFAULT_CONG_TRACE_INTERVAL_MS;
+static struct timeval lastPingTime;
 
 /* This window should get us going fairly quickly on a network with decent
    bandwidth.  If it's too high, then it will rapidly be reduced and stay
@@ -195,6 +198,7 @@ Bool rfbSendRTTPing(rfbClientPtr cl)
   rttInfo = rfbAlloc0(sizeof(rfbRTTInfo));
 
   gettimeofday(&rttInfo->tv, NULL);
+  lastPingTime = rttInfo->tv;
   rttInfo->pos = cl->lastPosition;
   rttInfo->extra = GetExtraBuffer(cl);
   rttInfo->congested = IsCongested(cl);
@@ -540,6 +544,27 @@ static void UpdateCongestion(rfbClientPtr cl)
     cl->congWindow = MINIMUM_WINDOW;
   if (cl->congWindow > MAXIMUM_WINDOW)
     cl->congWindow = MAXIMUM_WINDOW;
+
+  if (rfbCongTraceIntervalMs > 0) {
+
+    rfbCongInfo *info = &cl->congInfoToTrace;
+
+    if (cl->minRTT < info->minRTT) {
+      info->minRTT = cl->minRTT;
+      info->baseRTT = cl->baseRTT;
+      info->congWindow = cl->congWindow;
+      info->sockOffset = cl->sockOffset;
+    }
+
+    if (msBetween(&cl->lastCongTrace, &lastPingTime) > rfbCongTraceIntervalMs) {
+
+      cl->lastCongTrace = lastPingTime;
+
+      rfbLog("RTT: %u ms (%u ms), Window: %d KB, Offset: %d KB, Bandwidth: %g Mbps (0x%x)\n",
+             info->minRTT, info->baseRTT, info->congWindow / 1024, info->sockOffset / 1024,
+             info->congWindow * 8.0 / info->baseRTT / 1000.0, cl);
+    }
+  }
 
 #ifdef CONGESTION_DEBUG
   rfbLog("RTT: %d/%d ms (%d ms), Window: %d KB, Offset: %d KB, Bandwidth: %g Mbps%s\n",
