@@ -47,8 +47,6 @@ static const unsigned MINIMUM_WINDOW = 4096;
    limit for now... */
 static const unsigned MAXIMUM_WINDOW = 4194304;
 
-static const unsigned MAXIMUM_WINDOW_STEP = 1048576;
-
 
 typedef struct {
   struct timeval tv;
@@ -104,7 +102,6 @@ void rfbInitFlowControl(rfbClientPtr cl)
 {
   cl->ackedOffset = cl->sockOffset;
   cl->congWindow = INITIAL_WINDOW;
-  cl->congWindowStep = 0;
 }
 
 
@@ -262,20 +259,15 @@ static void UpdateCongestion(rfbClientPtr cl)
   if (diff > min(100, cl->baseRTT)) {
     /* Way too fast */
     cl->congWindow = cl->congWindow * cl->baseRTT / cl->minRTT;
-    cl->congWindowStep = -1;
   } else if (diff > min(50, cl->baseRTT / 2)) {
     /* Slightly too fast */
     cl->congWindow -= 4096;
-    cl->congWindowStep = -1;
+  } else if (diff < 5) {
+    /* Way too slow */
+    cl->congWindow += 8192;
   } else if (diff < 25) {
     /* Too slow */
-    const int doubleStep = (diff < 5) + 1;
-
-    cl->congWindowStep = max(4096, cl->congWindowStep);
-    if (cl->congWindowStep > 4096 && cl->congWindowStep < MAXIMUM_WINDOW_STEP)
-      cl->congWindowStep *= 2;
-
-    cl->congWindow += cl->congWindowStep * doubleStep;
+    cl->congWindow += 4096;
   }
 
   if (cl->congWindow < MINIMUM_WINDOW)
