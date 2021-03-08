@@ -604,6 +604,9 @@ typedef struct _rfbInteractionCapsMsg {
 #define rfbEncodingWarnEventAllOff 0xFFFFFA00
 #define rfbEncodingWarnEventAllOn  0xFFFFFAFF
 
+#define rfbEncodingVisEventAllOff  0xFFFFFB00
+#define rfbEncodingVisEventAllOn   0xFFFFFBFF
+
 #define rfbEncodingGII             0xFFFFFECF
 
 /* signatures for "fake" encoding types */
@@ -619,6 +622,7 @@ typedef struct _rfbInteractionCapsMsg {
 #define sig_rfbEncodingQualityLevel0   "JPEGQLVL"
 #define sig_rfbEncodingGII             "GII_____"
 #define sig_rfbEncodingWarnEventAllOff "WRNEVENT"
+#define sig_rfbEncodingVisEventAllOff  "VISEVENT"
 
 /*****************************************************************************
  *
