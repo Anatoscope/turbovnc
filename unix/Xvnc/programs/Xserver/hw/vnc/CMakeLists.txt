@@ -66,6 +66,7 @@ add_library(vnc STATIC
 	cursor.c
 	cutpaste.c
 	dispcur.c
+	disppopup.c
 	draw.c
 	${DRI3SRC}
 	flowcontrol.c
@@ -73,6 +74,8 @@ add_library(vnc STATIC
 	init.c
 	input-xkb.c
 	kbdptr.c
+	paintinactwarn.c
+	popupsprite.c
 	qnum_to_xorgevdev.c
 	qnum_to_xorgkbd.c
 	randr.c
