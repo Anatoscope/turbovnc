@@ -194,6 +194,9 @@ static void rfbPaintInactWarningWithVal(DrawablePtr drawable, void *userData)
 int rfbInactSignal = SIGTERM;
 CARD32 rfbInactTimeout = 0;
 CARD32 rfbInactWarnTimeout = 0;
+Bool rfbDflInactVisWarn = TRUE;
+
+static const unsigned char INACT_WARN_VIS_EVENT_MASK = 1;
 
 static double inactTimeout = -1.0;
 static Bool inact;
@@ -651,6 +654,8 @@ static rfbClientPtr rfbNewClient(int sock)
     if (combine > 0 && combine <= 65000) rfbCombineRect = combine;
   }
 
+  cl->visEventMask = rfbDflInactVisWarn ? INACT_WARN_VIS_EVENT_MASK : 0;
+
   cl->firstUpdate = TRUE;
   /* The TigerVNC Viewer won't enable remote desktop resize until it receives
      a desktop resize message from the server, so we give it one with the
@@ -990,7 +995,7 @@ static void rfbProcessClientInitMessage(rfbClientPtr cl)
 /* Update these constants on changing capability lists below! */
 #define N_SMSG_CAPS  0
 #define N_CMSG_CAPS  0
-#define N_ENC_CAPS  19
+#define N_ENC_CAPS  20
 
 void rfbSendInteractionCaps(rfbClientPtr cl)
 {
@@ -1057,6 +1062,7 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   SetCapInfo(&enc_list[i++],  rfbEncodingLastRect,       rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbGIIServer,              rfbGIIVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingWarnEvent,      rfbTurboVncVendor);
+  SetCapInfo(&enc_list[i++],  rfbEncodingVisEventAllOff, rfbTurboVncVendor);
   if (i != nEncCaps) {
     rfbLog("rfbSendInteractionCaps: assertion failed, i != nEncCaps\n");
     rfbCloseClient(cl);
@@ -1348,6 +1354,10 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               cl->tightQualityLevel = enc & 0xFF;
               rfbLog("Using JPEG quality %d for client %s\n",
                      cl->tightQualityLevel, cl->host);
+            } else if (enc >= (CARD32)rfbEncodingVisEventAllOff &&
+                       enc <= (CARD32)rfbEncodingVisEventAllOn) {
+              rfbLog("Setting VisEvent mask 0x%x for client %s\n", enc & 0xFF, cl->host);
+              cl->visEventMask = enc & 0xFF;
             } else {
               rfbLog("rfbProcessClientNormalMessage: ignoring unknown encoding %d (%x)\n",
                      (int)enc, (int)enc);
@@ -2211,19 +2221,24 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
       rfbSpriteRestoreCursorAllDev(pScreen);
   }
 
-  /*
-   * Block updates of the cursor erase the warning popup without sending
-   * the update. So redraw it in any case.
-   */
-  if (cl->inactWarnWasChanged && !rfbFB.popupIsDrawn)
-    rfbPopupSpriteRestorePopupAllDev(pScreen);
+  if (cl->visEventMask & INACT_WARN_VIS_EVENT_MASK) {
+    /*
+     * Block updates of the cursor erase the warning popup without sending
+     * the update. So redraw it in any case.
+     */
+    if (cl->inactWarnWasChanged && !rfbFB.popupIsDrawn)
+      rfbPopupSpriteRestorePopupAllDev(pScreen);
 
-  if (inactWarn && !rfbFB.popupIsDrawn)
-    rfbPopupSpriteRestorePopupAllDev(pScreen);
-  else if (!inactWarn && rfbFB.popupIsDrawn)
-    rfbPopupSpriteRemovePopupAllDev(pScreen);
+    if (inactWarn && !rfbFB.popupIsDrawn)
+      rfbPopupSpriteRestorePopupAllDev(pScreen);
+    else if (!inactWarn && rfbFB.popupIsDrawn)
+      rfbPopupSpriteRemovePopupAllDev(pScreen);
 
-  cl->inactWarnWasChanged = FALSE;
+    cl->inactWarnWasChanged = FALSE;
+  } else {
+    if (rfbFB.popupIsDrawn)
+      rfbPopupSpriteRemovePopupAllDev(pScreen);
+  }
 
   /*
    * If just connected to a session that has no activity then immediately send

@@ -165,6 +165,11 @@ directive in the security configuration file.  See the SECURITY
 CONFIGURATION FILE section for more details.
 
 .TP
+\fB-nodflinactviswarn\fR
+Don't show visual warning about inactivity (no user input) to clients that
+have no AnatoScope VISEVENT extension.
+
+.TP
 \fB\-noflowcontrol\fR
 Normally, the TurboVNC Server will use the RFB flow control extensions
 (Continuous Updates and Fence) with any connected viewers that support them.
