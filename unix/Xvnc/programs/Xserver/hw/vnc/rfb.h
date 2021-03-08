@@ -454,6 +454,8 @@ typedef struct rfbClientRec {
   Bool cursorWasChanged;            /* cursor shape update should be sent */
   Bool cursorWasMoved;              /* cursor position update should be sent */
 
+  unsigned char visEventMask;       /* which visual warning events to show */
+
   int cursorX, cursorY;             /* client's cursor position */
 
   Bool needSendFirstInactWarn;
@@ -1035,6 +1037,7 @@ extern void IdleTimerCheck(void);
 extern int rfbInactSignal;
 extern CARD32 rfbInactTimeout;
 extern CARD32 rfbInactWarnTimeout;
+extern Bool rfbDflInactVisWarn;
 extern void InactTimerSet(void);
 extern void InactTimerCancel(void);
 extern void InactTimerCheck(void);
