@@ -122,8 +122,8 @@ static inline Bool is_visible(DrawablePtr drawable)
   BoxRec *boxTemp = REGION_EXTENTS(pScreen, reg);  \
   if ((boxTemp->x2 - boxTemp->x1) * (boxTemp->y2 - boxTemp->y1) != 0)  \
     for (clTemp = rfbClientHead; clTemp; clTemp = clTemp->next) {  \
-      if (!prfb->dontSendFramebufferUpdate ||  \
-          !clTemp->enableCursorShapeUpdates)  \
+      if (!prfb->dontSendFramebufferUpdate || \
+          !clTemp->enableCursorShapeUpdates || clTemp->inactWarnWasChanged)  \
         REGION_UNION((pScreen), &clTemp->modifiedRegion,  \
                      &clTemp->modifiedRegion, reg);  \
     }  \

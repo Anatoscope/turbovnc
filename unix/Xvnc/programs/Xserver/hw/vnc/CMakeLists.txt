@@ -81,6 +81,7 @@ add_library(vnc STATIC
 	cursor.c
 	cutpaste.c
 	dispcur.c
+	disppopup.c
 	draw.c
 	flowcontrol.c
 	hextile.c
@@ -88,6 +89,8 @@ add_library(vnc STATIC
 	init.c
 	input-xkb.c
 	kbdptr.c
+	paintinactwarn.c
+	popupsprite.c
 	randr.c
 	rfbscreen.c
 	rfbserver.c
