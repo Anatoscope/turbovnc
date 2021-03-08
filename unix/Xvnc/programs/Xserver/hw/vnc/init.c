@@ -403,6 +403,11 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     return 1;
   }
 
+  if (strcasecmp(argv[i], "-nodflinactviswarn") == 0) {
+    rfbDflInactVisWarn = FALSE;
+    return 1;
+  }
+
   if (strcasecmp(argv[i], "-noflowcontrol") == 0) {
     rfbCongestionControl = FALSE;
     return 1;
@@ -1712,6 +1717,7 @@ void ddxUseMsg(void)
   ErrorF("-noclipboardsend       disable server->client clipboard synchronization\n");
   ErrorF("-nocutbuffersync       disable clipboard synchronization for applications\n");
   ErrorF("                       that use the (obsolete) X cut buffer\n");
+  ErrorF("-nodflinactviswarn     don't show visual no-input warning to clients without VISEVENT\n");
   ErrorF("-noflowcontrol         when continuous updates are enabled, send updates\n");
   ErrorF("                       whether or not the viewer is ready to receive them\n");
   ErrorF("-noprimarysync         disable clipboard synchronization with the PRIMARY\n");
