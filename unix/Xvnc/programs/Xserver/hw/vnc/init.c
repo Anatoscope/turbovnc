@@ -82,6 +82,7 @@ from the X Consortium.
 #include "micmap.h"
 #include "eventstr.h"
 #include "rfb.h"
+#include "popupsprite.h"
 #include <time.h>
 #include "tvnc_version.h"
 #include "input-xkb.h"
@@ -1009,6 +1010,8 @@ static Bool rfbScreenInit(ScreenPtr pScreen, int argc, char **argv)
   pScreen->SaveScreen = (SaveScreenProcPtr)rfbAlwaysTrue;
 
   rfbDCInitialize(pScreen, &rfbPointerCursorFuncs);
+  if (!rfbPopupScreenInitialize(pScreen))
+      return FALSE;
 
   if (noCursor) {
     pScreen->DisplayCursor = (DisplayCursorProcPtr)rfbAlwaysTrue;
@@ -1164,6 +1167,9 @@ void InitInput(int argc, char *argv[])
     if (!AddExtInputDevice(&virtualTabletPad))
       FatalError("Could not create TurboVNC virtual tablet pad device");
   }
+
+  for (int i = 0; i < screenInfo.numScreens; i++)
+    rfbPopupInitialize(screenInfo.screens[i]);
 }
 
 
@@ -1309,6 +1315,8 @@ void RemoveExtInputDevice(rfbClientPtr cl, int index)
 
 void CloseInput(void)
 {
+  for (int i = 0; i < screenInfo.numScreens; i++)
+    rfbPopupSpriteDevicePopupCleanup(screenInfo.screens[i]);
 }
 
 

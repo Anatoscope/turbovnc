@@ -43,6 +43,8 @@
 #include <sys/time.h>
 #include <arpa/inet.h>
 #include "windowstr.h"
+#include "paintinactwarn.h"
+#include "popupsprite.h"
 #include "rfb.h"
 #include "sprite.h"
 
@@ -191,6 +193,11 @@ static Bool rfbSendInactWarnTimeout(rfbClientPtr cl, CARD32 timeLeftMs, CARD32 r
   return TRUE;
 }
 
+static void rfbPaintInactWarningWithVal(DrawablePtr drawable, void *userData)
+{
+  rfbPaintInactWarning(drawable, *(double*)userData);
+}
+
 int rfbInactSignal = SIGTERM;
 CARD32 rfbInactTimeout = 0;
 CARD32 rfbInactWarnTimeout = 0;
@@ -202,6 +209,31 @@ static Bool inactWarn;
 
 static Bool seenInput;
 static OsTimerPtr inactRearm;
+
+static rfbPopupRec warnPopup;
+static double warnPopupAmountLeft;
+
+void rfbInactWarnSetPopup(ScreenPtr pScreen, double amountLeft)
+{
+  if (warnPopup.paintPopupFunc &&
+      fabs(warnPopupAmountLeft - amountLeft) < 1. / rfbInactWarnTickCount)
+    return;
+
+  warnPopupAmountLeft = amountLeft;
+
+  const int w = pScreen->width * 2 / 9;
+  const int h = pScreen->height * 2 / 9;
+  const int x = (pScreen->width - w) / 2;
+  const int y = (pScreen->height - h) / 2;
+
+  warnPopup.width = w;
+  warnPopup.height = h;
+  warnPopup.paintPopupFunc = rfbPaintInactWarningWithVal;
+  warnPopup.paintPopupFuncUserData = &warnPopupAmountLeft;
+  warnPopup.argb = NULL;
+
+  rfbPopupSpriteSetPopup(pScreen, &warnPopup, x, y);
+}
 
 static void InactTimerRearm(void);
 
@@ -244,6 +276,11 @@ void InactTimerSet(void)
       for (cl = rfbClientHead; cl; cl = cl->next) {
         if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
           rfbSendInactWarnTimeout(cl, 0, 1);
+
+        cl->inactWarnWasChanged = TRUE;
+
+        if (!cl->deferredUpdateScheduled)
+          rfbSendFramebufferUpdate(cl);
       }
     }
   }
@@ -287,7 +324,27 @@ void InactTimerCheck(void)
     for (cl = rfbClientHead; cl; cl = cl->next) {
       if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
         rfbSendInactWarnTimeout(cl, timeLeftMs, 0);
+
+      cl->inactWarnWasChanged = TRUE;
+
+      if (!cl->deferredUpdateScheduled)
+        rfbSendFramebufferUpdate(cl);
     }
+  }
+
+  if (inactWarn) {
+    const CARD32 totalPopupTime = rfbInactTimeout > rfbInactWarnTimeout ?
+        rfbInactTimeout - rfbInactWarnTimeout :
+        0;
+
+    const double timeLeft = inactTimeout > currTime ?
+        (inactTimeout - currTime):
+        0;
+
+    const double timeLeftRatio = totalPopupTime > 0 ? timeLeft / totalPopupTime : 0;
+
+    for (int i = 0; i < screenInfo.numScreens; i++)
+      rfbInactWarnSetPopup(screenInfo.screens[i], timeLeftRatio);
   }
 }
 
@@ -566,6 +623,8 @@ static rfbClientPtr rfbNewClient(int sock)
   cl->tightSubsampLevel = TIGHT_DEFAULT_SUBSAMP;
   cl->tightQualityLevel = -1;
   cl->imageQualityLevel = -1;
+
+  cl->inactWarnWasChanged = TRUE;
 
   cl->needSendFirstInactWarn = TRUE;
 
@@ -2179,6 +2238,20 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
     if (!rfbFB.cursorIsDrawn)
       rfbSpriteRestoreCursorAllDev(pScreen);
   }
+
+  /*
+   * Block updates of the cursor erase the warning popup without sending
+   * the update. So redraw it in any case.
+   */
+  if (cl->inactWarnWasChanged && !rfbFB.popupIsDrawn)
+    rfbPopupSpriteRestorePopupAllDev(pScreen);
+
+  if (inactWarn && !rfbFB.popupIsDrawn)
+    rfbPopupSpriteRestorePopupAllDev(pScreen);
+  else if (!inactWarn && rfbFB.popupIsDrawn)
+    rfbPopupSpriteRemovePopupAllDev(pScreen);
+
+  cl->inactWarnWasChanged = FALSE;
 
   /*
    * If just connected to a session that has no activity then immediately send

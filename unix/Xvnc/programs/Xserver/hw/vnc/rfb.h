@@ -158,6 +158,8 @@ typedef struct {
 
   Bool cursorIsDrawn;                /* TRUE if the cursor is currently
                                         drawn */
+  Bool popupIsDrawn;                 /* TRUE if the popup is currently
+                                        drawn */
   Bool dontSendFramebufferUpdate;    /* TRUE while removing or drawing the
                                         cursor */
   Bool blockUpdates;                 /* TRUE while resizing the screen */
@@ -413,6 +415,7 @@ typedef struct rfbClientRec {
                                        extension */
   Bool enableGII;                   /* client supports GII extension */
   unsigned char warnEventMask;      /* which warning to send to client */
+  Bool inactWarnWasChanged;         /* visual inactivity warning was shown/hidden */
   Bool useRichCursorEncoding;       /* rfbEncodingRichCursor is preferred */
   Bool cursorWasChanged;            /* cursor shape update should be sent */
   Bool cursorWasMoved;              /* cursor position update should be sent */
@@ -501,6 +504,7 @@ typedef struct rfbClientRec {
 
 #define FB_UPDATE_PENDING(cl)  \
   ((!(cl)->enableCursorShapeUpdates && !rfbFB.cursorIsDrawn) ||  \
+   ((cl)->inactWarnWasChanged && !rfbFB.popupIsDrawn) ||  \
    ((cl)->enableCursorShapeUpdates && (cl)->cursorWasChanged) ||  \
    ((cl)->enableCursorPosUpdates && (cl)->cursorWasMoved) ||  \
    REGION_NOTEMPTY((pScreen), &(cl)->copyRegion) ||  \
@@ -728,6 +732,10 @@ extern void vncSelectionInit(void);
 
 extern Bool rfbDCInitialize(ScreenPtr, miPointerScreenFuncPtr);
 
+/* disppopup.c */
+
+extern Bool rfbPopupInitialize(ScreenPtr);
+extern Bool rfbPopupScreenInitialize(ScreenPtr pScreen);
 
 /* draw.c */
 
