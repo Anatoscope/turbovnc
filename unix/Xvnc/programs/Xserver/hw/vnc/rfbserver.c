@@ -261,6 +261,8 @@ static CARD32 updateCallback(OsTimerPtr timer, CARD32 time, pointer arg)
  */
 
 int rfbInterframe = -1;  /* -1 = auto (determined by compression level) */
+double rfbInterframeEps = 0.0;  /* relative error allowed per colour */
+BOOL rfbInterframeAllowConv = FALSE;  /* allow RFB pixel format other than used for comparison */
 
 Bool InterframeOn(rfbClientPtr cl)
 {
@@ -1894,6 +1896,21 @@ static CARD32 firstQualityAdaptCallback(OsTimerPtr timer, CARD32 time, pointer a
 
 
 /*
+ * Compare lines of pixels of server buffer possibly allowing some color variation.
+ * Return 0 if the same.
+ * Return !=0 if different.
+ */
+
+static int rfbInterframeColorCmp(char *a1, char *a2, size_t size)
+{
+  if (rfbInterframeEps > 0.0)
+    return rfbColorCmpWithEps(a1, a2, size, rfbInterframeEps);
+
+  return memcmp(a1, a2, size);
+}
+
+
+/*
  * rfbSendFramebufferUpdate - send the currently pending framebuffer update to
  * the RFB client.
  */
@@ -2142,7 +2159,7 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
 
           while (rows--) {
             if (cl->firstCompare ||
-                memcmp(srcPtr, dstPtr, compareWidth * ps)) {
+                rfbInterframeColorCmp(srcPtr, dstPtr, compareWidth * ps)) {
               memcpy(dstPtr, srcPtr, compareWidth * ps);
               different = TRUE;
             }
