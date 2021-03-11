@@ -5,7 +5,7 @@
  */
 
 /*
- *  Copyright (C) 2010, 2012-2019 D. R. Commander.  All Rights Reserved.
+ *  Copyright (C) 2010, 2012-2020 D. R. Commander.  All Rights Reserved.
  *  Copyright (C) 2010 University Corporation for Atmospheric Research.
  *                     All Rights Reserved.
  *  Copyright (C) 2003-2006 Constantin Kaplinsky.  All Rights Reserved.
@@ -234,10 +234,13 @@ static void AuthPAMUserPwdRspFunc(rfbClientPtr cl)
     }
   }
 
-  if (rfbPAMAuthenticate(cl, pamServiceName, userBuf, pwdBuf, &emsg))
+  if (rfbPAMAuthenticate(cl, pamServiceName, userBuf, pwdBuf, &emsg)) {
     rfbClientAuthSucceeded(cl, rfbAuthUnixLogin);
-  else
+    rfbLog("PAM authentication succeeded for user '%s'\n", userBuf);
+  } else {
+    rfbLog("PAM authentication failed for user '%s'\n", userBuf);
     rfbClientAuthFailed(cl, (char *)emsg);
+  }
 }
 
 #endif
@@ -820,7 +823,7 @@ void rfbAuthNewClient(rfbClientPtr cl)
 
   if (rfbAuthIsBlocked()) {
     rfbLog("Too many authentication failures - client rejected\n");
-    rfbClientConnFailed(cl, "Too many authentication failures");
+    rfbClientConnFailed(cl, "Too many authentication failures.  Connections temporarily blocked");
     return;
   }
 
@@ -1511,13 +1514,25 @@ void rfbVncAuthProcessResponse(rfbClientPtr cl)
   }
 
   if (ok) {
+    rfbClientPtr otherCl;
+
     rfbAuthUnblock();
+    if (!cl->reverseConnection && rfbNeverShared && rfbDontDisconnect) {
+      for (otherCl = rfbClientHead; otherCl; otherCl = otherCl->next) {
+        if ((otherCl != cl) && (otherCl->state == RFB_NORMAL)) {
+          rfbLog("-dontdisconnect: Not shared & existing client\n");
+          rfbLog("  refusing new client %s\n", cl->host);
+          rfbClientAuthFailed(cl, "Authentication failed.  The server is already in use.");
+          return;
+        }
+      }
+    }
     rfbClientAuthSucceeded(cl, rfbAuthVNC);
   } else {
     rfbLog("rfbVncAuthProcessResponse: authentication failed from %s\n",
            cl->host);
     if (rfbAuthConsiderBlocking())
-      rfbClientAuthFailed(cl, "Authentication failed.  Too many tries");
+      rfbClientAuthFailed(cl, "Authentication failed.  Connections temporarily blocked");
     else
       rfbClientAuthFailed(cl, "Authentication failed");
   }
@@ -1610,13 +1625,13 @@ void rfbClientAuthSucceeded(rfbClientPtr cl, CARD32 authType)
  */
 
 /* Maximum authentication failures before blocking connections */
-#define MAX_AUTH_TRIES 5
+int rfbAuthMaxFails = DEFAULT_AUTH_MAX_FAILS;
 
-/* Delay in ms.  This doubles for each failure over MAX_AUTH_TRIES. */
-#define AUTH_TOO_MANY_BASE_DELAY 10 * 1000
+/* Delay in seconds.  This doubles for each failure over rfbAuthMaxFails. */
+CARD32 rfbAuthFailTimeout = DEFAULT_AUTH_FAIL_TIMEOUT;
 
-static int rfbAuthTries = 0;
-static Bool rfbAuthTooManyTries = FALSE;
+static int rfbAuthFails = 0;
+static Bool rfbAuthTooManyFails = FALSE;
 static OsTimerPtr timer = NULL;
 
 
@@ -1627,7 +1642,7 @@ static OsTimerPtr timer = NULL;
 
 static CARD32 rfbAuthReenable(OsTimerPtr timer, CARD32 now, pointer arg)
 {
-  rfbAuthTooManyTries = FALSE;
+  rfbAuthTooManyFails = FALSE;
   return 0;
 }
 
@@ -1641,15 +1656,18 @@ Bool rfbAuthConsiderBlocking(void)
 {
   int i;
 
-  rfbAuthTries++;
+  if (rfbAuthMaxFails == 0)
+    return FALSE;
 
-  if (rfbAuthTries >= MAX_AUTH_TRIES) {
-    CARD32 delay = AUTH_TOO_MANY_BASE_DELAY;
+  rfbAuthFails++;
 
-    for (i = MAX_AUTH_TRIES; i < rfbAuthTries; i++)
+  if (rfbAuthFails >= rfbAuthMaxFails) {
+    CARD32 delay = rfbAuthFailTimeout * 1000;
+
+    for (i = rfbAuthMaxFails; i < rfbAuthFails; i++)
       delay *= 2;
     timer = TimerSet(timer, 0, delay, rfbAuthReenable, NULL);
-    rfbAuthTooManyTries = TRUE;
+    rfbAuthTooManyFails = TRUE;
     return TRUE;
   }
 
@@ -1660,13 +1678,16 @@ Bool rfbAuthConsiderBlocking(void)
 /*
  * This function should be called after a successful authentication.  It
  * resets the counter of authentication failures.  Note that it's not necessary
- * to clear the rfbAuthTooManyTries flag, as it will be reset by the timer
+ * to clear the rfbAuthTooManyFails flag, as it will be reset by the timer
  * function.
  */
 
 void rfbAuthUnblock(void)
 {
-  rfbAuthTries = 0;
+  if (rfbAuthMaxFails == 0)
+    return;
+
+  rfbAuthFails = 0;
 }
 
 
@@ -1678,5 +1699,8 @@ void rfbAuthUnblock(void)
 
 Bool rfbAuthIsBlocked(void)
 {
-  return rfbAuthTooManyTries;
+  if (rfbAuthMaxFails == 0)
+    return FALSE;
+
+  return rfbAuthTooManyFails;
 }

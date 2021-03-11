@@ -76,8 +76,14 @@
 #define MAX_AUTH_CAPS 16
 #define MAX_VENCRYPT_SUBTYPES 16
 
+
+#define DEFAULT_AUTH_MAX_FAILS 5
+#define DEFAULT_AUTH_FAIL_TIMEOUT 10
+
 /* Protect ourself against a denial of service */
 #define MAX_CUTTEXT_LEN (1 * 1024 * 1024)
+
+#define DEFAULT_DEFER_UPDATE_TIME 40
 
 /* Maximum number of threads to use for multithreaded encoding, regardless of
    the CPU count */
@@ -90,7 +96,11 @@
 #define DEFAULT_MAX_CONNECTIONS 100
 #define MAX_MAX_CONNECTIONS 500
 
+#define DEFAULT_MAX_CLIENT_WAIT 20000
+
 #define BASE_RTT_WINDOW 64
+
+#define DEFAULT_CONG_TRACE_INTERVAL_MS 10000
 
 
 /*
@@ -191,6 +201,13 @@ typedef struct {
     struct sockaddr_in6 sin6;
   } u;
 } rfbSockAddr;
+
+typedef struct {
+  unsigned minRTT;
+  unsigned baseRTT;
+  unsigned congWindow;
+  int sockOffset;
+} rfbCongInfo;
 
 
 /*
@@ -401,7 +418,7 @@ typedef struct rfbClientRec {
 
   int cursorX, cursorY;             /* client's cursor position */
 
-  Bool firstUpdate;
+  Bool firstUpdate, inALR;
   OsTimerPtr alrTimer;
   RegionRec lossyRegion, alrRegion, alrEligibleRegion;
 
@@ -436,6 +453,9 @@ typedef struct rfbClientRec {
   OsTimerPtr congestionTimer;
   Bool congestionTimerRunning;
   struct timeval lastWrite;
+
+  rfbCongInfo congInfoToTrace; /* biggest RTT over period of time */
+  struct timeval lastCongTrace; /* last congestion summary trace time */
 
   Bool pendingDesktopResize, pendingExtDesktopResize;
   int reason, result;
@@ -643,6 +663,9 @@ extern void rfbClientAuthFailed(rfbClientPtr cl, char *reason);
 extern void rfbClientAuthSucceeded(rfbClientPtr cl, CARD32 authType);
 
 /* Functions to prevent too many successive authentication failures */
+extern int rfbAuthMaxFails;
+extern CARD32 rfbAuthFailTimeout;
+
 extern Bool rfbAuthConsiderBlocking(void);
 extern void rfbAuthUnblock(void);
 extern Bool rfbAuthIsBlocked(void);
@@ -732,6 +755,8 @@ extern RegionPtr rfbRestoreAreas(WindowPtr, RegionPtr);
 
 
 /* flowcontrol.c */
+
+extern CARD32 rfbCongTraceIntervalMs;
 
 extern void HandleFence(rfbClientPtr cl, CARD32 flags, unsigned len,
                         const char *data);

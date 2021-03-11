@@ -8,7 +8,7 @@ Build Requirements
 
 ### All Systems
 
-- [CMake](http://www.cmake.org) v2.8.11 or later
+- [CMake](http://www.cmake.org) v2.8.12 or later
 
 - libjpeg-turbo SDK (v1.4 or later required if building the Java viewer.)
   * The libjpeg-turbo SDK binary packages can be downloaded from the "Files"
@@ -44,27 +44,23 @@ Build Requirements
 - Microsoft Visual C++ 2005 or later
 
   If you don't already have Visual C++, then the easiest way to get it is by
-  installing the
-  [Windows SDK](http://msdn.microsoft.com/en-us/windows/bb980924.aspx).
-  The Windows SDK includes both 32-bit and 64-bit Visual C++ compilers and
-  everything necessary to build TurboVNC.
+  installing
+  [Visual Studio Community Edition](https://visualstudio.microsoft.com),
+  which includes everything necessary to build TurboVNC.
 
-  * You can also use Microsoft Visual Studio Express/Community Edition, which
-    is a free download.  (NOTE: versions prior to 2012 can only be used to
-    build 32-bit code.)
+  * You can also download and install the standalone Windows SDK (for Windows 7
+    or later), which includes command-line versions of the 32-bit and 64-bit
+    Visual C++ compilers.
   * If you intend to build TurboVNC from the command line, then add the
     appropriate compiler and SDK directories to the `INCLUDE`, `LIB`, and
     `PATH` environment variables.  This is generally accomplished by executing
-    `vcvars32.bat` or `vcvars64.bat` and `SetEnv.cmd`.  __vcvars32.bat__ and
-    __vcvars64.bat__ are part of Visual C++ and are located in the same
-    directory as the compiler.  __SetEnv.cmd__ is part of the Windows SDK.  You
-    can pass optional arguments to `SetEnv.cmd` to specify a 32-bit or 64-bit
-    build environment.
+    `vcvars32.bat` or `vcvars64.bat`, which are located in the same directory
+    as the compiler.
 
 
 ### Mac
 
-- Xcode 4.1 or later (OS X 10.7.x or later SDK required)
+- Xcode 4.1 or later (OS X/macOS 10.7.x or later SDK required)
 
 - JDK 8 or OpenJDK 8 or later
   * Download the
@@ -104,6 +100,8 @@ of TurboVNC.  See "Build Recipes" for specific instructions on how to build a
     cd {build_directory}
     cmake -G"Unix Makefiles" [additional CMake flags] {source_directory}
     make
+
+Replace `make` with `ninja` and `Unix Makefiles` with `Ninja` if using Ninja.
 
 
 ### Visual C++ (Command Line)
@@ -223,10 +221,10 @@ Installing TurboVNC
 ===================
 
 You can use the build system to install TurboVNC (as opposed to creating an
-installer package.)  To do this, run `make install` or `nmake install` (or
-build the "install" target in the Visual Studio IDE.)  Running `make uninstall`
-or `nmake uninstall` (or building the "uninstall" target in the Visual Studio
-IDE) will uninstall TurboVNC.
+installer package.)  To do this, run `make install` or `ninja install` or
+`nmake install` (or build the "install" target in the Visual Studio IDE.)
+Running `make uninstall` or `ninja uninstall` or `nmake uninstall` (or building
+the "uninstall" target in the Visual Studio IDE) will uninstall TurboVNC.
 
 The `CMAKE_INSTALL_PREFIX` CMake variable can be modified in order to install
 TurboVNC into a directory of your choosing.  If you don't specify
@@ -273,7 +271,7 @@ Creating Distribution Packages
 ==============================
 
 The following commands can be used to create various types of distribution
-packages:
+packages (replace `make` with `ninja` if using Ninja):
 
 
 Linux
@@ -294,10 +292,10 @@ Mac
     make dmg
 
 Create Mac package/disk image.  This requires __pkgbuild__ and
-__productbuild__, which are installed by default on OS X 10.7 and later.  This
-command generates a package containing a Java app bundle that relies on Oracle
-Java or OpenJDK.  The DMG built with this command can be installed on OS X 10.7
-and later.
+__productbuild__, which are installed by default on OS X/macOS 10.7 and later.
+This command generates a package containing a Java app bundle that relies on
+Oracle Java or OpenJDK.  The DMG built with this command can be installed on
+OS X/macOS 10.7 and later.
 
 
 Windows

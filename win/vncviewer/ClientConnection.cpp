@@ -1,5 +1,5 @@
-//  Copyright (C) 2009-2013, 2015-2018, 2020 D. R. Commander.
-//                                           All Rights Reserved.
+//  Copyright (C) 2009-2013, 2015-2018, 2020-2021 D. R. Commander.
+//                                                All Rights Reserved.
 //  Copyright 2009 Pierre Ossman for Cendio AB
 //  Copyright (C) 2005-2008 Sun Microsystems, Inc. All Rights Reserved.
 //  Copyright (C) 2004 Landmark Graphics Corporation. All Rights Reserved.
@@ -2800,7 +2800,7 @@ LRESULT CALLBACK ClientConnection::WndProc(HWND hwnd, UINT iMsg, WPARAM wParam,
       GetWindowThreadProcessId((HWND)wParam, &pid);
 
       if (LowLevelHook::isActive() && IsWindowVisible(_this->m_hwnd1) &&
-          pid != GetProcessId(GetCurrentProcess())) {
+          pid != GetCurrentProcessId()) {
         vnclog.Print(6, "Keyboard focus lost. Temporarily ungrabbing keyboard.\n");
         _this->UngrabKeyboard(false);
       }
@@ -3072,7 +3072,7 @@ inline void ClientConnection::SendPointerEvent(int x, int y, int buttonMask)
 //
 //    On German keyboards, @ is produced using AltGr-Q, which is
 //    Ctrl-Alt-Q.  But @ is a valid keysym in its own right, and when
-//    a German user types this combination, he doesn't mean Ctrl-@.
+//    a German user types this combination, the user doesn't mean Ctrl-@.
 //    So for this we will send, in total:
 //
 //      Ctrl-Down, Alt-Down,
