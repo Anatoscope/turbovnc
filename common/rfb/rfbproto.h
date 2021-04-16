@@ -601,7 +601,8 @@ typedef struct _rfbInteractionCapsMsg {
 #define rfbEncodingQualityLevel8   0xFFFFFFE8
 #define rfbEncodingQualityLevel9   0xFFFFFFE9
 
-#define rfbEncodingWarnEvent       0xFFFFFCE0
+#define rfbEncodingWarnEventAllOff 0xFFFFFA00
+#define rfbEncodingWarnEventAllOn  0xFFFFFAFF
 
 #define rfbEncodingVisEventAllOff  0xFFFFFB00
 #define rfbEncodingVisEventAllOn   0xFFFFFBFF
@@ -620,7 +621,7 @@ typedef struct _rfbInteractionCapsMsg {
 #define sig_rfbEncodingMaxDelay20      "MAXDELAY"
 #define sig_rfbEncodingQualityLevel0   "JPEGQLVL"
 #define sig_rfbEncodingGII             "GII_____"
-#define sig_rfbEncodingWarnEvent       "WRNEVENT"
+#define sig_rfbEncodingWarnEventAllOff "WRNEVENT"
 #define sig_rfbEncodingVisEventAllOff  "VISEVENT"
 
 /*****************************************************************************

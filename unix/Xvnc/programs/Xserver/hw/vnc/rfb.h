@@ -397,7 +397,7 @@ typedef struct rfbClientRec {
   Bool enableExtDesktopSize;        /* client supports extended desktop size
                                        extension */
   Bool enableGII;                   /* client supports GII extension */
-  Bool enableWarnEvent;             /* client supports WarnEvent extension */
+  unsigned char warnEventMask;      /* which warning to send to client */
   Bool inactWarnWasChanged;         /* visual inactivity warning was shown/hidden */
   Bool useRichCursorEncoding;       /* rfbEncodingRichCursor is preferred */
   Bool cursorWasChanged;            /* cursor shape update should be sent */

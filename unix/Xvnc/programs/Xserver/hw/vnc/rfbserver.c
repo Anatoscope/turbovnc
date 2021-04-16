@@ -126,6 +126,8 @@ CARD32 rfbMaxIdleTimeout = 0;
 CARD32 rfbIdleTimeout = 0;
 static double idleTimeout = -1.0;
 
+static const unsigned char INACT_WARN_EVENT_MASK = 1;
+
 void IdleTimerSet(void)
 {
   idleTimeout = gettime() + (double)rfbIdleTimeout;
@@ -166,7 +168,7 @@ static Bool rfbSendInactWarnTimeout(rfbClientPtr cl, CARD32 timeLeftMs, CARD32 r
   fbu.fu.nRects = Swap16IfLE(1);
 
   memset(&fbu.rh, 0, sz_rfbFramebufferUpdateRectHeader);
-  fbu.rh.encoding = Swap32IfLE(rfbEncodingWarnEvent);
+  fbu.rh.encoding = Swap32IfLE(rfbEncodingWarnEventAllOff);
 
   const CARD32 inactTimeoutMs = rfbInactTimeout * 1000;
   const CARD32 inactWarnTimeoutMs = rfbInactWarnTimeout * 1000;
@@ -270,7 +272,7 @@ void InactTimerSet(void)
 
       rfbClientPtr cl;
       for (cl = rfbClientHead; cl; cl = cl->next) {
-        if (cl->enableWarnEvent)
+        if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
           rfbSendInactWarnTimeout(cl, 0, 1);
 
         cl->inactWarnWasChanged = TRUE;
@@ -318,7 +320,7 @@ void InactTimerCheck(void)
 
     rfbClientPtr cl;
     for (cl = rfbClientHead; cl; cl = cl->next) {
-      if (cl->enableWarnEvent)
+      if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
         rfbSendInactWarnTimeout(cl, timeLeftMs, 0);
 
       cl->inactWarnWasChanged = TRUE;
@@ -1061,7 +1063,7 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   SetCapInfo(&enc_list[i++],  rfbEncodingPointerPos,     rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingLastRect,       rfbTightVncVendor);
   SetCapInfo(&enc_list[i++],  rfbGIIServer,              rfbGIIVendor);
-  SetCapInfo(&enc_list[i++],  rfbEncodingWarnEvent,      rfbTurboVncVendor);
+  SetCapInfo(&enc_list[i++],  rfbEncodingWarnEventAllOff,rfbTurboVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingVisEventAllOff, rfbTurboVncVendor);
   if (i != nEncCaps) {
     rfbLog("rfbSendInteractionCaps: assertion failed, i != nEncCaps\n");
@@ -1296,13 +1298,6 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               cl->enableGII = TRUE;
             }
             break;
-          case rfbEncodingWarnEvent:
-            if (!cl->enableWarnEvent) {
-              rfbLog("Enabling WarnEvent protocol extension for client %s\n", cl->host);
-              cl->enableWarnEvent = TRUE;
-              cl->needSendFirstInactWarn = TRUE;
-            }
-            break;
           default:
             if (enc >= (CARD32)rfbEncodingCompressLevel0 &&
                 enc <= (CARD32)rfbEncodingCompressLevel9) {
@@ -1354,6 +1349,11 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               cl->tightQualityLevel = enc & 0xFF;
               rfbLog("Using JPEG quality %d for client %s\n",
                      cl->tightQualityLevel, cl->host);
+            } else if (enc >= (CARD32)rfbEncodingWarnEventAllOff &&
+                       enc <= (CARD32)rfbEncodingWarnEventAllOn) {
+              rfbLog("Setting WarnEvent mask 0x%x for client %s\n", enc & 0xFF, cl->host);
+              cl->warnEventMask = enc & 0xFF;
+              cl->needSendFirstInactWarn = cl->warnEventMask & INACT_WARN_EVENT_MASK;
             } else if (enc >= (CARD32)rfbEncodingVisEventAllOff &&
                        enc <= (CARD32)rfbEncodingVisEventAllOn) {
               rfbLog("Setting VisEvent mask 0x%x for client %s\n", enc & 0xFF, cl->host);
@@ -2245,7 +2245,7 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
    * a separate FBU about inactivity.
    */
 
-  if (cl->needSendFirstInactWarn && cl->enableWarnEvent && inactWarn) {
+  if (cl->needSendFirstInactWarn && (cl->warnEventMask & INACT_WARN_EVENT_MASK) && inactWarn) {
     const double currTime = gettime();
     const CARD32 timeLeftMs = inactTimeout > currTime ? (inactTimeout - currTime) * 1000 : 0;
     rfbSendInactWarnTimeout(cl, timeLeftMs, 0);
