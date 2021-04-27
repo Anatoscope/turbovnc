@@ -436,6 +436,7 @@ typedef struct rfbClientRec {
   int cursorX, cursorY;             /* client's cursor position */
 
   Bool needSendFirstInactWarn;
+  Bool needSendFirstAutoQualityInfo;
 
   Bool firstUpdate, inALR;
   OsTimerPtr alrTimer;
