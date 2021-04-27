@@ -1020,6 +1020,14 @@ typedef struct _rfbWarnEventTimed {
 
 #define sz_rfbWarnEventTimed 20
 
+typedef struct _rfbWarnEventQualSimple {
+  rfbWarnEventHeader header;
+  CARD32 imageQualityLevel;  /* 0 to 9 quality level */
+                             /* can append a string with a description */
+} rfbWarnEventQualSimple;
+
+#define sz_rfbWarnEventQualSimple 12
+
 
 /*-----------------------------------------------------------------------------
  * SetColourMapEntries - these messages are only sent if the pixel

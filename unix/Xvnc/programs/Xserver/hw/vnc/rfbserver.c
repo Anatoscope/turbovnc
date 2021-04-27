@@ -100,6 +100,7 @@ static const CARD32 ADAPT_REASSES_TIME_MS = 1000;
 static const CARD32 BEFORE_FIRST_ADAPT_TIME_MS = 2000;
 
 static const unsigned char INACT_WARN_EVENT_MASK = 1;
+static const unsigned char QUAL_WARN_EVENT_MASK = 2;
 
 static rfbClientPtr rfbNewClient(int sock);
 static void rfbProcessClientProtocolVersion(rfbClientPtr cl);
@@ -630,6 +631,7 @@ static rfbClientPtr rfbNewClient(int sock)
   cl->inactWarnWasChanged = TRUE;
 
   cl->needSendFirstInactWarn = TRUE;
+  cl->needSendFirstAutoQualityInfo = TRUE;
 
   cl->next = rfbClientHead;
   cl->prev = NULL;
@@ -1367,6 +1369,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               rfbLog("Setting WarnEvent mask 0x%x for client %s\n", enc & 0xFF, cl->host);
               cl->warnEventMask = enc & 0xFF;
               cl->needSendFirstInactWarn = cl->warnEventMask & INACT_WARN_EVENT_MASK;
+              cl->needSendFirstAutoQualityInfo = cl->warnEventMask & QUAL_WARN_EVENT_MASK;
             } else if (enc >= (CARD32)rfbEncodingVisEventAllOff &&
                        enc <= (CARD32)rfbEncodingVisEventAllOn) {
               rfbLog("Setting VisEvent mask 0x%x for client %s\n", enc & 0xFF, cl->host);
@@ -2045,6 +2048,42 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 }
 
 
+static Bool rfbSendQualityInfo(rfbClientPtr cl)
+{
+  struct {
+    rfbFramebufferUpdateMsg fu;
+    rfbFramebufferUpdateRectHeader rh;
+    rfbWarnEventQualSimple e;
+  } fbu;
+
+#define STATIC_ASSERT_QualWarn(cond) switch(0){case 0:case (cond):;}
+  STATIC_ASSERT_QualWarn(sizeof(fbu) ==
+    sz_rfbFramebufferUpdateMsg + sz_rfbFramebufferUpdateRectHeader + sz_rfbWarnEventQualSimple)
+#undef STATIC_ASSERT_QualWarn
+
+  memset(&fbu.fu, 0, sz_rfbFramebufferUpdateMsg);
+  fbu.fu.type = rfbFramebufferUpdate;
+  fbu.fu.nRects = Swap16IfLE(1);
+
+  memset(&fbu.rh, 0, sz_rfbFramebufferUpdateRectHeader);
+  fbu.rh.encoding = Swap32IfLE(rfbEncodingWarnEventAllOff | QUAL_WARN_EVENT_MASK);
+
+  fbu.e.header.infoLength = Swap32IfLE(sz_rfbWarnEventQualSimple - sizeof(CARD32));
+  fbu.e.header.infoKind = Swap32IfLE(0);
+  fbu.e.imageQualityLevel = Swap32IfLE(cl->imageQualityLevel);
+
+  if (WriteExact(cl, (char *)&fbu, sizeof(fbu)) < 0) {
+    rfbLogPerror("rfbSendQualityInfo: write");
+    rfbCloseClient(cl);
+    return FALSE;
+  }
+
+  cl->needSendFirstAutoQualityInfo = FALSE;
+
+  return TRUE;
+}
+
+
 static void stepQualityLevel(rfbClientPtr cl, Bool stepUp)
 {
   if (cl->imageQualityLevel != -1) {
@@ -2060,6 +2099,8 @@ static void stepQualityLevel(rfbClientPtr cl, Bool stepUp)
       else
         rfbLog("Using image quality level %d for client %s\n",
                cl->imageQualityLevel, cl->host);
+      if (cl->warnEventMask & QUAL_WARN_EVENT_MASK)
+        rfbSendQualityInfo(cl);
     }
   } else {
     rfbLog("adaptive quality for this encoding is not implemented\n");
@@ -2280,6 +2321,14 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
   }
 
   cl->needSendFirstInactWarn = FALSE;
+
+  /**
+   * If auto quality was activated and maybe didn't change quality.
+   */
+
+  if (cl->needSendFirstAutoQualityInfo && (cl->warnEventMask & QUAL_WARN_EVENT_MASK) && cl->staleFBUThresholdMs) {
+    rfbSendQualityInfo(cl);
+  }
 
   /*
    * Do we plan to send cursor position update?
