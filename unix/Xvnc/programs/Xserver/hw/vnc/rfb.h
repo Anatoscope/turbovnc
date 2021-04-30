@@ -495,6 +495,9 @@ typedef struct rfbClientRec {
   int captureFD;
   Bool captureEnable;
 
+  /* Exchanghing AnatoScope version strings */
+  Bool warnedClientVersionUnknown; /* already logged that client has no version */
+
 } rfbClientRec, *rfbClientPtr;
 
 
@@ -889,6 +892,8 @@ extern double gettime(void);
 
 extern rfbClientPtr rfbClientHead;
 extern rfbClientPtr pointerClient;
+
+int rfbParseClSrvVerOpts(const char* optsFileName);
 
 extern CARD32 rfbMaxIdleTimeout;
 extern CARD32 rfbIdleTimeout;
