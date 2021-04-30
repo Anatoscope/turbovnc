@@ -92,6 +92,7 @@ add_library(vnc STATIC
 	paintinactwarn.c
 	popupsprite.c
 	randr.c
+	rfbplainjson.c
 	rfbscreen.c
 	rfbserver.c
 	rre.c
