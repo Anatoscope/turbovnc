@@ -235,6 +235,15 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     return 2;
   }
 
+  if (strcasecmp(argv[i], "-clsrvverfile") == 0) {
+    REQUIRE_ARG();
+    if (!rfbParseClSrvVerOpts(argv[i + 1])) {
+      rfbLog("ERROR: Unable to load client version file '%s' for CLSRVVER extension\n", argv[i + 1]);
+      UseMsg();
+    }
+    return 2;
+  }
+
   if (strcasecmp(argv[i], "-deferupdate") == 0) {  /* -deferupdate ms */
     REQUIRE_ARG();
     rfbDeferUpdateTime = atoi(argv[i + 1]);
@@ -1876,6 +1885,8 @@ void ddxUseMsg(void)
   ErrorF("-alwaysshared          always treat new connections as shared\n");
   ErrorF("-capture file          capture the data sent to the first connected viewer to\n");
   ErrorF("                       the specified file\n");
+  ErrorF("-clsrvverfile file     JSON file with object with \"version\" field for AnatoScope\n"
+         "                       CLSRVVER extension\n");
   ErrorF("-deferupdate time      time in ms to defer updates [default: %d]\n",
          DEFAULT_DEFER_UPDATE_TIME);
   ErrorF("-desktop name          VNC desktop name [default: %s]\n",

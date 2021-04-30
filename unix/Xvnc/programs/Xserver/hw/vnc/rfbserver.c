@@ -48,6 +48,7 @@
 #include "paintinactwarn.h"
 #include "popupsprite.h"
 #include "rfb.h"
+#include "rfbplainjson.h"
 #include "sprite.h"
 
 char updateBuf[UPDATE_BUF_SIZE];
@@ -111,6 +112,11 @@ static const CARD32 BEFORE_FIRST_ADAPT_TIME_MS = 2000;
 static const unsigned char INACT_WARN_EVENT_MASK = 1;
 static const unsigned char QUAL_WARN_EVENT_MASK = 2;
 
+/*
+ * Ignore longer client version strings coming through AnatoScope CLSRVVER extension.
+ */
+static const int MAX_CLIENT_VER_LEN = 4096;
+
 static rfbClientPtr rfbNewClient(int sock);
 static void rfbProcessClientProtocolVersion(rfbClientPtr cl);
 static void rfbProcessClientInitMessage(rfbClientPtr cl);
@@ -133,6 +139,29 @@ int rfbClientCount(void)
   for (cl = rfbClientHead; cl; cl = cl->next)
     count++;
   return count;
+}
+
+
+/*
+ * Client and server version reporting.
+ */
+static const char *RFB_CL_SRV_VER_OPTS_NAMES[] = {"version", NULL};
+static char *rfbSrvVerStr = NULL;
+
+int rfbParseClSrvVerOpts(const char* optsFileName)
+{
+  /* Load at start and don't free. */
+  assert(!rfbSrvVerStr);
+  char **rfbClSrvVerOpts = rfbPlainJsonParseFile(optsFileName, RFB_CL_SRV_VER_OPTS_NAMES);
+
+  if (rfbClSrvVerOpts) {
+    rfbSrvVerStr = rfbClSrvVerOpts[0];
+    for (size_t i = 1; i != sizeof(RFB_CL_SRV_VER_OPTS_NAMES) / sizeof(RFB_CL_SRV_VER_OPTS_NAMES[0]); ++i)
+      free(rfbClSrvVerOpts[i]);
+    free(rfbClSrvVerOpts);
+  }
+
+  return !!rfbClSrvVerOpts;
 }
 
 
@@ -781,6 +810,8 @@ static rfbClientPtr rfbNewClient(int sock)
                   rfbExtClipRequest | rfbExtClipNotify | rfbExtClipProvide;
   cl->clipSizes[0] = 20 * 1024 * 1024;
 
+  cl->warnedClientVersionUnknown = FALSE;
+
   return cl;
 }
 
@@ -1067,6 +1098,40 @@ static void rfbProcessClientInitMessage(rfbClientPtr cl)
 
 
 /*
+ * Send server version to client using AnatoScope CLSRVVER extension.
+ */
+static void rfbSendServerVer(rfbClientPtr cl)
+{
+  if (!rfbSrvVerStr)
+    return;
+
+  rfbServerVerMsg sct;
+  int len = strlen(rfbSrvVerStr);
+
+  memset(&sct, 0, sz_rfbServerVerMsg);
+  sct.type = rfbServerVer;
+  sct.length = Swap32IfLE(len);
+  WRITE_OR_CLOSE((char *)&sct, sz_rfbServerVerMsg, return);
+  WRITE_OR_CLOSE(rfbSrvVerStr, len, return);
+}
+
+/*
+ * React to the client version received through the AnatoScope CLSRVVER extension.
+ * Like print a message in logs or send a warning.
+ */
+static void rfbProcessClientVer(rfbClientPtr cl, const char *str)
+{
+  RFBLOGID("rfbProcessClientVer: '%s'\n", str);
+  if (!rfbSrvVerStr) {
+    RFBLOGID("rfbProcessClientVer: server has no version string set (-clsrvverfile option)\n");
+    return;
+  }
+  if (strverscmp(str, rfbSrvVerStr) < 0)
+    RFBLOGID("rfbProcessClientVer: version is old ('%s' < '%s')\n", str, rfbSrvVerStr);
+}
+
+
+/*
  * rfbSendInteractionCaps is called after sending the server
  * initialisation message, only if TightVNC protocol extensions were
  * enabled (protocol versions 3.7t, 3.8t). In this function, we send
@@ -1076,12 +1141,12 @@ static void rfbProcessClientInitMessage(rfbClientPtr cl)
 /* Update these constants on changing capability lists below! */
 #define N_SMSG_CAPS  0
 #define N_CMSG_CAPS  0
-#define N_ENC_CAPS  20
+#define N_ENC_CAPS  21
 
 void rfbSendInteractionCaps(rfbClientPtr cl)
 {
   rfbInteractionCapsMsg intr_caps;
-  const int nEncCaps = rfbCongestionControl ? N_ENC_CAPS : N_ENC_CAPS - 1;
+  const int nEncCaps = N_ENC_CAPS - !rfbCongestionControl - !rfbSrvVerStr;
   rfbCapabilityInfo enc_list[N_ENC_CAPS];
   int i;
 
@@ -1144,6 +1209,8 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   SetCapInfo(&enc_list[i++],  rfbGIIServer,              rfbGIIVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingWarnEventAllOff,rfbTurboVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingVisEventAllOff, rfbTurboVncVendor);
+  if (rfbSrvVerStr)
+    SetCapInfo(&enc_list[i++],  rfbEncodingClientServerVer, rfbTurboVncVendor);
   if (i != nEncCaps) {
     rfbLog("rfbSendInteractionCaps: assertion failed, i != nEncCaps\n");
     rfbCloseClient(cl);
@@ -1213,6 +1280,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       Bool firstLEDState = !SUPPORTS_LED_STATE(cl);
       Bool firstExtMouseButtons = !cl->enableExtMouseButtons;
       Bool logTightCompressLevel = FALSE;
+      Bool gotEncodingClientServerVerExt = FALSE;
 
       READ_OR_CLOSE(((char *)&msg) + 1, sz_rfbSetEncodingsMsg - 1, return);
 
@@ -1388,6 +1456,11 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               cl->enableExtMouseButtons = TRUE;
             }
             break;
+          case rfbEncodingClientServerVer:
+            RFBLOGID("Sending server version\n");
+            rfbSendServerVer(cl);
+            gotEncodingClientServerVerExt = TRUE;
+            break;
           default:
             if (enc >= (CARD32)rfbEncodingCompressLevel0 &&
                 enc <= (CARD32)rfbEncodingCompressLevel9) {
@@ -1472,6 +1545,11 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
         rfbSendClipboardCaps(cl, rfbExtClipUTF8 | rfbExtClipRequest |
                              rfbExtClipPeek | rfbExtClipNotify |
                              rfbExtClipProvide, sizes);
+      }
+
+      if (rfbSrvVerStr && !cl->warnedClientVersionUnknown && !gotEncodingClientServerVerExt) {
+        cl->warnedClientVersionUnknown = TRUE;
+        RFBLOGID("rfbProcessClientVer: latest is '%s', but version is unknown\n", rfbSrvVerStr);
       }
 
       if (cl->enableFence && firstFence) {
@@ -1672,6 +1750,32 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       /* NOTE: We do not accept cut text from a view-only client */
       if (!rfbViewOnly && !cl->viewOnly && !rfbAuthDisableCBRecv)
         rfbHandleClientCutText(cl, str, msg.cct.length);
+
+      free(str);
+      return;
+    }
+
+    case rfbClientVer:
+    {
+      READ_OR_CLOSE(((char *)&msg) + 1, sz_rfbClientVerMsg - 1, return);
+
+      msg.cct.length = Swap32IfLE(msg.cct.length);
+
+      if (msg.cct.length > MAX_CLIENT_VER_LEN) {
+        RFBLOGID("Client version string is too long (%d), max is %d. Ignoring.\n",
+                 msg.cct.length, MAX_CLIENT_VER_LEN);
+        SKIP_OR_CLOSE(msg.cct.length, free(str); return);
+        return;
+      }
+
+      if (msg.cct.length <= 0) return;
+      str = (char *)rfbAlloc(msg.cct.length + 1);
+
+      READ_OR_CLOSE(str, msg.cct.length, free(str);  return);
+
+      str[msg.cct.length] = 0;
+
+      rfbProcessClientVer(cl, str);
 
       free(str);
       return;

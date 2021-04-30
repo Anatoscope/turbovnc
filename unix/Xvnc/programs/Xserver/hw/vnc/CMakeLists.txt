@@ -79,6 +79,7 @@ add_library(vnc STATIC
 	qnum_to_xorgevdev.c
 	qnum_to_xorgkbd.c
 	randr.c
+	rfbplainjson.c
 	rfbscreen.c
 	rfbserver.c
 	rre.c

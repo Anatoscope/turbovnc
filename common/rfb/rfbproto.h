@@ -408,6 +408,9 @@ typedef struct _rfbInteractionCapsMsg {
 #define rfbBell 2
 #define rfbServerCutText 3
 
+/* AnatoScope extension to send server version and receive client version */
+#define rfbServerVer 105
+
 #define rfbFileListData 130
 #define rfbFileDownloadData 131
 #define rfbFileUploadCancel 132
@@ -434,6 +437,9 @@ typedef struct _rfbInteractionCapsMsg {
 #define rfbKeyEvent 4
 #define rfbPointerEvent 5
 #define rfbClientCutText 6
+
+/* AnatoScope extension to send server version and receive client version */
+#define rfbClientVer 105
 
 #define rfbFileListRequest 130
 #define rfbFileDownloadRequest 131
@@ -611,6 +617,8 @@ typedef struct _rfbInteractionCapsMsg {
 #define rfbEncodingVisEventAllOff       0xFFFFFB00
 #define rfbEncodingVisEventAllOn        0xFFFFFBFF
 
+#define rfbEncodingClientServerVer      0xFFFFFC00
+
 /* signatures for "fake" encoding types */
 #define sig_rfbEncodingCompressLevel0    "COMPRLVL"
 #define sig_rfbEncodingXCursor           "X11CURSR"
@@ -625,6 +633,7 @@ typedef struct _rfbInteractionCapsMsg {
 #define sig_rfbEncodingGII               "GII_____"
 #define sig_rfbEncodingWarnEventAllOff   "WRNEVENT"
 #define sig_rfbEncodingVisEventAllOff    "VISEVENT"
+#define sig_rfbEncodingClientServerVer   "CLSRVVER"
 
 
 /*****************************************************************************
@@ -1170,6 +1179,21 @@ typedef struct _rfbServerCutTextMsg {
 
 
 /*-----------------------------------------------------------------------------
+ * ServerVer - AnatoScope extension to send the server version.
+ */
+
+typedef struct _rfbServerVerMsg {
+    CARD8 type;                 /* always rfbServerVer */
+    CARD8 pad1;
+    CARD16 pad2;
+    CARD32 length;
+    /* followed by char text[length] */
+} rfbServerVerMsg;
+
+#define sz_rfbServerVerMsg 8
+
+
+/*-----------------------------------------------------------------------------
  * FileListData
  */
 
@@ -1429,6 +1453,21 @@ typedef struct _rfbClientCutTextMsg {
 } rfbClientCutTextMsg;
 
 #define sz_rfbClientCutTextMsg 8
+
+
+/*-----------------------------------------------------------------------------
+ * ClientVer - AnatoScope extension to get the client version.
+ */
+
+typedef struct _rfbClientVerMsg {
+    CARD8 type;                 /* always rfbClientVer */
+    CARD8 pad1;
+    CARD16 pad2;
+    CARD32 length;
+    /* followed by char text[length] */
+} rfbClientVerMsg;
+
+#define sz_rfbClientVerMsg 8
 
 
 /*-----------------------------------------------------------------------------
