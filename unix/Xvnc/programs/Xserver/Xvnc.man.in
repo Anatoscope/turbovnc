@@ -96,6 +96,22 @@ the security configuration file and if that value is lower than
 \fItime\fR.
 
 .TP
+\fB\-inactsignal\fR \fsignal\fR
+Signal to send to the parent process after timeout of no input was reached.
+(default: TERM.) This argument has no effect if the \fI-inacttimeout\fR
+argument is not supplied.
+
+.TP
+\fB\-inacttimeout\fR \ftime\fR
+Amount of time, in seconds, after which to send a signal to the parent
+process. The signal can be specified using the \fI-inactsignal\fR argument.
+
+.TP
+\fB\-inactwarntimeout\fR \ftime\fR
+Amount of time, in seconds, after which to send a warning to the clients
+using the AnatoScope WRNEVENT extension of the RFB protocol.
+
+.TP
 \fB\-inetd\fR
 If Xvnc is launched by inetd, this option causes Xvnc to redirect
 network input/output to stdin/stdout.
@@ -155,6 +171,11 @@ TurboVNC session whenever the latter changes.  This option can be set for all
 TurboVNC sessions on this system by using the \fIno-clipboard-send\fR
 directive in the security configuration file.  See the SECURITY
 CONFIGURATION FILE section for more details.
+
+.TP
+\fB-nodflinactviswarn\fR
+Don't show visual warning about inactivity (no user input) to clients that
+have no AnatoScope VISEVENT extension.
 
 .TP
 \fB\-noflowcontrol\fR

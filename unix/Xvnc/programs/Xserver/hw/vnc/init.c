@@ -65,6 +65,7 @@ from the X Consortium.
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <signal.h>
 #include <sys/types.h>
 #include <netdb.h>
 #include "servermd.h"
@@ -81,6 +82,7 @@ from the X Consortium.
 #include "micmap.h"
 #include "eventstr.h"
 #include "rfb.h"
+#include "popupsprite.h"
 #include <time.h>
 #include "tvnc_version.h"
 #include "input-xkb.h"
@@ -256,6 +258,53 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     return 2;
   }
 
+  if (strcasecmp(argv[i], "-inactsignal") == 0) {
+    if (i + 1 >= argc) UseMsg();
+    if (strcmp(argv[i + 1], "HUP") == 0)
+      rfbInactSignal = SIGHUP;
+    else if (strcmp(argv[i + 1], "INT") == 0)
+      rfbInactSignal = SIGINT;
+    else if (strcmp(argv[i + 1], "QUIT") == 0)
+      rfbInactSignal = SIGQUIT;
+    else if (strcmp(argv[i + 1], "ABRT") == 0)
+      rfbInactSignal = SIGABRT;
+    else if (strcmp(argv[i + 1], "BUS") == 0)
+      rfbInactSignal = SIGBUS;
+    else if (strcmp(argv[i + 1], "KILL") == 0)
+      rfbInactSignal = SIGKILL;
+    else if (strcmp(argv[i + 1], "USR1") == 0)
+      rfbInactSignal = SIGUSR1;
+    else if (strcmp(argv[i + 1], "USR2") == 0)
+      rfbInactSignal = SIGUSR2;
+    else if (strcmp(argv[i + 1], "USR2") == 0)
+      rfbInactSignal = SIGUSR2;
+    else if (strcmp(argv[i + 1], "PIPE") == 0)
+      rfbInactSignal = SIGPIPE;
+    else if (strcmp(argv[i + 1], "ALRM") == 0)
+      rfbInactSignal = SIGALRM;
+    else if (strcmp(argv[i + 1], "TERM") == 0)
+      rfbInactSignal = SIGTERM;
+    else if (strcmp(argv[i + 1], "CHLD") == 0)
+      rfbInactSignal = SIGCHLD;
+    else
+      UseMsg();
+    return 2;
+  }
+
+  if (strcasecmp(argv[i], "-inacttimeout") == 0) {  /* -idletimeout sec */
+    if (i + 1 >= argc) UseMsg();
+    rfbInactTimeout = atoi(argv[i + 1]);
+    if (rfbInactTimeout > (CARD32)-1 / 1000) UseMsg();
+    return 2;
+  }
+
+  if (strcasecmp(argv[i], "-inactwarntimeout") == 0) {  /* -inactwarntimeout sec */
+    if (i + 1 >= argc) UseMsg();
+    rfbInactWarnTimeout = atoi(argv[i + 1]);
+    if (rfbInactWarnTimeout > (CARD32)-1 / 1000) UseMsg();
+    return 2;
+  }
+
   if (strcasecmp(argv[i], "-inetd") == 0) {  /* -inetd */
     int n;
     for (n = 1; n < 100; n++) {
@@ -351,6 +400,11 @@ int ddxProcessArgument(int argc, char *argv[], int i)
 
   if (strcasecmp(argv[i], "-nocutbuffersync") == 0) {
     rfbSyncCutBuffer = FALSE;
+    return 1;
+  }
+
+  if (strcasecmp(argv[i], "-nodflinactviswarn") == 0) {
+    rfbDflInactVisWarn = FALSE;
     return 1;
   }
 
@@ -961,6 +1015,8 @@ static Bool rfbScreenInit(ScreenPtr pScreen, int argc, char **argv)
   pScreen->SaveScreen = (SaveScreenProcPtr)rfbAlwaysTrue;
 
   rfbDCInitialize(pScreen, &rfbPointerCursorFuncs);
+  if (!rfbPopupScreenInitialize(pScreen))
+      return FALSE;
 
   if (noCursor) {
     pScreen->DisplayCursor = (DisplayCursorProcPtr)rfbAlwaysTrue;
@@ -1116,6 +1172,9 @@ void InitInput(int argc, char *argv[])
     if (!AddExtInputDevice(&virtualTabletPad))
       FatalError("Could not create TurboVNC virtual tablet pad device");
   }
+
+  for (int i = 0; i < screenInfo.numScreens; i++)
+    rfbPopupInitialize(screenInfo.screens[i]);
 }
 
 
@@ -1261,6 +1320,8 @@ void RemoveExtInputDevice(rfbClientPtr cl, int index)
 
 void CloseInput(void)
 {
+  for (int i = 0; i < screenInfo.numScreens; i++)
+    rfbPopupSpriteDevicePopupCleanup(screenInfo.screens[i]);
 }
 
 
@@ -1593,6 +1654,8 @@ void OsVendorInit(void)
   }
   if (rfbIdleTimeout > 0)
     IdleTimerSet();
+  if (rfbInactTimeout > 0 || rfbInactWarnTimeout > 0)
+    InactTimerSet();
   if (rfbFB.width > rfbMaxWidth || rfbFB.height > rfbMaxHeight) {
     rfbFB.width = min(rfbFB.width, rfbMaxWidth);
     rfbFB.height = min(rfbFB.height, rfbMaxHeight);
@@ -1636,6 +1699,9 @@ void ddxUseMsg(void)
   ErrorF("-httpd dir             serve files from the specified directory using HTTP\n");
   ErrorF("-httpport port         port for HTTP server\n");
   ErrorF("-idletimeout S         exit if S seconds elapse with no VNC viewer connections\n");
+  ErrorF("-inactsignal signal    signal to send to parent after timeout of no input (default: TERM)\n");
+  ErrorF("-inacttimeout S        send signal to parent after S seconds of no input\n");
+  ErrorF("-inactwarntimeout S    after S seconds of no input warn clients using WRNEVENT\n");
   ErrorF("-inetd                 Xvnc is launched by inetd\n");
   ErrorF("-interface ipaddr      only bind to specified interface address\n");
   ErrorF("-ipv6                  enable IPv6 support\n");
@@ -1651,6 +1717,7 @@ void ddxUseMsg(void)
   ErrorF("-noclipboardsend       disable server->client clipboard synchronization\n");
   ErrorF("-nocutbuffersync       disable clipboard synchronization for applications\n");
   ErrorF("                       that use the (obsolete) X cut buffer\n");
+  ErrorF("-nodflinactviswarn     don't show visual no-input warning to clients without VISEVENT\n");
   ErrorF("-noflowcontrol         when continuous updates are enabled, send updates\n");
   ErrorF("                       whether or not the viewer is ready to receive them\n");
   ErrorF("-noprimarysync         disable clipboard synchronization with the PRIMARY\n");
