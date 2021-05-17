@@ -1,3 +1,8 @@
+2.2.6-anatoscope-1.6.0
+=====
+
+Extension to send and receive a version string.
+
 2.2.6-anatoscope-1.5.1
 =====
 
