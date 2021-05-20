@@ -1,3 +1,8 @@
+2.2.6-anatoscope-1.6.0
+=====
+
+Quality info event for auto quality.
+
 2.2.6-anatoscope-1.5.1
 =====
 
