@@ -60,6 +60,10 @@ that is already occupied.
 Specify a file to which to capture the data sent to the first connected viewer.
 
 .TP
+\fB\-clsrvverfile\fR \fIfile\fR
+JSON file with object with "version" field for AnatoScope CLSRVVER extension.
+
+.TP
 \fB\-congtraceintervalms\fR \fItime\fR
 Trace the biggest RTT over a period of time (0 - disabled) [default: 10000].
 
