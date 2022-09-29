@@ -336,15 +336,9 @@ static void InactTimerCheck(void)
     const CARD32 timeLeftMs = inactTimeout > 0.0 ? (inactTimeout - currTime) * 1000 : 0;
 
     rfbClientPtr cl;
-    for (cl = rfbClientHead; cl; cl = cl->next) {
+    for (cl = rfbClientHead; cl; cl = cl->next)
       if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
         rfbSendInactWarnTimeout(cl, timeLeftMs, 0);
-
-      cl->inactWarnWasChanged = TRUE;
-
-      if (!cl->deferredUpdateScheduled)
-        rfbSendFramebufferUpdate(cl);
-    }
   }
 
   if (inactWarn) {
@@ -358,8 +352,19 @@ static void InactTimerCheck(void)
 
     const double timeLeftRatio = totalPopupTime > 0 ? timeLeft / totalPopupTime : 0;
 
+    rfbClientPtr cl;
+
+    for (cl = rfbClientHead; cl; cl = cl->next)
+      if (cl->visEventMask & INACT_WARN_VIS_EVENT_MASK)
+        cl->inactWarnWasChanged = TRUE;
+
     for (int i = 0; i < screenInfo.numScreens; i++)
       rfbInactWarnSetPopup(screenInfo.screens[i], timeLeftRatio);
+
+    for (cl = rfbClientHead; cl; cl = cl->next)
+      if (cl->visEventMask & INACT_WARN_VIS_EVENT_MASK)
+        if (!cl->deferredUpdateScheduled)
+          rfbSendFramebufferUpdate(cl);
   }
 }
 
