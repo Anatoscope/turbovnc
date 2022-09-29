@@ -1046,7 +1046,6 @@ extern CARD32 rfbInactWarnTimeout;
 extern Bool rfbDflInactVisWarn;
 extern void InactTimerSet(void);
 extern void InactTimerCancel(void);
-extern void InactTimerCheck(void);
 extern Bool InterframeOn(rfbClientPtr cl);
 extern void InterframeOff(rfbClientPtr);
 extern BOOL rfbProfile;
