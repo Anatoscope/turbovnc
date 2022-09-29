@@ -270,65 +270,7 @@ void rfbInactWarnSetPopup(ScreenPtr pScreen, double amountLeft)
 
 static void InactTimerRearm(void);
 
-static CARD32 InactTimerRearmCallback(OsTimerPtr timer, CARD32 time, void *arg)
-{
-  if (seenInput) {
-    seenInput = FALSE;
-    InactTimerSet();
-  }
-
-  /* every half a second rearm the inactivity timer if saw input */
-  InactTimerRearm();
-
-  return 0;
-}
-
-static void InactTimerRearm(void)
-{
-  inactRearm = TimerSet(inactRearm, 0, (CARD32)500, InactTimerRearmCallback, NULL);
-}
-
-void InactTimerSet(void)
-{
-  const double currTime = gettime();
-
-  if (rfbInactTimeout > 0) {
-    inactTimeout = currTime + (double)rfbInactTimeout;
-    inact = FALSE;
-  }
-
-  if (rfbInactWarnTimeout > 0) {
-    inactWarnTimeout = currTime + (double)rfbInactWarnTimeout;
-
-    if (inactWarn) {
-      rfbLog("TurboVNC session received input. Clearing warnings for clients.\n");
-
-      inactWarn = FALSE;
-
-      rfbClientPtr cl;
-      for (cl = rfbClientHead; cl; cl = cl->next) {
-        if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
-          rfbSendInactWarnTimeout(cl, 0, 1);
-
-        cl->inactWarnWasChanged = TRUE;
-
-        if (!cl->deferredUpdateScheduled)
-          rfbSendFramebufferUpdate(cl);
-      }
-    }
-  }
-
-  InactTimerRearm();
-}
-
-void InactTimerCancel(void)
-{
-  TimerFree(inactRearm);
-  inactTimeout = -1.0;
-  inactWarnTimeout = -1.0;
-}
-
-void InactTimerCheck(void)
+static void InactTimerCheck(void)
 {
   const Bool needGetTime = (inactTimeout >= 0.0 && !inact) ||
                            inactWarnTimeout >= 0.0;
@@ -379,6 +321,66 @@ void InactTimerCheck(void)
     for (int i = 0; i < screenInfo.numScreens; i++)
       rfbInactWarnSetPopup(screenInfo.screens[i], timeLeftRatio);
   }
+}
+
+static CARD32 InactTimerRearmCallback(OsTimerPtr timer, CARD32 time, void *arg)
+{
+  if (seenInput) {
+    seenInput = FALSE;
+    InactTimerSet();
+  }
+
+  InactTimerCheck();
+
+  /* every half a second rearm the inactivity timer if saw input */
+  InactTimerRearm();
+
+  return 0;
+}
+
+static void InactTimerRearm(void)
+{
+  inactRearm = TimerSet(inactRearm, 0, (CARD32)500, InactTimerRearmCallback, NULL);
+}
+
+void InactTimerSet(void)
+{
+  const double currTime = gettime();
+
+  if (rfbInactTimeout > 0) {
+    inactTimeout = currTime + (double)rfbInactTimeout;
+    inact = FALSE;
+  }
+
+  if (rfbInactWarnTimeout > 0) {
+    inactWarnTimeout = currTime + (double)rfbInactWarnTimeout;
+
+    if (inactWarn) {
+      rfbLog("TurboVNC session received input. Clearing warnings for clients.\n");
+
+      inactWarn = FALSE;
+
+      rfbClientPtr cl;
+      for (cl = rfbClientHead; cl; cl = cl->next) {
+        if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
+          rfbSendInactWarnTimeout(cl, 0, 1);
+
+        cl->inactWarnWasChanged = TRUE;
+
+        if (!cl->deferredUpdateScheduled)
+          rfbSendFramebufferUpdate(cl);
+      }
+    }
+  }
+
+  InactTimerRearm();
+}
+
+void InactTimerCancel(void)
+{
+  TimerFree(inactRearm);
+  inactTimeout = -1.0;
+  inactWarnTimeout = -1.0;
 }
 
 
