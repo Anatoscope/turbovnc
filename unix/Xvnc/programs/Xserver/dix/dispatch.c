@@ -436,8 +436,6 @@ Dispatch(void)
                 if (InputCheckPending())
                     ProcessInputEvents();
 
-                InactTimerCheck();
-
                 FlushIfCriticalOutputPending();
                 if ((SmartScheduleTime - start_tick) >= SmartScheduleSlice)
                 {
