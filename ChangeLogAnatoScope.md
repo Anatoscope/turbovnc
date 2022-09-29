@@ -1,3 +1,8 @@
+2.2.6-anatoscope-1.7.2
+=====
+
+Move inactivity check and warning drawing to timer so it executes when no events from clients.
+
 2.2.6-anatoscope-1.7.1
 =====
 
