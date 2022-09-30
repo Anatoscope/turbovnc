@@ -305,6 +305,7 @@ void rfbInactWarnSetPopup(ScreenPtr pScreen, double amountLeft)
   warnPopup.paintPopupFuncUserData = &warnPopupAmountLeft;
   warnPopup.argb = NULL;
 
+  rfbPopupSpriteSetPopup(pScreen, NULL, 0, 0);
   rfbPopupSpriteSetPopup(pScreen, &warnPopup, x, y);
 }
 
@@ -415,6 +416,9 @@ void InactTimerSet(void)
         if (!cl->deferredUpdateScheduled)
           rfbSendFramebufferUpdate(cl);
       }
+
+      for (int i = 0; i < screenInfo.numScreens; i++)
+        rfbPopupSpriteSetPopup(screenInfo.screens[i], NULL, 0, 0);
     }
   }
 
