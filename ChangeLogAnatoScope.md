@@ -1,3 +1,8 @@
+2.2.6-anatoscope-1.7.1
+=====
+
+Pushing a tag triggers a build and an upload of a generic GitLab package.
+
 2.2.6-anatoscope-1.7.0
 =====
 
