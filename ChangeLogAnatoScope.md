@@ -1,3 +1,8 @@
+2.2.6-anatoscope-1.7.2
+=====
+
+Allow everything (except underscores) in the Anatoscope version number to be able to have dashes.
+
 2.2.6-anatoscope-1.7.1
 =====
 
