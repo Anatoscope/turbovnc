@@ -265,10 +265,69 @@ void rfbInactWarnSetPopup(ScreenPtr pScreen, double amountLeft)
   warnPopup.paintPopupFuncUserData = &warnPopupAmountLeft;
   warnPopup.argb = NULL;
 
+  rfbPopupSpriteSetPopup(pScreen, NULL, 0, 0);
   rfbPopupSpriteSetPopup(pScreen, &warnPopup, x, y);
 }
 
 static void InactTimerRearm(void);
+
+static void InactTimerCheck(void)
+{
+  const Bool needGetTime = (inactTimeout >= 0.0 && !inact) ||
+                           inactWarnTimeout >= 0.0;
+  const double currTime = needGetTime ? gettime() : 0.0;
+
+  if (inactTimeout >= 0.0 && !inact && currTime >= inactTimeout) {
+
+    inact = TRUE;
+
+    rfbLog("TurboVNC session received no input for %u seconds. Sending signal %d to parent process.\n",
+               (unsigned int)rfbInactTimeout, rfbInactSignal);
+
+    kill(getppid(), rfbInactSignal);
+  }
+
+  if (inactWarnTimeout >= 0.0 && !inactWarn && currTime >= inactWarnTimeout) {
+
+    inactWarn = TRUE;
+
+    rfbLog("TurboVNC session received no input for %u seconds. Sending warnings to clients.\n",
+               (unsigned int)rfbInactWarnTimeout);
+
+    const CARD32 timeLeftMs = inactTimeout > 0.0 ? (inactTimeout - currTime) * 1000 : 0;
+
+    rfbClientPtr cl;
+    for (cl = rfbClientHead; cl; cl = cl->next)
+      if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
+        rfbSendInactWarnTimeout(cl, timeLeftMs, 0);
+  }
+
+  if (inactWarn) {
+    const CARD32 totalPopupTime = rfbInactTimeout > rfbInactWarnTimeout ?
+        rfbInactTimeout - rfbInactWarnTimeout :
+        0;
+
+    const double timeLeft = inactTimeout > currTime ?
+        (inactTimeout - currTime):
+        0;
+
+    const double timeLeftRatio = totalPopupTime > 0 ? timeLeft / totalPopupTime : 0;
+
+    rfbClientPtr cl;
+
+    for (cl = rfbClientHead; cl; cl = cl->next)
+      if (cl->visEventMask & INACT_WARN_VIS_EVENT_MASK)
+        cl->inactWarnWasChanged = TRUE;
+
+    for (int i = 0; i < screenInfo.numScreens; i++)
+      rfbInactWarnSetPopup(screenInfo.screens[i], timeLeftRatio);
+
+    for (cl = rfbClientHead; cl; cl = cl->next)
+      if (cl->visEventMask & INACT_WARN_VIS_EVENT_MASK)
+        if (!cl->deferredUpdateScheduled)
+          rfbSendFramebufferUpdate(cl);
+  }
+}
 
 static CARD32 InactTimerRearmCallback(OsTimerPtr timer, CARD32 time, void *arg)
 {
@@ -276,6 +335,8 @@ static CARD32 InactTimerRearmCallback(OsTimerPtr timer, CARD32 time, void *arg)
     seenInput = FALSE;
     InactTimerSet();
   }
+
+  InactTimerCheck();
 
   /* every half a second rearm the inactivity timer if saw input */
   InactTimerRearm();
@@ -315,6 +376,9 @@ void InactTimerSet(void)
         if (!cl->deferredUpdateScheduled)
           rfbSendFramebufferUpdate(cl);
       }
+
+      for (int i = 0; i < screenInfo.numScreens; i++)
+        rfbPopupSpriteSetPopup(screenInfo.screens[i], NULL, 0, 0);
     }
   }
 
@@ -326,59 +390,6 @@ void InactTimerCancel(void)
   TimerFree(inactRearm);
   inactTimeout = -1.0;
   inactWarnTimeout = -1.0;
-}
-
-void InactTimerCheck(void)
-{
-  const Bool needGetTime = (inactTimeout >= 0.0 && !inact) ||
-                           inactWarnTimeout >= 0.0;
-  const double currTime = needGetTime ? gettime() : 0.0;
-
-  if (inactTimeout >= 0.0 && !inact && currTime >= inactTimeout) {
-
-    inact = TRUE;
-
-    rfbLog("TurboVNC session received no input for %u seconds. Sending signal %d to parent process.\n",
-               (unsigned int)rfbInactTimeout, rfbInactSignal);
-
-    kill(getppid(), rfbInactSignal);
-  }
-
-  if (inactWarnTimeout >= 0.0 && !inactWarn && currTime >= inactWarnTimeout) {
-
-    inactWarn = TRUE;
-
-    rfbLog("TurboVNC session received no input for %u seconds. Sending warnings to clients.\n",
-               (unsigned int)rfbInactWarnTimeout);
-
-    const CARD32 timeLeftMs = inactTimeout > 0.0 ? (inactTimeout - currTime) * 1000 : 0;
-
-    rfbClientPtr cl;
-    for (cl = rfbClientHead; cl; cl = cl->next) {
-      if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
-        rfbSendInactWarnTimeout(cl, timeLeftMs, 0);
-
-      cl->inactWarnWasChanged = TRUE;
-
-      if (!cl->deferredUpdateScheduled)
-        rfbSendFramebufferUpdate(cl);
-    }
-  }
-
-  if (inactWarn) {
-    const CARD32 totalPopupTime = rfbInactTimeout > rfbInactWarnTimeout ?
-        rfbInactTimeout - rfbInactWarnTimeout :
-        0;
-
-    const double timeLeft = inactTimeout > currTime ?
-        (inactTimeout - currTime):
-        0;
-
-    const double timeLeftRatio = totalPopupTime > 0 ? timeLeft / totalPopupTime : 0;
-
-    for (int i = 0; i < screenInfo.numScreens; i++)
-      rfbInactWarnSetPopup(screenInfo.screens[i], timeLeftRatio);
-  }
 }
 
 
