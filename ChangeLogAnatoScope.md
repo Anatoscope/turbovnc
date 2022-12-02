@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.7.3
+=====
+
+Rebase on TurboVNC 3.0.2.
+
 2.2.6-anatoscope-1.7.3
 =====
 
