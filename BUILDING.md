@@ -9,18 +9,21 @@ Build Requirements
 ### All Systems
 
 - [CMake](http://www.cmake.org) v2.8.12 or later
+  * CMake 3.12 or later is required if it is desirable or necessary to use
+    Python 3 to run the simple web server for noVNC (part of the TurboVNC
+    Server.)
 
-- libjpeg-turbo SDK (v1.4 or later required if building the Java viewer.)
+- libjpeg-turbo SDK v1.2 or later
   * The libjpeg-turbo SDK binary packages can be downloaded from the "Files"
     area of <http://sourceforge.net/projects/libjpeg-turbo>.
-  * The TurboVNC build system will search for the TurboJPEG header and
-    library under __/opt/libjpeg-turbo__ on Unix or __c:\libjpeg-turbo[64]__ on
-    Windows, but you can override this by setting the `TJPEG_INCLUDE_DIR` CMake
-    variable to the directory containing __turbojpeg.h__ and the
-    `TJPEG_LIBRARY` CMake variable to either the full path of the TurboJPEG
-    library against which you want to link or a set of link flags needed to
-    link with the TurboJPEG library (for instance,
-    `-DTJPEG_LIBRARY="-L/opt/libjpeg-turbo/lib64 -lturbojpeg"` or
+  * The TurboVNC build system will search for the TurboJPEG header and library
+    under __/opt/libjpeg-turbo__ on Un\*x or __c:\libjpeg-turbo[64]__ (Visual
+    C++) or __c:\libjpeg-turbo-gcc[64]__ (MinGW) on Windows, but you can
+    override this by setting the `TJPEG_INCLUDE_DIR` CMake variable to the
+    directory containing __turbojpeg.h__ and the `TJPEG_LIBRARY` CMake variable
+    to either the full path of the TurboJPEG library against which you want to
+    link or a set of link flags needed to link with the TurboJPEG library (for
+    instance, `-DTJPEG_LIBRARY="-L/opt/libjpeg-turbo/lib64 -lturbojpeg"` or
     `-DTJPEG_LIBRARY="-libpath:c:/libjpeg-turbo64/lib turbojpeg.lib"`.)
 
 
@@ -36,7 +39,10 @@ Build Requirements
   * For systems that do not provide a JDK, download the
     [Oracle Java Development Kit](http://www.oracle.com/technetwork/java/javase/downloads)
     or [OpenJDK](https://jdk.java.net)
-  * If using JDK 11 or later, CMake 3.10.x or later must also be used
+  * [OpenJDK](https://jdk.java.net) 11 or later must be used if building
+    an installer with a custom JRE (if the `TVNC_INCLUDEJRE` CMake variable is
+    set to `1`)
+  * If using JDK 11 or later, CMake 3.11.x or later must also be used
 
 
 ### Windows
@@ -57,6 +63,24 @@ Build Requirements
     `vcvars32.bat` or `vcvars64.bat`, which are located in the same directory
     as the compiler.
 
+   ... OR ...
+
+- MinGW
+
+  [MSYS2](http://msys2.github.io/) or [tdm-gcc](http://tdm-gcc.tdragon.net/)
+  recommended if building on a Windows machine.  Both distributions install a
+  Start Menu link that can be used to launch a command prompt with the
+  appropriate compiler paths automatically set.
+
+- JDK 8 or OpenJDK 1.8 or later
+  * Download the
+    [Oracle Java Development Kit](http://www.oracle.com/technetwork/java/javase/downloads)
+    or [OpenJDK](https://jdk.java.net)
+  * [OpenJDK](https://jdk.java.net) 11 or later must be used if building
+    an installer with a custom JRE (if the `TVNC_INCLUDEJRE` CMake variable is
+    set to `1`)
+  * If using JDK 11 or later, CMake 3.11.x or later must also be used
+
 
 ### Mac
 
@@ -66,7 +90,10 @@ Build Requirements
   * Download the
     [Oracle Java Development Kit](http://www.oracle.com/technetwork/java/javase/downloads)
     or [OpenJDK](https://jdk.java.net)
-  * If using JDK 11 or later, CMake 3.10.x or later must also be used
+  * [OpenJDK](https://jdk.java.net) 11 or later must be used if building
+    a Mac package/disk image with a custom JRE (if the `TVNC_INCLUDEJRE` CMake
+    variable is set to `1`)
+  * If using JDK 11 or later, CMake 3.11.x or later must also be used
 
 
 Out-of-Tree Builds
@@ -88,13 +115,13 @@ Build Procedure
 
 ### Un*x (including Mac)
 
-The following procedure will build the Java TurboVNC Viewer and some native
-glueware to support running it as a standalone application.  Additionally, if
-the TurboVNC Server build is enabled (which is the default on Un*x platforms
-other than Mac), then this procedure will build the TurboVNC Server and a
-handful of C applications that are used to interface with it.  On most 64-bit
-systems (Solaris being a notable exception), this will build a 64-bit version
-of TurboVNC.  See "Build Recipes" for specific instructions on how to build a
+The following procedure will build the TurboVNC Viewer and some native glueware
+to support running it as a standalone application.  Additionally, if the
+TurboVNC Server build is enabled (which is the default on Un*x platforms other
+than Mac), then this procedure will build the TurboVNC Server and a handful of
+C applications that are used to interface with it.  On most 64-bit systems
+(Solaris being a notable exception), this will build a 64-bit version of
+TurboVNC.  See "Build Recipes" for specific instructions on how to build a
 32-bit or 64-bit version of TurboVNC on systems that support both.
 
     cd {build_directory}
@@ -112,6 +139,8 @@ Replace `make` with `ninja` and `Unix Makefiles` with `Ninja` if using Ninja.
 
 This will build either a 32-bit or a 64-bit version of TurboVNC, depending on
 which version of __cl.exe__ is in the `PATH`.
+
+Replace `nmake` with `ninja` and `NMake Makefiles` with `Ninja` if using Ninja.
 
 
 ### Visual C++ (IDE)
@@ -132,21 +161,6 @@ configurations in that project ("Debug", "Release", etc.) to generate a full
 build of TurboVNC.
 
 
-### Java
-
-Adding `-DTVNC_BUILDJAVA=1` to the CMake command line will build the Java
-TurboVNC Viewer, as well as include it when installing or packaging the native
-TurboVNC Viewer or the TurboVNC Server.  This is the default on Un*x and Mac
-platforms.
-
-On Un*x systems, the default is to also build native/X11 infrastructure to
-support running the Java TurboVNC Viewer as a standalone application.  You can,
-however, disable this by adding `-DTVNC_BUILDNATIVE=0` to the CMake command
-line.  This will build only the Java classes without the native infrastructure.
-You can add `-DTVNC_BUILDNATIVE=0 -DTVNC_BUILDSERVER=0` to the CMake command
-line to avoid building anything but the pure Java code.
-
-
 ### Debug Build
 
 When building the native TurboVNC Viewer or the TurboVNC Server, add
@@ -157,18 +171,39 @@ NMake.)
 
 ### TLS Encryption Support
 
-The TurboVNC Server provides TLS encryption using either OpenSSL or GnuTLS.
-OpenSSL is the default because it generally performs the best, but it may be
-desirable to use GnuTLS under certain circumstances.  To do this, add
-`-DTVNC_USETLS=GnuTLS` to the CMake command line when configuring the TurboVNC
-Server.  Add `-DTVNC_USETLS=0` to the CMake command line to disable TLS
-encryption.
+The TurboVNC Server provides TLS encryption using OpenSSL.  Add
+`-DTVNC_USETLS=0` to the CMake command line to disable TLS encryption.
 
-The default when using OpenSSL is to dynamically load the OpenSSL symbols from
-libssl and libcrypto using `dlopen()` and `dlsym()`.  This ensures maximum
-compatibility across different O/S distributions.  You can disable this
-behavior and link directly with libssl and libcrypto by adding
-`-DTVNC_DLOPENSSL=0` to the CMake command line.
+The default is to dynamically load the OpenSSL symbols from libssl and
+libcrypto using `dlopen()` and `dlsym()`.  This ensures maximum compatibility
+across different O/S distributions.  You can disable this behavior and link
+directly with libssl and libcrypto by adding `-DTVNC_DLOPENSSL=0` to the CMake
+command line.
+
+
+### Distribution-Specific Build
+
+By default, the build system builds TurboVNC binaries that can run on multiple
+O/S distributions.  This involves building some of the X.org dependencies,
+which are included in the TurboVNC source tree, and statically linking TurboVNC
+with those and other dependencies.  Distribution-specific dynamically-linked
+TurboVNC binaries can instead be built by changing the values of the following
+CMake variables:
+
+- `TJPEG_INCLUDE_DIR`
+- `TJPEG_LIBRARY`
+- `TVNC_DLOPENSSL`
+- `TVNC_STATIC_XORG_PATHS`
+- `TVNC_SYSTEMLIBS`
+- `TVNC_SYSTEMX11`
+- `XKB_BASE_DIRECTORY`
+- `XKB_BIN_DIRECTORY`
+- `XORG_DRI_DRIVER_PATH`
+- `XORG_FONT_PATH`
+- `XORG_REGISTRY_PATH`
+
+Use `ccmake` or `cmake-gui`, as described below, to view documentation for
+those variables.
 
 
 Build Recipes
@@ -285,6 +320,13 @@ Create Red Hat-style binary RPM package.  Requires RPM v4 or later.
 
 Create Debian-style binary package.  Requires dpkg.
 
+A custom JRE based on OpenJDK can be included in the Linux installer packages
+by setting the `TVNC_INCLUDEJRE` CMake variable to `1`.  If this variable is
+not set, then the TurboVNC Viewer will rely on a separate installation of
+Oracle Java or OpenJDK.  OpenJDK must be used when including a custom JRE, in
+order to avoid legal restrictions regarding the redistribution of Oracle JDK
+components.
+
 
 Mac
 ---
@@ -293,9 +335,14 @@ Mac
 
 Create Mac package/disk image.  This requires __pkgbuild__ and
 __productbuild__, which are installed by default on OS X/macOS 10.7 and later.
-This command generates a package containing a Java app bundle that relies on
-Oracle Java or OpenJDK.  The DMG built with this command can be installed on
-OS X/macOS 10.7 and later.
+This command generates a package containing a TurboVNC Viewer app bundle that,
+depending on the value of the `TVNC_INCLUDEJRE` CMake variable, includes a
+custom JRE based on OpenJDK or relies on a separate installation of Oracle Java
+or OpenJDK.  The DMG built with this command can be installed on OS X/macOS
+10.7 and later, but if a custom JRE is included, it requires OS X/macOS 10.9 or
+later in order to run.  OpenJDK must be used when including a custom JRE, in
+order to avoid legal restrictions regarding the redistribution of Oracle JDK
+components.
 
 
 Windows
@@ -305,6 +352,11 @@ If using NMake:
 
     cd {build_directory}
     nmake installer
+
+If using Ninja:
+
+    cd {build_directory}
+    ninja installer
 
 If using the Visual Studio IDE, build the "installer" target.
 
@@ -317,3 +369,10 @@ __{build_directory}\Release__).
 Building a Windows installer requires
 [Inno Setup](http://www.jrsoftware.org/isinfo.php).
 __iscc.exe__ should be in your `PATH`.
+
+A custom JRE based on OpenJDK can be included in the Windows installer package
+by setting the `TVNC_INCLUDEJRE` CMake variable to `1`.  If this variable is
+not set, then the TurboVNC Viewer will rely on a separate installation of
+Oracle Java or OpenJDK.  OpenJDK must be used when including a custom JRE, in
+order to avoid legal restrictions regarding the redistribution of Oracle JDK
+components.

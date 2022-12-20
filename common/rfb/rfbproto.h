@@ -1,27 +1,26 @@
-/*
- *  Copyright (C) 2009-2010, 2012-2013, 2015 D. R. Commander.
- *                                           All Rights Reserved.
- *  Copyright (C) 2009 Vic Lee.  All Rights Reserved.
- *  Copyright (C) 2004-2008 Sun Microsystems, Inc. All Rights Reserved.
- *  Copyright (C) 2004 Landmark Graphics Corporation. All Rights Reserved.
- *  Copyright (C) 2000-2006 Constantin Kaplinsky. All Rights Reserved.
- *  Copyright (C) 2000 Tridia Corporation. All Rights Reserved.
- *  Copyright (C) 1999 AT&T Laboratories Cambridge. All Rights Reserved.
+/* Copyright (C) 2009-2010, 2012-2013, 2015, 2022 D. R. Commander.
+ *                                                All Rights Reserved.
+ * Copyright (C) 2009 Vic Lee.  All Rights Reserved.
+ * Copyright (C) 2004-2008 Sun Microsystems, Inc. All Rights Reserved.
+ * Copyright (C) 2000-2006 Constantin Kaplinsky. All Rights Reserved.
+ * Copyright (C) 2004 Landmark Graphics Corporation. All Rights Reserved.
+ * Copyright (C) 2000 Tridia Corporation. All Rights Reserved.
+ * Copyright (C) 1999 AT&T Laboratories Cambridge. All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 /*
@@ -149,12 +148,12 @@ typedef struct _rfbCapabilityInfo {
  * TurboVNC, VeNCrypt
  */
 
-#define rfbStandardVendor "STDV"
+#define rfbStandardVendor  "STDV"
 #define rfbTridiaVncVendor "TRDV"
-#define rfbTightVncVendor "TGHT"
-#define rfbTurboVncVendor "TRBO"
-#define rfbVeNCryptVendor "VENC"
-#define rfbGIIVendor      "GGI_"
+#define rfbTightVncVendor  "TGHT"
+#define rfbTurboVncVendor  "TRBO"
+#define rfbVeNCryptVendor  "VENC"
+#define rfbGIIVendor       "GGI_"
 
 
 /*****************************************************************************
@@ -305,7 +304,6 @@ typedef struct _rfbAuthenticationCapsMsg {
 #define rfbAuthVeNCrypt 19
 #define sig_rfbAuthVeNCrypt "VENCRYPT"
 
-
 /*-----------------------------------------------------------------------------
  * Authentication result codes (all protocol versions, but rfbAuthTooMany is
  * not used in protocol versions above 3.3)
@@ -395,27 +393,15 @@ typedef struct _rfbInteractionCapsMsg {
  */
 
 
-/*-----------------------------------------------------------------------------
- * Extended desktop size reason and result codes
- */
-
-#define rfbEDSReasonServer 0
-#define rfbEDSReasonClient 1
-#define rfbEDSReasonOtherClient 2
-
-#define rfbEDSResultSuccess 0
-#define rfbEDSResultProhibited 1
-#define rfbEDSResultNoResources 2
-#define rfbEDSResultInvalid 3
-
-
 /*****************************************************************************
  *
  * Message types
  *
  *****************************************************************************/
 
-/* server -> client */
+/*-----------------------------------------------------------------------------
+ * server -> client
+ */
 
 #define rfbFramebufferUpdate 0
 #define rfbSetColourMapEntries 1
@@ -440,7 +426,9 @@ typedef struct _rfbInteractionCapsMsg {
 #define sig_rfbGIIServer "GII_SERV"
 
 
-/* client -> server */
+/*-----------------------------------------------------------------------------
+ * client -> server
+ */
 
 #define rfbSetPixelFormat 0
 #define rfbFixColourMapEntries 1        /* not currently supported */
@@ -479,29 +467,11 @@ typedef struct _rfbInteractionCapsMsg {
 #define sig_rfbGIIClient "GII_CLNT"
 
 
-/* server -> client and client -> server */
+/*-----------------------------------------------------------------------------
+ * server -> client and client -> server
+ */
 
 #define rfbFence 248
-
-/* fence flags */
-#define rfbFenceFlagBlockBefore 1
-#define rfbFenceFlagBlockAfter 2
-#define rfbFenceFlagSyncNext 4
-#define rfbFenceFlagRequest 0x80000000
-#define rfbFenceFlagsSupported (rfbFenceFlagBlockBefore | \
-                                rfbFenceFlagBlockAfter | \
-                                rfbFenceFlagSyncNext | \
-                                rfbFenceFlagRequest)
-
-
-/* GII sub-types */
-
-#define rfbGIIEvent 0
-#define rfbGIIVersion 1
-#define rfbGIIDeviceCreate 2
-#define rfbGIIDeviceDestroy 3
-
-#define rfbGIIBE 128
 
 
 /*****************************************************************************
@@ -535,110 +505,165 @@ typedef struct _rfbInteractionCapsMsg {
 
 /*
  * Special encoding numbers:
- *   0xFFFFFD00 .. 0xFFFFFD05 -- subsampling level;
- *   0xFFFFFE00 .. 0xFFFFFE64 -- fine-grained quality level (0-100 scale);
- *   0xFFFFFEC7 .. 0xFFFFFEC8 -- flow control extensions;
- *   0xFFFFFECC               -- extended desktop size;
- *   0xFFFFFF00 .. 0xFFFFFF0F -- encoding-specific compression levels;
- *   0xFFFFFF10 .. 0xFFFFFF1F -- mouse cursor shape data;
- *   0xFFFFFF20 .. 0xFFFFFF2F -- various protocol extensions;
- *   0xFFFFFF30 .. 0xFFFFFFDF -- not allocated yet;
- *   0xFFFFFFE0 .. 0xFFFFFFEF -- quality level for JPEG compressor;
- *   0xFFFFFFF0 .. 0xFFFFFFFF -- not allocated yet.
+ *   0xFFFFFD00 .. 0xFFFFFD05 -- subsampling level
+ *         -768 .. -763
+ *   0xFFFFFE00 .. 0xFFFFFE64 -- fine-grained quality level (0-100 scale)
+ *         -512 .. -412
+ *   0xFFFFFEC7 .. 0xFFFFFEC8 -- flow control extensions
+ *         -313 .. -312
+ *   0xFFFFFECC               -- extended desktop size
+ *         -308
+ *   0xFFFFFECF               -- GII
+ *         -305
+ *   0xFFFFFF00 .. 0xFFFFFF0F -- encoding-specific compression levels
+ *         -256 .. -241
+ *   0xFFFFFF10 .. 0xFFFFFF1F -- mouse cursor shape data
+ *         -240 .. -225
+ *   0xFFFFFF20 .. 0xFFFFFF2F -- various protocol extensions
+ *         -224 .. -209
+ *   0xFFFFFF30 .. 0xFFFFFFDF -- not allocated yet
+ *         -208 .. -33
+ *   0xFFFFFFE0 .. 0xFFFFFFEF -- quality level for JPEG compressor
+ *          -32 .. -17
+ *   0xFFFFFFF0 .. 0xFFFFFFFF -- not allocated yet
+ *          -16 .. -1
  */
 
-#define rfbEncodingFineQualityLevel0   0xFFFFFE00
-#define rfbEncodingFineQualityLevel100 0xFFFFFE64
-#define rfbEncodingSubsamp1X           0xFFFFFD00
-#define rfbEncodingSubsamp4X           0xFFFFFD01
-#define rfbEncodingSubsamp2X           0xFFFFFD02
-#define rfbEncodingSubsampGray         0xFFFFFD03
-#define rfbEncodingSubsamp8X           0xFFFFFD04
-#define rfbEncodingSubsamp16X          0xFFFFFD05
+#define rfbEncodingSubsamp1X            0xFFFFFD00
+#define rfbEncodingSubsamp4X            0xFFFFFD01
+#define rfbEncodingSubsamp2X            0xFFFFFD02
+#define rfbEncodingSubsampGray          0xFFFFFD03
+#define rfbEncodingSubsamp8X            0xFFFFFD04
+#define rfbEncodingSubsamp16X           0xFFFFFD05
+#define rfbEncodingFineQualityLevel0    0xFFFFFE00
+#define rfbEncodingFineQualityLevel100  0xFFFFFE64
 
-#define rfbEncodingContinuousUpdates   0xFFFFFEC7
-#define rfbEncodingFence               0xFFFFFEC8
+#define rfbEncodingContinuousUpdates    0xFFFFFEC7
+#define rfbEncodingFence                0xFFFFFEC8
 
-#define rfbEncodingExtendedDesktopSize 0xFFFFFECC
+#define rfbEncodingExtendedDesktopSize  0xFFFFFECC
 
-#define rfbEncodingCompressLevel0  0xFFFFFF00
-#define rfbEncodingCompressLevel1  0xFFFFFF01
-#define rfbEncodingCompressLevel2  0xFFFFFF02
-#define rfbEncodingCompressLevel3  0xFFFFFF03
-#define rfbEncodingCompressLevel4  0xFFFFFF04
-#define rfbEncodingCompressLevel5  0xFFFFFF05
-#define rfbEncodingCompressLevel6  0xFFFFFF06
-#define rfbEncodingCompressLevel7  0xFFFFFF07
-#define rfbEncodingCompressLevel8  0xFFFFFF08
-#define rfbEncodingCompressLevel9  0xFFFFFF09
+#define rfbEncodingGII                  0xFFFFFECF
 
-#define rfbEncodingXCursor         0xFFFFFF10
-#define rfbEncodingRichCursor      0xFFFFFF11
-#define rfbEncodingPointerPos      0xFFFFFF18
+#define rfbEncodingCompressLevel0       0xFFFFFF00
+#define rfbEncodingCompressLevel1       0xFFFFFF01
+#define rfbEncodingCompressLevel2       0xFFFFFF02
+#define rfbEncodingCompressLevel3       0xFFFFFF03
+#define rfbEncodingCompressLevel4       0xFFFFFF04
+#define rfbEncodingCompressLevel5       0xFFFFFF05
+#define rfbEncodingCompressLevel6       0xFFFFFF06
+#define rfbEncodingCompressLevel7       0xFFFFFF07
+#define rfbEncodingCompressLevel8       0xFFFFFF08
+#define rfbEncodingCompressLevel9       0xFFFFFF09
 
-#define rfbEncodingLastRect        0xFFFFFF20
-#define rfbEncodingNewFBSize       0xFFFFFF21
+#define rfbEncodingXCursor              0xFFFFFF10
+#define rfbEncodingRichCursor           0xFFFFFF11
+#define rfbEncodingPointerPos           0xFFFFFF18
 
-#define rfbEncodingMaxDelay20      0xFFFFFCF0
-#define rfbEncodingMaxDelay40      0xFFFFFCF1
-#define rfbEncodingMaxDelay60      0xFFFFFCF2
-#define rfbEncodingMaxDelay80      0xFFFFFCF3
-#define rfbEncodingMaxDelay100     0xFFFFFCF4
-#define rfbEncodingMaxDelay120     0xFFFFFCF5
-#define rfbEncodingMaxDelay140     0xFFFFFCF6
-#define rfbEncodingMaxDelay160     0xFFFFFCF7
-#define rfbEncodingMaxDelay180     0xFFFFFCF8
-#define rfbEncodingMaxDelay200     0xFFFFFCF9
-#define rfbEncodingMaxDelay220     0xFFFFFCFA
-#define rfbEncodingMaxDelay240     0xFFFFFCFB
-#define rfbEncodingMaxDelay260     0xFFFFFCFC
-#define rfbEncodingMaxDelay280     0xFFFFFCFD
-#define rfbEncodingMaxDelay300     0xFFFFFCFE
-#define rfbEncodingMaxDelay320     0xFFFFFCFF
+#define rfbEncodingLastRect             0xFFFFFF20
+#define rfbEncodingNewFBSize            0xFFFFFF21
 
-#define rfbEncodingQualityLevel0   0xFFFFFFE0
-#define rfbEncodingQualityLevel1   0xFFFFFFE1
-#define rfbEncodingQualityLevel2   0xFFFFFFE2
-#define rfbEncodingQualityLevel3   0xFFFFFFE3
-#define rfbEncodingQualityLevel4   0xFFFFFFE4
-#define rfbEncodingQualityLevel5   0xFFFFFFE5
-#define rfbEncodingQualityLevel6   0xFFFFFFE6
-#define rfbEncodingQualityLevel7   0xFFFFFFE7
-#define rfbEncodingQualityLevel8   0xFFFFFFE8
-#define rfbEncodingQualityLevel9   0xFFFFFFE9
+#define rfbEncodingMaxDelay20           0xFFFFFCF0
+#define rfbEncodingMaxDelay40           0xFFFFFCF1
+#define rfbEncodingMaxDelay60           0xFFFFFCF2
+#define rfbEncodingMaxDelay80           0xFFFFFCF3
+#define rfbEncodingMaxDelay100          0xFFFFFCF4
+#define rfbEncodingMaxDelay120          0xFFFFFCF5
+#define rfbEncodingMaxDelay140          0xFFFFFCF6
+#define rfbEncodingMaxDelay160          0xFFFFFCF7
+#define rfbEncodingMaxDelay180          0xFFFFFCF8
+#define rfbEncodingMaxDelay200          0xFFFFFCF9
+#define rfbEncodingMaxDelay220          0xFFFFFCFA
+#define rfbEncodingMaxDelay240          0xFFFFFCFB
+#define rfbEncodingMaxDelay260          0xFFFFFCFC
+#define rfbEncodingMaxDelay280          0xFFFFFCFD
+#define rfbEncodingMaxDelay300          0xFFFFFCFE
+#define rfbEncodingMaxDelay320          0xFFFFFCFF
 
-#define rfbEncodingWarnEventAllOff 0xFFFFFA00
-#define rfbEncodingWarnEventAllOn  0xFFFFFAFF
+#define rfbEncodingQualityLevel0        0xFFFFFFE0
+#define rfbEncodingQualityLevel1        0xFFFFFFE1
+#define rfbEncodingQualityLevel2        0xFFFFFFE2
+#define rfbEncodingQualityLevel3        0xFFFFFFE3
+#define rfbEncodingQualityLevel4        0xFFFFFFE4
+#define rfbEncodingQualityLevel5        0xFFFFFFE5
+#define rfbEncodingQualityLevel6        0xFFFFFFE6
+#define rfbEncodingQualityLevel7        0xFFFFFFE7
+#define rfbEncodingQualityLevel8        0xFFFFFFE8
+#define rfbEncodingQualityLevel9        0xFFFFFFE9
 
-#define rfbEncodingVisEventAllOff  0xFFFFFB00
-#define rfbEncodingVisEventAllOn   0xFFFFFBFF
+#define rfbEncodingWarnEventAllOff      0xFFFFFA00
+#define rfbEncodingWarnEventAllOn       0xFFFFFAFF
 
-#define rfbEncodingGII             0xFFFFFECF
+#define rfbEncodingVisEventAllOff       0xFFFFFB00
+#define rfbEncodingVisEventAllOn        0xFFFFFBFF
 
-#define rfbEncodingClientServerVer 0xFFFFFC00
+#define rfbEncodingClientServerVer      0xFFFFFC00
 
 /* signatures for "fake" encoding types */
-#define sig_rfbEncodingCompressLevel0  "COMPRLVL"
-#define sig_rfbEncodingXCursor         "X11CURSR"
-#define sig_rfbEncodingRichCursor      "RCHCURSR"
-#define sig_rfbEncodingPointerPos      "POINTPOS"
-#define sig_rfbEncodingLastRect        "LASTRECT"
-#define sig_rfbEncodingNewFBSize       "NEWFBSIZ"
+#define sig_rfbEncodingCompressLevel0    "COMPRLVL"
+#define sig_rfbEncodingXCursor           "X11CURSR"
+#define sig_rfbEncodingRichCursor        "RCHCURSR"
+#define sig_rfbEncodingPointerPos        "POINTPOS"
+#define sig_rfbEncodingLastRect          "LASTRECT"
+#define sig_rfbEncodingNewFBSize         "NEWFBSIZ"
 #define sig_rfbEncodingFineQualityLevel0 "FINEQLVL"
-#define sig_rfbEncodingSubsamp1X       "SSAMPLVL"
-#define sig_rfbEncodingMaxDelay20      "MAXDELAY"
-#define sig_rfbEncodingQualityLevel0   "JPEGQLVL"
-#define sig_rfbEncodingGII             "GII_____"
-#define sig_rfbEncodingWarnEventAllOff "WRNEVENT"
-#define sig_rfbEncodingVisEventAllOff  "VISEVENT"
-#define sig_rfbEncodingClientServerVer "CLSRVVER"
+#define sig_rfbEncodingSubsamp1X         "SSAMPLVL"
+#define sig_rfbEncodingMaxDelay20        "MAXDELAY"
+#define sig_rfbEncodingQualityLevel0     "JPEGQLVL"
+#define sig_rfbEncodingGII               "GII_____"
+#define sig_rfbEncodingWarnEventAllOff   "WRNEVENT"
+#define sig_rfbEncodingVisEventAllOff    "VISEVENT"
+#define sig_rfbEncodingClientServerVer   "CLSRVVER"
+
 
 /*****************************************************************************
  *
- * Server -> client message definitions
+ * Message definitions (server -> client and client -> server)
  *
  *****************************************************************************/
 
+/*-----------------------------------------------------------------------------
+ * Fence
+ */
+
+/* flags */
+#define rfbFenceFlagBlockBefore 1
+#define rfbFenceFlagBlockAfter 2
+#define rfbFenceFlagSyncNext 4
+#define rfbFenceFlagRequest 0x80000000
+#define rfbFenceFlagsSupported (rfbFenceFlagBlockBefore | \
+                                rfbFenceFlagBlockAfter | \
+                                rfbFenceFlagSyncNext | \
+                                rfbFenceFlagRequest)
+
+typedef struct _rfbFenceMsg {
+    CARD8 type;                 /* always rfbFence */
+    CARD8 pad[3];
+    CARD32 flags;
+    CARD8 length;
+    /* Followed by char data[length] */
+} rfbFenceMsg;
+
+#define sz_rfbFenceMsg 9
+
+
+/*-----------------------------------------------------------------------------
+ * GII message subtypes
+ */
+
+#define rfbGIIEvent 0
+#define rfbGIIVersion 1
+#define rfbGIIDeviceCreate 2
+#define rfbGIIDeviceDestroy 3
+
+#define rfbGIIBE 128
+
+
+/*****************************************************************************
+ *
+ * Message definitions (server -> client)
+ *
+ *****************************************************************************/
 
 /*-----------------------------------------------------------------------------
  * FramebufferUpdate - a block of rectangles to be copied to the framebuffer.
@@ -776,6 +801,7 @@ typedef struct _rfbCoRRERectangle {
 #define rfbHextileExtractY(byte) ((byte) & 0xf)
 #define rfbHextileExtractW(byte) (((byte) >> 4) + 1)
 #define rfbHextileExtractH(byte) (((byte) & 0xf) + 1)
+
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  * ZLIB - zlib compression Encoding.  We have an rfbZlibHeader structure
@@ -922,16 +948,16 @@ typedef struct _rfbZlibHeader {
  *
  */
 
-#define rfbTightExplicitFilter         0x04
-#define rfbTightFill                   0x08
-#define rfbTightJpeg                   0x09
-#define rfbTightNoZlib                 0x0A
-#define rfbTightMaxSubencoding         0x09
+#define rfbTightExplicitFilter  0x04
+#define rfbTightFill            0x08
+#define rfbTightJpeg            0x09
+#define rfbTightNoZlib          0x0A
+#define rfbTightMaxSubencoding  0x09
 
 /* Filters to improve compression efficiency */
-#define rfbTightFilterCopy             0x00
-#define rfbTightFilterPalette          0x01
-#define rfbTightFilterGradient         0x02
+#define rfbTightFilterCopy      0x00
+#define rfbTightFilterPalette   0x01
+#define rfbTightFilterGradient  0x02
 
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -944,8 +970,8 @@ typedef struct _rfbZlibHeader {
  * values, if they are also set.
  */
 
-#define rfbHextileZlibRaw               (1 << 5)
-#define rfbHextileZlibHex               (1 << 6)
+#define rfbHextileZlibRaw       (1 << 5)
+#define rfbHextileZlibHex       (1 << 6)
 
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -1009,6 +1035,20 @@ typedef struct {
 
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * Extended desktop size reason and result codes
+ */
+
+#define rfbEDSReasonServer 0
+#define rfbEDSReasonClient 1
+#define rfbEDSReasonOtherClient 2
+
+#define rfbEDSResultSuccess 0
+#define rfbEDSResultProhibited 1
+#define rfbEDSResultNoResources 2
+#define rfbEDSResultInvalid 3
+
+
+/*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
  * WarnEvent encoding to transmit warning messages about events like shutdowns.
  * The warn event header is sent after a header of an all-zero rectangle. Warn
  * event header may be followed by an UTF-8 string description of the event.
@@ -1061,7 +1101,6 @@ typedef struct _rfbSetColourMapEntriesMsg {
 #define sz_rfbSetColourMapEntriesMsg 6
 
 
-
 /*-----------------------------------------------------------------------------
  * Bell - ring a bell on the client if it has one.
  */
@@ -1071,7 +1110,6 @@ typedef struct _rfbBellMsg {
 } rfbBellMsg;
 
 #define sz_rfbBellMsg 1
-
 
 
 /*-----------------------------------------------------------------------------
@@ -1088,6 +1126,7 @@ typedef struct _rfbServerCutTextMsg {
 
 #define sz_rfbServerCutTextMsg 8
 
+
 /*-----------------------------------------------------------------------------
  * ServerVer - AnatoScope extension to send the server version.
  */
@@ -1101,6 +1140,7 @@ typedef struct _rfbServerVerMsg {
 } rfbServerVerMsg;
 
 #define sz_rfbServerVerMsg 8
+
 
 /*-----------------------------------------------------------------------------
  * FileListData
@@ -1117,6 +1157,7 @@ typedef struct _rfbFileListDataMsg {
 } rfbFileListDataMsg;
 
 #define sz_rfbFileListDataMsg 8
+
 
 /*-----------------------------------------------------------------------------
  * FileDownloadData
@@ -1147,6 +1188,7 @@ typedef struct _rfbFileUploadCancelMsg {
 
 #define sz_rfbFileUploadCancelMsg 4
 
+
 /*-----------------------------------------------------------------------------
  * FileDownloadFailed
  */
@@ -1160,19 +1202,6 @@ typedef struct _rfbFileDownloadFailedMsg {
 
 #define sz_rfbFileDownloadFailedMsg 4
 
-/*-----------------------------------------------------------------------------
- * Fence
- */
-
-typedef struct _rfbFenceMsg {
-    CARD8 type;                 /* always rfbFence */
-    CARD8 pad[3];
-    CARD32 flags;
-    CARD8 length;
-    /* Followed by char data[length] */
-} rfbFenceMsg;
-
-#define sz_rfbFenceMsg 9
 
 /*-----------------------------------------------------------------------------
  * GII Server Version
@@ -1188,6 +1217,7 @@ typedef struct _rfbGIIServerVersionMsg {
 
 #define sz_rfbGIIServerVersionMsg 8
 
+
 /*-----------------------------------------------------------------------------
  * GII Device Creation Response
  */
@@ -1200,6 +1230,7 @@ typedef struct _rfbGIIDeviceCreatedMsg {
 } rfbGIIDeviceCreatedMsg;
 
 #define sz_rfbGIIDeviceCreatedMsg 8
+
 
 /*-----------------------------------------------------------------------------
  * Union of all server->client messages.
@@ -1221,13 +1252,11 @@ typedef union _rfbServerToClientMsg {
 } rfbServerToClientMsg;
 
 
-
 /*****************************************************************************
  *
  * Message definitions (client -> server)
  *
  *****************************************************************************/
-
 
 /*-----------------------------------------------------------------------------
  * SetPixelFormat - tell the RFB server the format in which the client wants
@@ -1360,7 +1389,6 @@ typedef struct _rfbPointerEventMsg {
 #define sz_rfbPointerEventMsg 6
 
 
-
 /*-----------------------------------------------------------------------------
  * ClientCutText - the client has new text in its cut buffer.
  */
@@ -1374,6 +1402,7 @@ typedef struct _rfbClientCutTextMsg {
 } rfbClientCutTextMsg;
 
 #define sz_rfbClientCutTextMsg 8
+
 
 /*-----------------------------------------------------------------------------
  * ClientVer - AnatoScope extension to get the client version.
@@ -1389,6 +1418,7 @@ typedef struct _rfbClientVerMsg {
 
 #define sz_rfbClientVerMsg 8
 
+
 /*-----------------------------------------------------------------------------
  * FileListRequest
  */
@@ -1401,6 +1431,7 @@ typedef struct _rfbFileListRequestMsg {
 } rfbFileListRequestMsg;
 
 #define sz_rfbFileListRequestMsg 4
+
 
 /*-----------------------------------------------------------------------------
  * FileDownloadRequest
@@ -1415,6 +1446,7 @@ typedef struct _rfbFileDownloadRequestMsg {
 } rfbFileDownloadRequestMsg;
 
 #define sz_rfbFileDownloadRequestMsg 8
+
 
 /*-----------------------------------------------------------------------------
  * FileUploadRequest
@@ -1446,6 +1478,7 @@ typedef struct _rfbFileUploadDataMsg {
 
 #define sz_rfbFileUploadDataMsg 6
 
+
 /*-----------------------------------------------------------------------------
  * FileDownloadCancel
  */
@@ -1458,6 +1491,7 @@ typedef struct _rfbFileDownloadCancelMsg {
 } rfbFileDownloadCancelMsg;
 
 #define sz_rfbFileDownloadCancelMsg 4
+
 
 /*-----------------------------------------------------------------------------
  * FileUploadFailed
@@ -1472,6 +1506,7 @@ typedef struct _rfbFileUploadFailedMsg {
 
 #define sz_rfbFileUploadFailedMsg 4
 
+
 /*-----------------------------------------------------------------------------
  * FileCreateDirRequest
  */
@@ -1484,6 +1519,7 @@ typedef struct _rfbFileCreateDirRequestMsg {
 } rfbFileCreateDirRequestMsg;
 
 #define sz_rfbFileCreateDirRequestMsg 4
+
 
 /*-----------------------------------------------------------------------------
  * EnableContinuousUpdates
@@ -1499,6 +1535,7 @@ typedef struct _rfbEnableContinuousUpdatesMsg {
 } rfbEnableContinuousUpdatesMsg;
 
 #define sz_rfbEnableContinuousUpdatesMsg 10
+
 
 /*-----------------------------------------------------------------------------
  * SetDesktopSize
@@ -1527,6 +1564,7 @@ typedef struct _rfbSetDesktopSizeMsg {
 
 #define sz_rfbSetDesktopSizeMsg 8
 
+
 /*-----------------------------------------------------------------------------
  * GII Client Version
  */
@@ -1540,10 +1578,12 @@ typedef struct _rfbGIIClientVersionMsg {
 
 #define sz_rfbGIIClientVersionMsg 6
 
+
 /*-----------------------------------------------------------------------------
  * GII Device Creation
  */
 
+/* unit types */
 #define rfbGIIUnitUnknown          0
 #define rfbGIIUnitTime             1
 #define rfbGIIUnitFreq             2
@@ -1575,7 +1615,7 @@ typedef struct _rfbGIIValuator {
     INT32 rangeMin;
     INT32 rangeCenter;
     INT32 rangeMax;
-    CARD32 siUnit;
+    CARD32 siUnit;              /* unit type */
     INT32 siAdd;
     INT32 siMul;
     INT32 siDiv;
@@ -1584,6 +1624,7 @@ typedef struct _rfbGIIValuator {
 
 #define sz_rfbGIIValuator 116
 
+/* event type masks */
 #define rfbGIIKeyPressMask         0x00000020
 #define rfbGIIKeyReleaseMask       0x00000040
 #define rfbGIIKeyRepeatMask        0x00000080
@@ -1602,7 +1643,7 @@ typedef struct _rfbGIIDeviceCreateMsg {
     CARD8 deviceName[32];       /* Must be NULL-terminated */
     CARD32 vendorID;
     CARD32 productID;
-    CARD32 canGenerate;
+    CARD32 canGenerate;         /* event type mask */
     CARD32 numRegisters;
     CARD32 numValuators;
     CARD32 numButtons;
@@ -1610,6 +1651,7 @@ typedef struct _rfbGIIDeviceCreateMsg {
 } rfbGIIDeviceCreateMsg;
 
 #define sz_rfbGIIDeviceCreateMsg 60
+
 
 /*-----------------------------------------------------------------------------
  * GII Device Destruction
@@ -1623,6 +1665,7 @@ typedef struct _rfbGIIDeviceDestroyMsg {
 } rfbGIIDeviceDestroyMsg;
 
 #define sz_rfbGIIDeviceDestroyMsg 8
+
 
 /*-----------------------------------------------------------------------------
  * GII Event
@@ -1689,7 +1732,7 @@ typedef struct _rfbGIIValuatorEvent {
 #define sz_rfbGIIValuatorEvent 16
 
 typedef struct _rfbGIIEventMsg {
-    CARD8 type;                 /* always rfbGII */
+    CARD8 type;                 /* always rfbGIIClient */
     CARD8 endianAndSubType;     /* rfbGIIEvent | (rfbGIIBE or 0) */
     CARD16 length;
     /* Followed by any number of rfbGII*Event structures, totaling length
@@ -1697,6 +1740,7 @@ typedef struct _rfbGIIEventMsg {
 } rfbGIIEventMsg;
 
 #define sz_rfbGIIEventMsg 4
+
 
 /*-----------------------------------------------------------------------------
  * Union of all client->server messages.

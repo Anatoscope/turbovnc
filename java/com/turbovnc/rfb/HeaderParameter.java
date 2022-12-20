@@ -1,4 +1,4 @@
-/* Copyright (C) 2017 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2017-2018 D. R. Commander.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,12 +30,12 @@ public class HeaderParameter extends VoidParameter {
     throw new ErrorException("Cannot set header parameter");
   }
 
-  public final String getDefaultStr() {
-    throw new ErrorException("Cannot get default string for header parameter");
+  public final void reset() {
+    throw new ErrorException("Cannot reset header parameter");
   }
 
-  public final String getValueStr() {
-    throw new ErrorException("Cannot get value string for header parameter");
+  public final String getDefaultStr() {
+    throw new ErrorException("Cannot get default string for header parameter");
   }
 
   public final String getValues() {

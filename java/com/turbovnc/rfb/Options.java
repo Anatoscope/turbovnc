@@ -1,5 +1,8 @@
-/* Copyright (C) 2012-2013, 2015, 2017-2018, 2020 D. R. Commander.
- *                                                All Rights Reserved.
+/* Copyright (C) 2012-2013, 2015-2018, 2020-2022 D. R. Commander.
+ *                                               All Rights Reserved.
+ * Copyright (C) 2011 Brian P. Hinz
+ * Copyright (C) 2010 TigerVNC Team
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +21,10 @@
  */
 
 package com.turbovnc.rfb;
+
+import java.util.*;
+
+import com.turbovnc.rdr.*;
 
 import com.jcraft.jsch.Session;
 
@@ -52,12 +59,10 @@ public class Options {
   public Options() {}
 
   public Options(Options old) {
-    continuousUpdates = old.continuousUpdates;
     port = old.port;
     recvClipboard = old.recvClipboard;
     sendClipboard = old.sendClipboard;
-    if (old.serverName != null)
-      serverName = new String(old.serverName);
+    if (old.serverName != null) serverName = new String(old.serverName);
     shared = old.shared;
 
     fsAltEnter = old.fsAltEnter;
@@ -68,7 +73,6 @@ public class Options {
     viewOnly = old.viewOnly;
 
     acceptBell = old.acceptBell;
-    colors = old.colors;
     cursorShape = old.cursorShape;
     desktopSize = new DesktopSize(old.desktopSize);
     fullScreen = old.fullScreen;
@@ -77,13 +81,12 @@ public class Options {
     showToolbar = old.showToolbar;
 
     compressLevel = old.compressLevel;
-    copyRect = old.copyRect;
     preferredEncoding = old.preferredEncoding;
     allowJpeg = old.allowJpeg;
     quality = old.quality;
     subsampling = old.subsampling;
 
-    extSSH = old.extSSH;
+    enabledSecTypes = new ArrayList<Integer>(old.enabledSecTypes);
     sendLocalUsername = old.sendLocalUsername;
     sshSession = old.sshSession;
     sshTunnelActive = old.sshTunnelActive;
@@ -91,6 +94,8 @@ public class Options {
     tunnel = old.tunnel;
     if (old.user != null) user = new String(old.user);
     if (old.via != null) via = new String(old.via);
+    if (old.x509ca != null) x509ca = new String(old.x509ca);
+    if (old.x509crl != null) x509crl = new String(old.x509crl);
   }
 
   public static int parseScalingFactor(String scaleString) {
@@ -138,23 +143,14 @@ public class Options {
         if (array.length < 2)
           return null;
 
-        int w = 0, h = 0;
-        try {
-          w = Integer.parseInt(array[0]);
-          h = Integer.parseInt(array[1]);
-        } catch (NumberFormatException e) {
-          return null;
-        }
+        int w = Integer.parseInt(array[0]);
+        int h = Integer.parseInt(array[1]);
         if (w < 1 || h < 1)
           return null;
 
         int x = 0, y = 0;
-        try {
-          if (array.length > 2) x = Integer.parseInt(array[2]);
-          if (array.length > 3) y = Integer.parseInt(array[3]);
-        } catch (NumberFormatException e) {
-          return null;
-        }
+        if (array.length > 2) x = Integer.parseInt(array[2]);
+        if (array.length > 3) y = Integer.parseInt(array[3]);
         if (x < 0 || y < 0)
           return null;
 
@@ -195,6 +191,86 @@ public class Options {
     return 0;
   }
 
+  public void save() {
+    // CONNECTION OPTIONS
+    UserPreferences.set("global", "RecvClipboard", recvClipboard);
+    UserPreferences.set("global", "SendClipboard", sendClipboard);
+    UserPreferences.set("global", "Shared", shared);
+
+    // INPUT OPTIONS
+    UserPreferences.set("global", "FSAltEnter", fsAltEnter);
+    if (Utils.osGrab()) {
+      if (grabKeyboard == GRAB_ALWAYS)
+        UserPreferences.set("global", "GrabKeyboard", "Always");
+      else if (grabKeyboard == GRAB_MANUAL)
+        UserPreferences.set("global", "GrabKeyboard", "Manual");
+      else
+        UserPreferences.set("global", "GrabKeyboard", "FS");
+    }
+    for (MenuKey.MenuKeySymbol mks : MenuKey.getMenuKeySymbols()) {
+      if (mks.keycode == menuKeyCode && mks.keysym == menuKeySym)
+        UserPreferences.set("global", "MenuKey", mks.name);
+    }
+    UserPreferences.set("global", "ReverseScroll", reverseScroll);
+    UserPreferences.set("global", "ViewOnly", viewOnly);
+
+    // DISPLAY OPTIONS
+    UserPreferences.set("global", "AcceptBell", acceptBell);
+    UserPreferences.set("global", "CursorShape", cursorShape);
+    UserPreferences.set("global", "DesktopSize", desktopSize.getString());
+    UserPreferences.set("global", "FullScreen", fullScreen);
+
+    if (scalingFactor == SCALE_AUTO)
+      UserPreferences.set("global", "Scale", "Auto");
+    else if (scalingFactor == SCALE_FIXEDRATIO)
+      UserPreferences.set("global", "Scale", "FixedRatio");
+    else
+      UserPreferences.set("global", "Scale", scalingFactor);
+
+    if (span == SPAN_PRIMARY)
+      UserPreferences.set("global", "Span", "Primary");
+    else if (span == SPAN_ALL)
+      UserPreferences.set("global", "Span", "All");
+    else
+      UserPreferences.set("global", "Span", "Auto");
+
+    UserPreferences.set("global", "Toolbar", showToolbar);
+
+    // ENCODING OPTIONS
+    UserPreferences.set("global", "CompressLevel", compressLevel);
+    UserPreferences.set("global", "JPEG", allowJpeg);
+    UserPreferences.set("global", "Quality", quality);
+
+    if (subsampling == SUBSAMP_2X)
+      UserPreferences.set("global", "Subsampling", "2X");
+    else if (subsampling == SUBSAMP_4X)
+      UserPreferences.set("global", "Subsampling", "4X");
+    else if (subsampling == SUBSAMP_GRAY)
+      UserPreferences.set("global", "Subsampling", "Gray");
+    else
+      UserPreferences.set("global", "Subsampling", "1X");
+
+    // SECURITY AND AUTHENTICATION OPTIONS
+    //
+    // NOTE: We use key names of "SecTypes" rather than "SecurityTypes" and
+    // "Username" rather than "User".  This is to prevent older versions of the
+    // TurboVNC Viewer from automatically loading these values into parameters,
+    // since older versions of the TurboVNC Viewer did not provide a way to
+    // configure the values of those parameters using the GUI.
+    UserPreferences.set("global", "SecTypes", getSecTypesString());
+    UserPreferences.set("global", "SendLocalUsername", sendLocalUsername);
+    UserPreferences.set("global", "tunnel", tunnel);
+    UserPreferences.set("global", "Username", user);
+    if (via != null && sshUser != null)
+      UserPreferences.set("global", "via", sshUser + "@" + via);
+    else
+      UserPreferences.set("global", "via", via);
+    UserPreferences.set("global", "x509ca", x509ca);
+    UserPreferences.set("global", "x509crl", x509crl);
+
+    UserPreferences.save();
+  }
+
   void printOpt(String name, boolean val) {
     System.out.println(name + " = " + (val ? "true" : "false"));
   }
@@ -208,7 +284,6 @@ public class Options {
   }
 
   public void print() {
-    printOpt("continuousUpdates", continuousUpdates);
     printOpt("port", port);
     printOpt("recvClipboard", recvClipboard);
     printOpt("sendClipboard", sendClipboard);
@@ -223,7 +298,6 @@ public class Options {
     printOpt("viewOnly", viewOnly);
 
     printOpt("acceptBell", acceptBell);
-    printOpt("colors", colors);
     printOpt("cursorShape", cursorShape);
     if (desktopSize.mode == SIZE_MANUAL)
       printOpt("desktopSize", desktopSize.getString());
@@ -235,18 +309,150 @@ public class Options {
     printOpt("showToolbar", showToolbar);
 
     printOpt("compressLevel", compressLevel);
-    printOpt("copyRect", copyRect);
     printOpt("preferredEncoding", preferredEncoding);
     printOpt("allowJpeg", allowJpeg);
     printOpt("quality", quality);
     printOpt("subsampling", subsampling);
 
-    printOpt("extSSH", extSSH);
+    printOpt("secTypes", getSecTypesString());
     printOpt("sendLocalUsername", sendLocalUsername);
     printOpt("sshUser", sshUser);
     printOpt("tunnel", tunnel);
     printOpt("user", user);
     printOpt("via", via);
+    printOpt("x509ca", x509ca);
+    printOpt("x509crl", x509crl);
+  }
+
+  public void setSecurityTypes(String secTypesString) {
+    if (secTypesString == null)
+      enabledSecTypes = new ArrayList<Integer>();
+    else
+      enabledSecTypes = parseSecTypes(secTypesString);
+  }
+
+  public List<Integer> getEnabledSecTypes() {
+    List<Integer> result = new ArrayList<Integer>();
+
+    for (Iterator<Integer> i = enabledSecTypes.iterator(); i.hasNext();) {
+      int refType = (Integer)i.next();
+      if (refType >= 0x100) {
+        result.add(RFB.SECTYPE_VENCRYPT);
+        break;
+      }
+    }
+    result.add(RFB.SECTYPE_TIGHT);
+    result.add(RFB.SECTYPE_TLS);
+    for (Iterator<Integer> i = enabledSecTypes.iterator(); i.hasNext();) {
+      int refType = (Integer)i.next();
+      if (refType < 0x100 && refType != RFB.SECTYPE_TIGHT &&
+          refType != RFB.SECTYPE_TLS)
+        result.add(refType);
+    }
+
+    return (result);
+  }
+
+  public List<Integer> getEnabledExtSecTypes() {
+    List<Integer> result = new ArrayList<Integer>();
+
+    for (Iterator<Integer> i = enabledSecTypes.iterator(); i.hasNext();) {
+      int refType = (Integer)i.next();
+      if (refType != RFB.SECTYPE_VENCRYPT && refType != RFB.SECTYPE_UNIX_LOGIN)
+        /* ^^ Do not include VeNCrypt to avoid loops */
+        result.add(refType);
+    }
+
+    return (result);
+  }
+
+  public List<Integer> getEnabledTightSecTypes() {
+    List<Integer> result = new ArrayList<Integer>();
+
+    for (Iterator<Integer> i = enabledSecTypes.iterator(); i.hasNext();) {
+      int refType = (Integer)i.next();
+      if (refType < 0x100 && refType != RFB.SECTYPE_VENCRYPT &&
+          refType != RFB.SECTYPE_TIGHT && refType != RFB.SECTYPE_TLS)
+        result.add(refType);
+    }
+
+    return (result);
+  }
+
+  private String getSecTypesString() {
+    StringBuilder sb = new StringBuilder();
+    for (Iterator<Integer> i = enabledSecTypes.iterator(); i.hasNext();) {
+      int refType = ((Integer)i.next());
+      if (refType != RFB.SECTYPE_VENCRYPT && refType != RFB.SECTYPE_TIGHT &&
+          refType != RFB.SECTYPE_TLS) {
+        sb.append(RFB.secTypeName(refType));
+        if (i.hasNext()) sb.append(',');
+      }
+    }
+    return sb.toString();
+  }
+
+  public void enableSecType(int secType) {
+    for (Iterator<Integer> i = enabledSecTypes.iterator(); i.hasNext();)
+      if ((Integer)i.next() == secType)
+        return;
+
+    if (isSecTypeAllowed(secType))
+      enabledSecTypes.add(secType);
+  }
+
+  public boolean isSecTypeSupported(int secType) {
+    Iterator<Integer> i;
+
+    if (sessMgrActive && Params.sessMgrAuto.getValue() &&
+        secType == RFB.SECTYPE_VNCAUTH)
+      return true;
+
+    for (i = enabledSecTypes.iterator(); i.hasNext();)
+      if ((Integer)i.next() == secType)
+        return true;
+    if (secType == RFB.SECTYPE_VENCRYPT)
+      return true;
+    if (secType == RFB.SECTYPE_TIGHT)
+      return true;
+    if (secType == RFB.SECTYPE_TLS)
+      return true;
+
+    return false;
+  }
+
+  public void disableSecType(int secType) {
+    enabledSecTypes.remove((Object)secType);
+  }
+
+  private List<Integer> parseSecTypes(String types_) {
+    List<Integer> result = new ArrayList<Integer>();
+    String[] types = types_.split(",");
+    for (int i = 0; i < types.length; i++) {
+      if (types[i].length() < 1) continue;
+      int typeNum = RFB.secTypeNum(types[i]);
+      if (typeNum != RFB.SECTYPE_INVALID) {
+        if (isSecTypeAllowed(typeNum))
+          result.add(typeNum);
+      } else
+        throw new WarningException("Security type \'" + types[i] +
+                                   "\' is not valid");
+    }
+    return result;
+  }
+
+  private boolean isSecTypeAllowed(int secType) {
+    if (Params.noUnixLogin.getValue() &&
+        (secType == RFB.SECTYPE_PLAIN || secType == RFB.SECTYPE_TLS_PLAIN ||
+         secType == RFB.SECTYPE_X509_PLAIN ||
+         secType == RFB.SECTYPE_UNIX_LOGIN))
+      return false;
+    if ((user != null || sendLocalUsername) &&
+        (secType == RFB.SECTYPE_VNCAUTH || secType == RFB.SECTYPE_TLS_VNC ||
+         secType == RFB.SECTYPE_X509_VNC || secType == RFB.SECTYPE_NONE ||
+         secType == RFB.SECTYPE_TLS_NONE || secType == RFB.SECTYPE_X509_NONE))
+      return false;
+    return true;
   }
 
   public static class DesktopSize {
@@ -272,6 +478,11 @@ public class Options {
     public boolean equals(DesktopSize size) {
       return size.mode == mode && size.width == width &&
              size.height == height && size.layout.equals(layout);
+    }
+
+    public boolean equalsIgnoreID(DesktopSize size) {
+      return size.mode == mode && size.width == width &&
+             size.height == height && size.layout.equalsIgnoreID(layout);
     }
 
     public String getString() {
@@ -307,7 +518,6 @@ public class Options {
   }
 
   // CONNECTION OPTIONS
-  public boolean continuousUpdates;
   public int port;
   public boolean recvClipboard;
   public boolean sendClipboard;
@@ -321,7 +531,6 @@ public class Options {
   public boolean viewOnly;
   // DISPLAY OPTIONS
   public boolean acceptBell;
-  public int colors;
   public boolean cursorShape;
   public DesktopSize desktopSize = new DesktopSize();
   public boolean fullScreen;
@@ -330,18 +539,20 @@ public class Options {
   public boolean showToolbar;
   // ENCODING OPTIONS
   public int compressLevel;
-  public boolean copyRect = true;
   public int preferredEncoding;
   public boolean allowJpeg;
   public int quality;
   public int subsampling;
   // SECURITY AND AUTHENTICATION OPTIONS
-  public boolean extSSH;
+  private List<Integer> enabledSecTypes;
   public boolean sendLocalUsername;
   public Session sshSession;
   public boolean sshTunnelActive;
+  public boolean sessMgrActive;
   public String sshUser;
   public boolean tunnel;
   public String user;
   public String via;
+  public String x509ca;
+  public String x509crl;
 }

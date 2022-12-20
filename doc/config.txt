@@ -105,76 +105,6 @@ compare full rectangles, as TurboVNC 1.2.x did. |
 
 ** Viewer Settings
 
-| Environment Variable | {pcode: TVNC_PROFILE = __0 \| 1__} |
-| Summary | Disable/enable profiling output |
-| Platforms | Un*x, Mac (Java) |
-| Default Value | Disabled |
-#OPT: hiCol=first
-
-	Description :: If profiling output is enabled, then the TurboVNC Viewer will
-	continuously benchmark itself and periodically print the throughput of
-	various stages in its image pipeline to the console.
-
-{anchor: TVNC_SINGLESCREEN}
-| Environment Variable | {pcode: TVNC_SINGLESCREEN = __0 \| 1__} |
-| Summary | Disable/enable forcing a single-screen layout when using \
-	automatic desktop resizing |
-| Platforms | All |
-| Default Value | Disabled |
-#OPT: hiCol=first
-
-	Description :: The default behavior of the TurboVNC Viewer, when automatic
-	desktop resizing is enabled, is to request a desktop size from the server
-	that will fit within the viewer window without using scrollbars, and (if
-	multi-screen spanning is enabled) to request a screen layout from the server
-	that will align the server's screen boundaries with the client's when the
-	viewer window is in its default position.  Setting this environment variable
-	to 1 will restore the automatic desktop resizing behavior of previous
-	versions of the TurboVNC Viewer, thus forcing the server to use a
-	single-screen layout even if it supports multi-screen layouts.
-
-{anchor: VNC_VIA_CMD}
-| Environment Variable | ''VNC_VIA_CMD'', ''VNC_TUNNEL_CMD'' |
-| Summary | SSH command-line templates for use with the ''via'' and \
-	''tunnel'' options (respectively) |
-| Platforms | All |
-| Default Value | See below |
-#OPT: hiCol=first
-
-	Description :: When the ''-via'' option (or the ''via'' parameter in the Java
-	viewer, along with the ''extssh'' parameter) is used, the TurboVNC Viewer
-	reads the ''VNC_VIA_CMD'' environment variable (the Java viewer can also read
-	this information from the ''turbovnc.via'' system property), expands patterns
-	beginning with the "%" character, and uses the resulting command line to
-	establish the secure tunnel to the VNC gateway.  If ''VNC_VIA_CMD'' is not
-	set, then this command line defaults to
-	''/usr/bin/ssh -f -L %L:%H:%R %G sleep 20'' on Linux/Un*x and Mac systems and
-	''ssh.exe -f -L %L:%H:%R %G sleep 20'' on Windows systems.
-	{nl}{nl}
-	When the ''-tunnel'' option (or the ''tunnel'' parameter in the Java viewer,
-	along with the ''extssh'' parameter) is used, the TurboVNC Viewer reads the
-	''VNC_TUNNEL_CMD'' environment variable (the Java viewer can also read this
-	information from the ''turbovnc.tunnel'' system property), expands patterns
-	beginning with the "%" character, and uses the resulting command line to
-	establish the secure tunnel to the VNC host.  If ''VNC_TUNNEL_CMD'' is not
-	set, then this command line defaults to
-	''/usr/bin/ssh -f -L %L:localhost:%R %H sleep 20'' on Linux/Un*x and Mac
-	systems and ''ssh.exe -f -L %L:localhost:%R %H sleep 20'' on Windows systems.
-	{nl}{nl}
-	The following patterns are recognized in the ''VNC_VIA_CMD'' and
-	''VNC_TUNNEL_CMD'' environment variables (note that ''%H'', ''%L'' and ''%R''
-	must be present in the command template, and ''%G'' must also be present if
-	using the ''-via'' option):
-	{nl}{nl}
-	| ''%%'' | A literal "%" |
-	| ''%G'' | gateway host name or IP address |
-	| ''%H'' | remote VNC host name or IP address (if using the ''-via'' \
-		option, then this is specified from the point of view of the gateway) |
-	| ''%L'' | local TCP port number |
-	| ''%R'' | remote TCP port number |
-
-** Java Viewer Settings
-
 Java system properties are normally specified as command-line arguments to the
 Java executable.  For example:
 
@@ -190,28 +120,24 @@ you don't have access to the command line.  For instance, on Linux you could
 execute:
 
 	#Verb: <<---
-	JAVA_TOOL_OPTIONS=-Dturbovnc.turbojpeg=0 /opt/TurboVNC/bin/vncviewer
+	JAVA_TOOL_OPTIONS=-Dturbovnc.profile=1 /opt/TurboVNC/bin/vncviewer
 	---
 
 to start the TurboVNC Viewer without JPEG acceleration.
-
-Refer to the default {file: VncViewer.jnlp} file installed with the TurboVNC
-Server for an example of how to specify Java command-line arguments in a Java
-Web Start environment.
 
 | Java System Property | {pcode: turbovnc.forcealpha = __0 \| 1__} |
 | Summary | Disable/enable back buffer alpha channel |
 | Default Value | Enabled if using OpenGL Java 2D blitting, disabled otherwise |
 #OPT: hiCol=first
 
-	Description :: If this property is enabled, then the Java TurboVNC Viewer
-	will use a TYPE_INT_ARGB_PRE (BGRA with pre-computed alpha channel)
-	BufferedImage as its back buffer instead of a TYPE_INT_RGB (BGRX)
-	BufferedImage.  When using OpenGL blitting in Java 2D (normally accomplished
-	by passing an argument of ''-Dsun.java2d.opengl=true'' to ''java''), it is
-	generally faster to draw an alpha-enabled BufferedImage to the screen,
-	because otherwise glDrawPixels() has to set all of the alpha values itself
-	(which can cause it to revert to an unaccelerated code path in some cases.)
+	Description :: If this property is enabled, then the TurboVNC Viewer will use
+	a TYPE_INT_ARGB_PRE (BGRA with pre-computed alpha channel) BufferedImage as
+	its back buffer instead of a TYPE_INT_RGB (BGRX) BufferedImage.  When using
+	OpenGL blitting in Java 2D (normally accomplished by passing an argument of
+	''-Dsun.java2d.opengl=true'' to ''java''), it is generally faster to draw an
+	alpha-enabled BufferedImage to the screen, because otherwise glDrawPixels()
+	has to set all of the alpha values itself (which can cause it to revert to an
+	unaccelerated code path in some cases.)
 
 	!!! NOTE: this property is enabled by default when using Java 7 or later on
 	Mac platforms, because OpenGL Java 2D blitting is the only option available.
@@ -222,8 +148,8 @@ Web Start environment.
 | Default Value | Enabled |
 #OPT: hiCol=first
 
-	Description :: When running in full-screen mode, the Java TurboVNC Viewer
-	will normally try to take advantage of the full-screen application feature
+	Description :: When running in full-screen mode, the TurboVNC Viewer will
+	normally try to take advantage of the full-screen application feature
 	provided by OS X/macOS 10.7 and later, if available.  Disabling this property
 	will force the viewer to use its own built-in cross-platform
 	"pseudo-full-screen" feature instead.  This is useful mainly for testing.
@@ -250,16 +176,63 @@ Web Start environment.
 	will have to explicitly paste the server's clipboard contents by using a menu
 	option or hotkey on the client.)
 
+| Environment Variable | {pcode: TVNC_PROFILE = __0 \| 1__} |
+| Summary | Disable/enable profiling output |
+| Default Value | Disabled |
+#OPT: hiCol=first
+
+	Description :: If profiling output is enabled, then the TurboVNC Viewer will
+	continuously benchmark itself and periodically print the throughput of
+	various stages in its image pipeline to the console.
+
+{anchor: TVNC_SERVERARGS}
+| Environment Variable | ''TVNC_SERVERARGS'' |
+| Java System Property | ''turbovnc.serverargs'' |
+| Summary | Additional arguments that the TurboVNC Session Manager will pass \
+	to ''vncserver'' when starting a new TurboVNC session \
+|
+#OPT: hiCol=first
+
+	Description :: The TurboVNC Session Manager will pass these command-line
+	arguments to the ''vncserver'' script when starting a new TurboVNC session on
+	the TurboVNC host.  This can be used, for instance, to enable
+	[[#ALR][automatic lossless refresh]].
+
+{anchor: TVNC_SERVERDIR}
+| Environment Variable | ''TVNC_SERVERDIR'' |
+| Java System Property | ''turbovnc.serverdir'' |
+| Summary | The directory in which the TurboVNC Server is installed on the \
+	TurboVNC host |
+| Default Value | ''/opt/TurboVNC'' |
+#OPT: hiCol=first
+
+	Description :: The TurboVNC Session Manager will execute ''bin/vncserver''
+	and ''bin/vncpasswd'' from this directory on the TurboVNC host.
+
+| Java System Property | {pcode: turbovnc.sessmgr = __0 \| 1__} |
+| Summary | Disable/enable the TurboVNC Session Manager |
+| Default Value | Enabled |
+#OPT: hiCol=first
+
+	Description :: Disabling this property will completely disable the TurboVNC
+	Session Manager.
+
+| Environment Variable | {pcode: TVNC_SINGLESCREEN = __0 \| 1__} |
 | Java System Property | {pcode: turbovnc.singlescreen = __0 \| 1__} |
 | Summary | Disable/enable forcing a single-screen layout when using \
 	automatic desktop resizing |
 | Default Value | Disabled |
 #OPT: hiCol=first
 
-	Description :: A more Java-friendly way of disabling the multi-screen-aware
-	automatic desktop resize feature.  See the
-	[[#TVNC_SINGLESCREEN][''TVNC_SINGLESCREEN'' environment variable]] above for
-	more details.
+	Description :: The default behavior of the TurboVNC Viewer, when automatic
+	desktop resizing is enabled, is to request a desktop size from the server
+	that will fit within the viewer window without using scrollbars, and (if
+	multi-screen spanning is enabled) to request a screen layout from the server
+	that will align the server's screen boundaries with the client's when the
+	viewer window is in its default position.  Setting this environment variable
+	or property to 1 will restore the automatic desktop resizing behavior of
+	previous versions of the TurboVNC Viewer, thus forcing the server to use a
+	single-screen layout even if it supports multi-screen layouts.
 
 | Java System Property | ''turbovnc.sshauth'' |
 | Summary | Preferred authentication methods for the built-in SSH client |
@@ -273,55 +246,61 @@ Web Start environment.
 
 | Java System Property | {pcode: turbovnc.sshbannerdlg = __0 \| 1__} |
 | Summary | Display the banner message from the SSH server in a dialog box |
-| Default Value | Enabled |
+| Default Value | Disabled |
 #OPT: hiCol=first
 
-	Description :: The default behavior of the Java TurboVNC Viewer is to display
-	the banner message from the SSH server in a dialog box.  Disabling this
-	system property causes the viewer to display the banner message on the
-	command line instead.
+	Description :: The default behavior of the TurboVNC Viewer is to display the
+	banner message from the SSH server on the command line.  Enabling this system
+	property causes the viewer to display the banner message in a dialog box
+	instead.
 
 | Java System Property | {pcode: turbovnc.swingdb = __0 \| 1__} |
 | Summary | Disable/enable Swing double buffering |
 | Default Value | Disabled |
 #OPT: hiCol=first
 
-	Description :: The Java TurboVNC Viewer has its own double buffering
-	mechanism, so it normally disables the double buffering mechanism in Swing
-	and Java 2D in order to increase performance.  This also allows the viewer to
-	achieve optimal performance under X11 without requiring MIT-SHM pixmap
-	support.  Although the viewer has been thoroughly tested, the
-	''turbovnc.swingdb'' system property is provided as a fallback in case issues
-	are discovered when running it under a specific version of Java.
+	Description :: The TurboVNC Viewer has its own double buffering mechanism, so
+	it normally disables the double buffering mechanism in Swing and Java 2D in
+	order to increase performance.  This also allows the viewer to achieve
+	optimal performance under X11 without requiring MIT-SHM pixmap support.
+	Although the viewer has been thoroughly tested, the ''turbovnc.swingdb''
+	system property is provided as a fallback in case issues are discovered when
+	running it under a specific version of Java.
 
-| Java System Property | ''turbovnc.tunnel'' |
-| Summary | SSH command-line template for use with the ''Tunnel'' and \
-	''ExtSSH'' parameters |
+{anchor: VNC_VIA_CMD}
+| Environment Variable | ''VNC_VIA_CMD'', ''VNC_TUNNEL_CMD'' |
+| Java System Property | ''turbovnc.via'', ''turbovnc.tunnel'' |
+| Summary | SSH command-line templates for use with the ''via'' and \
+	''tunnel'' options (respectively) |
+| Default Value | See below |
 #OPT: hiCol=first
 
-	Description :: A more Java-friendly way of specifying the command line to use
-	when establishing a secure tunnel with the ''Tunnel'' and ''ExtSSH''
-	parameters.  See the
-	[[#VNC_VIA_CMD][''VNC_TUNNEL_CMD'' environment variable]] above for more
-	details.
-
-| Java System Property | {pcode: turbovnc.turbojpeg = __0 \| 1__} |
-| Summary | Disable/enable JPEG acceleration |
-| Default Value | Enabled if the libjpeg-turbo JNI library is available |
-#OPT: hiCol=first
-
-	Description :: Normally, the Java TurboVNC Viewer will try to load the
-	libjpeg-turbo JNI library and use it to accelerate the decompression of
-	JPEG subrectangles.  If this property is disabled, then the viewer will
-	revert to using unaccelerated JPEG decompression.  This is useful mainly for
-	testing and benchmarking purposes.
-
-| Java System Property | ''turbovnc.via'' |
-| Summary | SSH command-line template for use with the ''Via'' and \
-	''ExtSSH'' parameters |
-#OPT: hiCol=first
-
-	Description :: A more Java-friendly way of specifying the command line to use
-	when establishing a secure tunnel with the ''Via'' and ''ExtSSH''
-	parameters.  See the [[#VNC_VIA_CMD][''VNC_VIA_CMD'' environment variable]]
-	above for more details.
+	Description :: When the ''-via'' option is used along with the ''-extssh''
+	option, the TurboVNC Viewer reads the ''VNC_VIA_CMD'' environment variable or
+	the ''turbovnc.via'' system property, expands patterns beginning with the "%"
+	character, and uses the resulting command line to establish the secure tunnel
+	to the VNC gateway.  If ''VNC_VIA_CMD'' is not set, then this command line
+	defaults to  ''/usr/bin/ssh -f -L %L:%H:%R %G sleep 20'' on Linux/Un*x and
+	Mac systems and ''ssh.exe -f -L %L:%H:%R %G sleep 20'' on Windows systems.
+	{nl}{nl} \
+	When the ''-tunnel'' option is used along with the ''-extssh'' option, the
+	TurboVNC Viewer reads the ''VNC_TUNNEL_CMD'' environment variable or the
+	''turbovnc.tunnel'' system property, expands patterns beginning with the "%"
+	character, and uses the resulting command line to establish the secure tunnel
+	to the VNC host.  If ''VNC_TUNNEL_CMD'' is not set, then this command line
+	defaults to ''/usr/bin/ssh -f -L %L:localhost:%R %H sleep 20'' on Linux/Un*x
+	and Mac systems and ''ssh.exe -f -L %L:localhost:%R %H sleep 20'' on Windows
+	systems.
+	{nl}{nl} \
+	The following patterns are recognized in the ''VNC_VIA_CMD'' and
+	''VNC_TUNNEL_CMD'' environment variables and their corresponding system
+	properties (note that ''%H'', ''%L'' and ''%R'' must be present in the
+	command template, and ''%G'' must also be present if using the ''-via''
+	option): \
+	{nl}{nl}
+	| ''%%'' | A literal "%" |
+	| ''%G'' | gateway host name or IP address |
+	| ''%H'' | remote VNC host name or IP address (if using the ''-via'' \
+		option, then this is specified from the point of view of the gateway) |
+	| ''%L'' | local TCP port number |
+	| ''%R'' | remote TCP port number |

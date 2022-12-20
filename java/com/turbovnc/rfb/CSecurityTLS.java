@@ -1,10 +1,9 @@
-/*
- * Copyright (C) 2004 Red Hat Inc.
- * Copyright (C) 2005 Martin Koegler
+/* Copyright (C) 2012, 2015-2020 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2011-2012, 2015, 2017, 2019 Brian P. Hinz
  * Copyright (C) 2010 m-privacy GmbH
  * Copyright (C) 2010 TigerVNC Team
- * Copyright (C) 2011-2012, 2015, 2017, 2019 Brian P. Hinz
- * Copyright (C) 2012, 2015-2020 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2005 Martin Koegler
+ * Copyright (C) 2004 Red Hat Inc.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,7 +51,6 @@ import org.spf4j.base.Base64;
 
 import com.turbovnc.rdr.*;
 import com.turbovnc.network.*;
-import com.turbovnc.vncviewer.*;
 
 public class CSecurityTLS extends CSecurity {
 
@@ -251,9 +249,8 @@ public class CSecurityTLS extends CSecurity {
             for (X509Certificate c :
                  ((X509TrustManager)m).getAcceptedIssuers())
               ks.setCertificateEntry(getThumbprint((X509Certificate)c), c);
-        File cacert = new File(SecurityClient.x509ca.getValue());
-        vlog.debug("Using X.509 CA certificate " +
-                   SecurityClient.x509ca.getValue());
+        File cacert = new File(Params.x509ca.getValue());
+        vlog.debug("Using X.509 CA certificate " + Params.x509ca.getValue());
         if (cacert.exists() && cacert.canRead()) {
           InputStream caStream = new MyFileInputStream(cacert);
           Collection<? extends Certificate> cacerts =
@@ -265,14 +262,14 @@ public class CSecurityTLS extends CSecurity {
         }
         PKIXBuilderParameters params =
           new PKIXBuilderParameters(ks, new X509CertSelector());
-        File crlcert = new File(SecurityClient.x509crl.getValue());
+        File crlcert = new File(Params.x509crl.getValue());
         if (!crlcert.exists() || !crlcert.canRead()) {
           vlog.debug("Not using X.509 CRL");
           params.setRevocationEnabled(false);
         } else {
-          vlog.debug("Using X.509 CRL " + SecurityClient.x509crl.getValue());
+          vlog.debug("Using X.509 CRL " + Params.x509crl.getValue());
           InputStream crlStream =
-            new FileInputStream(SecurityClient.x509crl.getValue());
+            new FileInputStream(Params.x509crl.getValue());
           Collection<? extends CRL> crls = cf.generateCRLs(crlStream);
           CertStoreParameters csp = new CollectionCertStoreParameters(crls);
           CertStore store = CertStore.getInstance("Collection", csp);
@@ -328,7 +325,7 @@ public class CSecurityTLS extends CSecurity {
         expiredOK = true;
       }
       String thumbprint = getThumbprint(cert);
-      File vncDir = new File(FileUtils.getVncHomeDir());
+      File vncDir = new File(Utils.getVncHomeDir());
       File certFile = new File(vncDir, "x509_savedcerts.pem");
       CertificateFactory cf = CertificateFactory.getInstance("X.509");
       if (vncDir.exists() && certFile.exists() && certFile.canRead()) {
@@ -438,7 +435,7 @@ public class CSecurityTLS extends CSecurity {
               if (peer.equals(((String)nxt.get(1)).toLowerCase()))
                 return;
             } else if (((Integer)nxt.get(0)).intValue() == 7) {
-              String peer = ((CConn)client).getSocket().getPeerAddress();
+              String peer = client.getSocket().getPeerAddress();
               if (peer.equals(((String)nxt.get(1)).toLowerCase()))
                 return;
             }

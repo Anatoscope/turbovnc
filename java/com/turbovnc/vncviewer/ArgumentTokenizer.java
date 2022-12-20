@@ -1,5 +1,5 @@
-/* Copyright (c) 2001-2010, JavaPLT group at Rice University (drjava@rice.edu)
- * Copyright (c) 2020, D. R. Commander
+/* Copyright (c) 2020, D. R. Commander
+ * Copyright (c) 2001-2010, JavaPLT group at Rice University (drjava@rice.edu)
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,6 +33,8 @@ package com.turbovnc.vncviewer;
 
 import java.util.List;
 import java.util.LinkedList;
+
+import com.turbovnc.rfb.Utils;
 
 /**
  * Utility class which can tokenize a String into a list of String arguments,
@@ -95,7 +97,7 @@ public abstract class ArgumentTokenizer {
               // Seen the close quote; continue this arg until whitespace is
               // seen
               state = NORMAL_TOKEN_STATE;
-            } else if (c == '\\' && !VncViewer.OS.startsWith("windows")) {
+            } else if (c == '\\' && !Utils.isWindows()) {
               // Look ahead, and only escape quotes or backslashes
               i++;
               char next = arguments.charAt(i);
@@ -113,7 +115,7 @@ public abstract class ArgumentTokenizer {
           case NORMAL_TOKEN_STATE:
             switch (c) {
               case '\\':
-                if (VncViewer.OS.startsWith("windows"))
+                if (Utils.isWindows())
                   currArg.append(c);
                 else
                   escaped = true;

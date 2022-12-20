@@ -1,7 +1,9 @@
 /* -*-mode:java; c-basic-offset:2; indent-tabs-mode:nil -*- */
 /*
-Copyright (c) 2002-2016 ymnk, JCraft,Inc. All rights reserved.
-Copyright (c) 2018, D. R. Commander. All rights reserved.
+Copyright (c) 2002-2018 ymnk, JCraft,Inc. All rights reserved.
+Copyright (c) 2018 D. R. Commander. All rights reserved.
+Copyright (c) 2020 Jeremy Norris. All rights reserved.
+Copyright (c) 2020 Matthias Wiedemann. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -76,7 +78,7 @@ public class KeyPairDSA extends KeyPair{
       keypairgen=null;
     }
     catch(Exception e){
-      //System.err.println("KeyPairDSA: "+e); 
+      //System.err.println("KeyPairDSA: "+e);
       if(e instanceof Throwable)
         throw new JSchException(e.toString(), (Throwable)e);
       throw new JSchException(e.toString());
@@ -144,6 +146,29 @@ public class KeyPairDSA extends KeyPair{
         }
 
         return true;
+      }
+
+      // OPENSSH Key v1 Format
+      else if (vendor == VENDOR_OPENSSH_V1) {
+
+        final Buffer prvKEyBuffer = new Buffer(plain);
+        int checkInt1 = prvKEyBuffer.getInt(); // uint32 checkint1
+        int checkInt2 = prvKEyBuffer.getInt(); // uint32 checkint2
+        if (checkInt1 != checkInt2) {
+          throw new JSchException("check failed");
+        }
+        // The private key section contains both the public key and the private key
+        String keyType = Util.byte2str(prvKEyBuffer.getString()); // string keytype
+
+        P_array=prvKEyBuffer.getMPInt();
+        Q_array=prvKEyBuffer.getMPInt();
+        G_array= prvKEyBuffer.getMPInt();
+        pub_array=prvKEyBuffer.getMPInt();
+        prv_array=prvKEyBuffer.getMPInt();
+        publicKeyComment=Util.byte2str(prvKEyBuffer.getString());
+        //if(P_array!=null) key_size = (new java.math.BigInteger(P_array)).bitLength();
+        return true;
+
       }
 
       int index=0;
@@ -250,7 +275,7 @@ public class KeyPairDSA extends KeyPair{
   }
 
   public byte[] getSignature(byte[] data){
-    try{      
+    try{
       Class c=Class.forName((String)JSch.getConfig("signature.dss"));
       SignatureDSA dsa=
         (SignatureDSA)(c.getDeclaredConstructor().newInstance());
@@ -270,8 +295,12 @@ public class KeyPairDSA extends KeyPair{
     return null;
   }
 
+  public byte[] getSignature(byte[] data, String alg){
+    return getSignature(data);
+  }
+
   public Signature getVerifier(){
-    try{      
+    try{
       Class c=Class.forName((String)JSch.getConfig("signature.dss"));
       SignatureDSA dsa=
         (SignatureDSA)(c.getDeclaredConstructor().newInstance());
@@ -284,7 +313,7 @@ public class KeyPairDSA extends KeyPair{
         Q_array = buf.getString();
         G_array = buf.getString();
         pub_array = buf.getString();
-      } 
+      }
 
       dsa.setPubKey(pub_array, P_array, Q_array, G_array);
       return dsa;
@@ -293,6 +322,10 @@ public class KeyPairDSA extends KeyPair{
       //System.err.println("e "+e);
     }
     return null;
+  }
+
+  public Signature getVerifier(String alg){
+    return getVerifier();
   }
 
   static KeyPair fromSSHAgent(JSch jsch, Buffer buf) throws JSchException {

@@ -2,10 +2,14 @@
 set -e
 
 BINDIR=`dirname $0`
-if [ "$JAVA_HOME" = "" ]; then
-	JAVA=java
+if [ -d $BINDIR/../java/jre ]; then
+	JAVA=$BINDIR/../java/jre/bin/java
 else
-	JAVA="$JAVA_HOME/bin/java"
+	if [ "$JAVA_HOME" = "" ]; then
+		JAVA=java
+	else
+		JAVA="$JAVA_HOME/bin/java"
+	fi
 fi
 TVNC_JAVADIR=@CMAKE_INSTALL_FULL_JAVADIR@
 if [ -d $BINDIR/../java ]; then
@@ -18,25 +22,15 @@ if [ "$ARCH" = "x86_64" ]; then
 	ARCH=amd64
 fi
 
-if [ "$JAVA_HOME" != "" ]; then
-	if [ -f "$JAVA_HOME/lib/$ARCH/libjawt.so" ]; then
-		JAWT_PATH=$JAVA_HOME/lib/$ARCH
-	elif [ -f "$JAVA_HOME/lib/libjawt.so" ]; then
-		JAWT_PATH=$JAVA_HOME/lib
-	fi
-fi
-
-if [ "$JAWT_PATH" = "" ]; then
-	# This should work with OpenJDK or Oracle Java 7 and later.
-	_TMP=`java -XshowSettings:properties -version 2>&1 | grep sun.boot.library.path | sed s/.*=\ //g`
-	if [ -f "$_TMP/libjawt.so" ]; then
-		JAWT_PATH=$_TMP
-	fi
+# This should work with OpenJDK or Oracle Java 7 and later.
+_TMP=`$JAVA -XshowSettings:properties -version 2>&1 | grep sun.boot.library.path | sed s/.*=\ //g`
+if [ -f "$_TMP/libjawt.so" ]; then
+	JAWT_PATH=$_TMP
 fi
 
 if [ "$JAWT_PATH" = "" ]; then
 	# This may be required for IBM Java
-	_TMP=`java -XshowSettings:properties -version 2>&1 | grep java.home | sed s/.*=\ //g`
+	_TMP=`$JAVA -XshowSettings:properties -version 2>&1 | grep java.home | sed s/.*=\ //g`
 	if [ -f "$_TMP/lib/$ARCH/libjawt.so" ]; then
 		JAWT_PATH=$_TMP/lib/$ARCH
 	fi

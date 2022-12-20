@@ -1,7 +1,6 @@
 /***********************************************************
 
 Copyright 1987, 1998  The Open Group
-Copyright 2017  D. R. Commander
 
 Permission to use, copy, modify, distribute, and sell this software and its
 documentation for any purpose is hereby granted without fee, provided that
@@ -91,24 +90,6 @@ SOFTWARE.
 #define GetErrno() errno
 #endif
 
-/* like ffs, but uses fd_mask instead of int as argument, so it works
-   when fd_mask is longer than an int, such as common 64-bit platforms */
-/* modifications by raphael */
-int
-mffs(fd_mask mask)
-{
-    int i;
-
-    if (!mask)
-        return 0;
-    i = 1;
-    while (!(mask & 1)) {
-        i++;
-        mask >>= 1;
-    }
-    return i;
-}
-
 #ifdef DPMSExtension
 #include <X11/extensions/dpmsconst.h>
 #endif
@@ -189,11 +170,6 @@ WaitForSomething(Bool are_ready)
     int pollerr;
     static Bool were_ready;
     Bool timer_is_running;
-#if defined(TURBOVNC) && defined(GLXEXT)
-    CARD32 now = 0;
-    OsTimerPtr timer;
-    extern Bool indirectGlxActive;
-#endif
 
     timer_is_running = were_ready;
 
@@ -214,13 +190,13 @@ WaitForSomething(Bool are_ready)
         /* deal with any blocked jobs */
         if (workQueue) {
             ProcessWorkQueue();
-            are_ready = clients_are_ready();
         }
+
+        timeout = check_timers();
+        are_ready = clients_are_ready();
 
         if (are_ready)
             timeout = 0;
-        else
-            timeout = check_timers();
 
         BlockHandler(&timeout);
         if (NewOutputPending)
@@ -244,26 +220,6 @@ WaitForSomething(Bool are_ready)
         } else
             are_ready = clients_are_ready();
 
-#if defined(TURBOVNC) && defined(GLXEXT)
-        if (indirectGlxActive) {
-            /* This basically restores the logic from xorg-server 1.18.x and
-               earlier.  Without it, the timers in the VNC server are never
-               invoked (and thus framebuffer updates are never sent) while
-               indirect OpenGL applications are running. */
-            if (i > 0) {
-                if (InputCheckPending())
-                    return FALSE;
-
-                if ((timer = first_timer()) != NULL) {
-                    now = GetTimeInMillis();
-                    if ((int) (timer->expires - now) <= 0) {
-                        DoTimers(now);
-                        return FALSE;
-                    }
-                }
-            }
-        } else
-#endif
         if (InputCheckPending())
             return FALSE;
 

@@ -1,19 +1,20 @@
-/*  Copyright (C)2015-2017, 2019 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2015-2017, 2019, 2021-2022 D. R. Commander.
+ *                                          All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 /* Contains code from JNITablet (http://www.jhlabs.com/java/tablet):
@@ -51,15 +52,31 @@
 #include "JRSwizzle.h"
 #import <objc/objc-class.h>
 
+#if !defined(MAC_OS_X_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_12
+#define NSEventTypeLeftMouseDown NSLeftMouseDown
+#define NSEventTypeLeftMouseUp NSLeftMouseUp
+#define NSEventTypeRightMouseDown NSRightMouseDown
+#define NSEventTypeRightMouseUp NSRightMouseUp
+#define NSEventTypeMouseMoved NSMouseMoved
+#define NSEventTypeLeftMouseDragged NSLeftMouseDragged
+#define NSEventTypeRightMouseDragged NSRightMouseDragged
+#define NSEventTypeTabletProximity NSTabletProximity
+#define NSEventTypeOtherMouseDown NSOtherMouseDown
+#define NSEventTypeOtherMouseUp NSOtherMouseUp
+#define NSEventTypeOtherMouseDragged NSOtherMouseDragged
 
-#define bailif0(f) {  \
+#define NSEventSubtypeTabletPoint NSTabletPointEventSubtype
+#endif
+
+
+#define BAILIF0(f) {  \
   if (!(f) || (*env)->ExceptionCheck(env)) {  \
     goto bailout;  \
   }  \
 }
 
 #define SET_LONG(cls, obj, fieldName, val) {  \
-  bailif0(fid = (*env)->GetFieldID(env, cls, #fieldName, "J"));  \
+  BAILIF0(fid = (*env)->GetFieldID(env, cls, #fieldName, "J"));  \
   (*env)->SetLongField(env, obj, fid, val);  \
 }
 
@@ -99,7 +116,7 @@ static jint GetJNIEnv(JNIEnv **env, bool *mustDetach)
   bool shouldDetach = false, success = true;
 
   switch ([event type]) {
-    case NSTabletProximity:
+    case NSEventTypeTabletProximity:
       if (!g_object || !g_methodID_prox) break;
 
       if (GetJNIEnv(&env, &shouldDetach) != JNI_OK) {
@@ -113,20 +130,20 @@ static jint GetJNIEnv(JNIEnv **env, bool *mustDetach)
         (*g_jvm)->DetachCurrentThread(g_jvm);
       return;
 
-    case NSLeftMouseDown:      // 1
-    case NSLeftMouseUp:        // 2
-    case NSRightMouseDown:     // 3
-    case NSRightMouseUp:       // 4
-    case NSMouseMoved:         // 5
-    case NSLeftMouseDragged:   // 6
-    case NSRightMouseDragged:  // 7
-    case NSOtherMouseDown:     // 25
-    case NSOtherMouseUp:       // 26
-    case NSOtherMouseDragged:  // 27
+    case NSEventTypeLeftMouseDown:      // 1
+    case NSEventTypeLeftMouseUp:        // 2
+    case NSEventTypeRightMouseDown:     // 3
+    case NSEventTypeRightMouseUp:       // 4
+    case NSEventTypeMouseMoved:         // 5
+    case NSEventTypeLeftMouseDragged:   // 6
+    case NSEventTypeRightMouseDragged:  // 7
+    case NSEventTypeOtherMouseDown:     // 25
+    case NSEventTypeOtherMouseUp:       // 26
+    case NSEventTypeOtherMouseDragged:  // 27
       if (!g_object || !g_methodID) break;
 
-      if ([event subtype] != NSTabletPointEventSubtype &&
-          [event type] <= NSRightMouseDragged)
+      if ([event subtype] != NSEventSubtypeTabletPoint &&
+          [event type] <= NSEventTypeRightMouseDragged)
         break;
       if (GetJNIEnv(&env, &shouldDetach) != JNI_OK) {
         NSLog(@"Couldn't attach to JVM");
@@ -181,14 +198,14 @@ JNIEXPORT void JNICALL Java_com_turbovnc_vncviewer_Viewport_setupExtInput
   if (g_object) {
     (*env)->DeleteGlobalRef(env, g_object);  g_object = NULL;
   }
-  bailif0(g_object = (*env)->NewGlobalRef(env, obj));
+  BAILIF0(g_object = (*env)->NewGlobalRef(env, obj));
 
-  bailif0(cls = (*env)->GetObjectClass(env, obj));
+  BAILIF0(cls = (*env)->GetObjectClass(env, obj));
 
-  bailif0(g_methodID = (*env)->GetMethodID(env, cls,
+  BAILIF0(g_methodID = (*env)->GetMethodID(env, cls,
                                            "handleTabletEvent",
                                            "(IDDFFFJ)Z"));
-  bailif0(g_methodID_prox = (*env)->GetMethodID(env, cls,
+  BAILIF0(g_methodID_prox = (*env)->GetMethodID(env, cls,
                                                 "handleTabletProximityEvent",
                                                 "(ZIJ)V"));
 
@@ -196,8 +213,8 @@ JNIEXPORT void JNICALL Java_com_turbovnc_vncviewer_Viewport_setupExtInput
   SET_LONG(cls, obj, x11win,
            (jlong)[[NSApplication sharedApplication] keyWindow]);
 
-  printf("TurboVNC Helper: Intercepting tablet events for window 0x%.8lx\n",
-         (unsigned long)[[NSApplication sharedApplication] keyWindow]);
+  fprintf(stderr, "TurboVNC Helper: Intercepting tablet events for window 0x%.8lx\n",
+          (unsigned long)[[NSApplication sharedApplication] keyWindow]);
   return;
 
   bailout:
@@ -230,10 +247,10 @@ JNIEXPORT void JNICALL Java_com_turbovnc_vncviewer_Viewport_cleanupExtInput
   g_methodID = g_methodID_prox = NULL;
   g_jvm = NULL;
 
-  bailif0(cls = (*env)->GetObjectClass(env, obj));
+  BAILIF0(cls = (*env)->GetObjectClass(env, obj));
   SET_LONG(cls, obj, x11dpy, 0);
 
-  printf("TurboVNC Helper: Shutting down tablet event interceptor\n");
+  fprintf(stderr, "TurboVNC Helper: Shutting down tablet event interceptor\n");
 
   bailout:
   return;

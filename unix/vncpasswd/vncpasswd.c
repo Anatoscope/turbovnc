@@ -1,24 +1,23 @@
-/*
- *  Copyright (C) 2010, 2019 D. R. Commander.  All Rights Reserved.
- *  Copyright (C) 2010 University Corporation for Atmospheric Research.
- *                     All Rights Reserved.
- *  Copyright (C) 2002-2003 Constantin Kaplinsky.  All Rights Reserved.
- *  Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
+/* Copyright (C) 2010, 2019, 2021 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2010 University Corporation for Atmospheric Research.
+ *                    All Rights Reserved.
+ * Copyright (C) 2002-2003 Constantin Kaplinsky.  All Rights Reserved.
+ * Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 /*
@@ -165,12 +164,12 @@ static int DoUserList(void)
   char bytes[MAXUSERLEN + 1];
 
   if ((user == NULL) || ((len = strlen(user)) == 0)) {
-    fprintf(stderr, "missing the user name!");
+    fprintf(stderr, "missing the username!");
     return 1;
   }
 
   if (len > MAXUSERLEN) {
-    fprintf(stderr, "user name is too large");
+    fprintf(stderr, "username is too large");
     return 1;
   }
 
@@ -199,7 +198,7 @@ static int DoUserList(void)
 int main(int argc, char *argv[])
 {
   int read_from_stdin = 0;
-  int make_directory = 0;
+  int make_directory = 1;
   int check_strictly = 0;
   char passwd1[9];
   char passwd2[9];
@@ -228,10 +227,12 @@ int main(int argc, char *argv[])
         break;
 
       case 'c':
+        make_directory = 0;
         otp = 1;  otpClear = 1;
         break;
 
       case 'o':
+        make_directory = 0;
         otp = 1;
         break;
 
@@ -240,6 +241,7 @@ int main(int argc, char *argv[])
           usage(argv);
 
         user = argv[i];
+        make_directory = 0;
         userList = 1;
         addUser = 1;
         break;
@@ -249,6 +251,7 @@ int main(int argc, char *argv[])
           usage(argv);
 
         user = argv[i];
+        make_directory = 0;
         userList = 1;
         addUser = 0;
         break;
@@ -284,7 +287,7 @@ int main(int argc, char *argv[])
       exit(1);
     }
 
-    if (make_directory) {
+    if (!strncmp(passwdDir, "/tmp", 4)) {
       fprintf(stderr, "Error: -t is incompatible with -o\n");
       exit(1);
     }
@@ -303,7 +306,7 @@ int main(int argc, char *argv[])
       exit(1);
     }
 
-    if (make_directory) {
+    if (!strncmp(passwdDir, "/tmp", 4)) {
       fprintf(stderr, "Error: -t is incompatible with -a and -r\n");
       exit(1);
     }

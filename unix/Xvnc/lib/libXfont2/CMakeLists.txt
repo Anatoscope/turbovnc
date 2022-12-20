@@ -5,7 +5,12 @@ foreach(h ${HEADERS})
 	copy_X_header(${h} X11/fonts)
 endforeach()
 
-include_directories(include src/stubs ../libfontenc/include)
+include_directories(include src/stubs ../libfontenc/include .)
+
+check_include_files(stdint.h HAVE_STDINT_H)
+if(HAVE_STDINT_H)
+	add_definitions(-DHAVE_STDINT_H)
+endif()
 
 add_definitions(-DHAVE_CONFIG_H -DHAVE_READLINK -UUSE_POLL)
 

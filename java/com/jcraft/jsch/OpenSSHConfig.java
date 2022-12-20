@@ -1,7 +1,8 @@
 /* -*-mode:java; c-basic-offset:2; indent-tabs-mode:nil -*- */
 /*
-Copyright (c) 2013-2016 ymnk, JCraft,Inc. All rights reserved.
-Copyright (c) 2019, D. R. Commander. All rights reserved.
+Copyright (c) 2013-2018 ymnk, JCraft,Inc. All rights reserved.
+Copyright (c) 2019 D. R. Commander. All rights reserved.
+Copyright (c) 2020-2021 Jeremy Norris. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -48,6 +49,7 @@ import java.util.Vector;
  *   <li>Hostname</li>
  *   <li>Port</li>
  *   <li>PreferredAuthentications</li>
+ *   <li>PubkeyAcceptedAlgorithms</li>
  *   <li>IdentityFile</li>
  *   <li>NumberOfPasswordPrompts</li>
  *   <li>ConnectTimeout</li>
@@ -226,6 +228,20 @@ public class OpenSSHConfig implements ConfigRepository {
         if(value != null)
           break;
       }
+      // TODO: The following change should be applied,
+      //       but it is breaking changes.
+      //       The consensus is required to enable it.
+      /*
+      if(value!=null &&
+         (key.equals("SERVERALIVEINTERVAL") ||
+          key.equals("CONNECTTIMEOUT"))){
+        try {
+          int timeout = Integer.parseInt(value);
+          value = Integer.toString(timeout*1000);
+        } catch (NumberFormatException e) {
+        }
+      }
+      */
       return value;
     }
 

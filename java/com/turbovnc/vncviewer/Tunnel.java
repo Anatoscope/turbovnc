@@ -1,23 +1,23 @@
-/*  Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
- *  Copyright (C) 2000 Const Kaplinsky.  All Rights Reserved.
- *  Copyright (C) 2012-2015, 2017-2018, 2020 D. R. Commander.
- *                                           All Rights Reserved.
- *  Copyright (C) 2012, 2016 Brian P. Hinz.  All Rights Reserved.
+/* Copyright (C) 2012-2015, 2017-2018, 2020-2022 D. R. Commander.
+ *                                               All Rights Reserved.
+ * Copyright (C) 2012, 2016 Brian P. Hinz.  All Rights Reserved.
+ * Copyright (C) 2000 Const Kaplinsky.  All Rights Reserved.
+ * Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 /*
@@ -33,12 +33,12 @@ import com.turbovnc.rfb.*;
 import com.turbovnc.rdr.*;
 import com.turbovnc.network.*;
 
-import com.jcraft.jsch.ConfigRepository;
-import com.jcraft.jsch.JSch;
-import com.jcraft.jsch.Logger;
-import com.jcraft.jsch.OpenSSHConfig;
+import com.jcraft.jsch.agentproxy.*;
+import com.jcraft.jsch.agentproxy.connector.*;
+import com.jcraft.jsch.agentproxy.usocket.*;
+import com.jcraft.jsch.*;
 
-public final class Tunnel {
+public class Tunnel {
 
   public static void createTunnel(Options opts) throws Exception {
     int localPort;
@@ -46,11 +46,14 @@ public final class Tunnel {
     String gatewayHost;
     String remoteHost;
 
+    boolean tunnel = opts.tunnel ||
+                     (opts.sessMgrActive && Params.sessMgrAuto.getValue());
+
     localPort = TcpSocket.findFreeTcpPort();
     if (localPort == 0)
       throw new ErrorException("Could not obtain free TCP port");
 
-    if (opts.tunnel) {
+    if (tunnel) {
       gatewayHost = Hostname.getHost(opts.serverName);
       remoteHost = "localhost";
     } else {
@@ -64,7 +67,7 @@ public final class Tunnel {
       remotePort = Hostname.getPort(opts.serverName);
 
     String pattern = null;
-    if (opts.tunnel) {
+    if (tunnel) {
       pattern = System.getProperty("turbovnc.tunnel");
       if (pattern == null)
         pattern = System.getenv("VNC_TUNNEL_CMD");
@@ -74,11 +77,13 @@ public final class Tunnel {
         pattern = System.getenv("VNC_VIA_CMD");
     }
 
-    if (opts.extSSH || (pattern != null && pattern.length() > 0))
+    if (Params.extSSH.getValue() || (pattern != null && pattern.length() > 0))
       createTunnelExt(gatewayHost, remoteHost, remotePort, localPort, pattern,
-                      opts);
+                      opts, tunnel);
     else {
-      createTunnelJSch(gatewayHost, opts);
+      vlog.debug("Opening SSH tunnel through gateway " + gatewayHost);
+      if (opts.sshSession == null)
+        createTunnelJSch(gatewayHost, opts);
       vlog.debug("Forwarding local port " + localPort + " to " + remoteHost +
                  ":" + remotePort + " (relative to gateway)");
       opts.sshSession.setPortForwardingL(localPort, remoteHost, remotePort);
@@ -89,14 +94,14 @@ public final class Tunnel {
 
   /* Create a tunnel using the builtin JSch SSH client */
 
-  private static void createTunnelJSch(String host, Options opts)
-                                       throws Exception {
+  protected static void createTunnelJSch(String host, Options opts)
+                                         throws Exception {
     JSch jsch = new JSch();
     JSch.setLogger(LOGGER);
     String homeDir = new String("");
     try {
       homeDir = System.getProperty("user.home");
-    } catch (java.security.AccessControlException e) {
+    } catch (Exception e) {
       System.err.println("Cannot access user.home system property");
     }
 
@@ -107,12 +112,41 @@ public final class Tunnel {
     File knownHosts = new File(homeDir + "/.ssh/known_hosts");
     jsch.setKnownHosts(knownHosts.getAbsolutePath());
 
+    if (Helper.isAvailable()) {
+      Connector connector = null;
+      try {
+        if (Utils.isWindows())
+          connector = new PageantConnector();
+        else
+          connector = new SSHAgentConnector(new JNIUSocketFactory());
+        if (connector != null) {
+          IdentityRepository repo = new RemoteIdentityRepository(connector);
+          vlog.sshdebug("SSH private keys offered by agent:");
+          Iterator<com.jcraft.jsch.Identity> iter =
+            repo.getIdentities().iterator();
+          while (iter.hasNext()) {
+            com.jcraft.jsch.Identity id = iter.next();
+            vlog.sshdebug("  " + id.getName());
+            if (id.getFingerPrint() != null)
+              vlog.sshdebug("    Fingerprint: " + id.getFingerPrint());
+          }
+          jsch.setIdentityRepository(repo);
+        }
+      } catch (Exception e) {
+        if (Utils.isWindows())
+          vlog.debug("Could not contact Pageant:\n        " + e.getMessage());
+        else
+          vlog.debug("Could not contact ssh-agent:\n        " +
+                     e.getMessage());
+      }
+    }
+
     ArrayList<File> privateKeys = new ArrayList<File>();
-    String sshKeyFile = VncViewer.sshKeyFile.getValue();
-    String sshKey = VncViewer.sshKey.getValue();
+    String sshKeyFile = Params.sshKeyFile.getValue();
+    String sshKey = Params.sshKey.getValue();
     boolean useDefaultPrivateKeyFiles = false;
     if (sshKey != null) {
-      String sshKeyPass = VncViewer.sshKeyPass.getValue();
+      String sshKeyPass = Params.sshKeyPass.getValue();
       byte[] keyPass = null, key;
       if (sshKeyPass != null)
         keyPass = sshKeyPass.getBytes();
@@ -130,20 +164,19 @@ public final class Tunnel {
     }
 
     // username and passphrase will be given via UserInfo interface.
-    vlog.debug("Opening SSH tunnel through gateway " + host);
-    int port = VncViewer.sshPort.getValue();
+    int port = Params.sshPort.getValue();
     String user = opts.sshUser;
     if (user == null)
       user = (String)System.getProperties().get("user.name");
 
-    File sshConfigFile = new File(VncViewer.sshConfig.getValue());
+    File sshConfigFile = new File(Params.sshConfig.getValue());
     if (sshConfigFile.exists() && sshConfigFile.canRead()) {
       ConfigRepository repo =
         OpenSSHConfig.parseFile(sshConfigFile.getAbsolutePath());
       jsch.setConfigRepository(repo);
-      vlog.debug("Read OpenSSH config file " + VncViewer.sshConfig.getValue());
+      vlog.debug("Read OpenSSH config file " + Params.sshConfig.getValue());
       // This just ensures that the password dialog displays the correct
-      // user name.  JSch will ignore the user name and port passed to
+      // username.  JSch will ignore the username and port passed to
       // getSession() if the configuration has already been set using an
       // OpenSSH configuration file.
       String repoUser = repo.getConfig(host).getUser();
@@ -157,12 +190,12 @@ public final class Tunnel {
         }
       }
     } else {
-      if (VncViewer.sshConfig.isDefault()) {
+      if (Params.sshConfig.isDefault()) {
         vlog.debug("Could not parse SSH config file " +
-                   VncViewer.sshConfig.getValue());
+                   Params.sshConfig.getValue());
       } else {
         vlog.info("Could not parse SSH config file " +
-                  VncViewer.sshConfig.getValue());
+                  Params.sshConfig.getValue());
       }
     }
 
@@ -175,9 +208,9 @@ public final class Tunnel {
       File privateKey = (File)i.next();
       try {
         if (privateKey.exists() && privateKey.canRead()) {
-          if (VncViewer.sshKeyPass.getValue() != null)
+          if (Params.sshKeyPass.getValue() != null)
             jsch.addIdentity(privateKey.getAbsolutePath(),
-                             VncViewer.sshKeyPass.getValue());
+                             Params.sshKeyPass.getValue());
           else
             jsch.addIdentity(privateKey.getAbsolutePath());
         }
@@ -186,7 +219,7 @@ public final class Tunnel {
                                  privateKey.getAbsolutePath() + ":\n" +
                                  e.getMessage());
       }
-   }
+    }
 
     opts.sshSession = jsch.getSession(user, host, port);
     // OpenSSHConfig doesn't recognize StrictHostKeyChecking
@@ -198,7 +231,7 @@ public final class Tunnel {
       auth = "publickey,keyboard-interactive,password";
     opts.sshSession.setConfig("PreferredAuthentications", auth);
     PasswdDialog dlg = new PasswdDialog(new String("SSH Authentication"),
-                                        true, user, false);
+                                        true, user, false, true, -1);
     opts.sshSession.setUserInfo(dlg);
     opts.sshSession.connect();
   }
@@ -208,21 +241,22 @@ public final class Tunnel {
      do. */
 
   private static final String DEFAULT_SSH_CMD =
-    (VncViewer.OS.startsWith("windows") ? "ssh.exe" : "/usr/bin/ssh");
+    (Utils.isWindows() ? "ssh.exe" : "/usr/bin/ssh");
   private static final String DEFAULT_TUNNEL_CMD =
     DEFAULT_SSH_CMD + " -f -L %L:localhost:%R %H sleep 20";
   private static final String DEFAULT_VIA_CMD =
     DEFAULT_SSH_CMD + " -f -L %L:%H:%R %G sleep 20";
 
-  public static void createTunnelExt(String gatewayHost, String remoteHost,
-                                     int remotePort, int localPort,
-                                     String pattern, Options opts)
-                                     throws Exception {
+  private static void createTunnelExt(String gatewayHost, String remoteHost,
+                                      int remotePort, int localPort,
+                                      String pattern, Options opts,
+                                      boolean tunnel)
+                                      throws Exception {
     if (pattern == null || pattern.length() < 1)
-      pattern = (opts.tunnel ? DEFAULT_TUNNEL_CMD : DEFAULT_VIA_CMD);
+      pattern = (tunnel ? DEFAULT_TUNNEL_CMD : DEFAULT_VIA_CMD);
 
     String command = fillCmdPattern(pattern, gatewayHost, remoteHost,
-                                    remotePort, localPort, opts);
+                                    remotePort, localPort, opts, tunnel);
 
     vlog.debug("SSH command line: " + command);
     List<String> args = ArgumentTokenizer.tokenize(command);
@@ -237,7 +271,8 @@ public final class Tunnel {
 
   private static String fillCmdPattern(String pattern, String gatewayHost,
                                        String remoteHost, int remotePort,
-                                       int localPort, Options opts) {
+                                       int localPort, Options opts,
+                                       boolean tunnel) {
     int i, j;
     boolean hFound = false, gFound = false, rFound = false, lFound = false;
     String command = "";
@@ -249,7 +284,7 @@ public final class Tunnel {
       if (pattern.charAt(i) == '%') {
         switch (pattern.charAt(++i)) {
           case 'H':
-            command += (opts.tunnel ? gatewayHost : remoteHost);
+            command += (tunnel ? gatewayHost : remoteHost);
             hFound = true;
             continue;
           case 'G':
@@ -272,7 +307,7 @@ public final class Tunnel {
     if (!hFound || !rFound || !lFound)
       throw new ErrorException("%H, %R or %L absent in tunneling command template.");
 
-    if (!opts.tunnel && !gFound)
+    if (!tunnel && !gFound)
       throw new ErrorException("%G pattern absent in tunneling command template.");
 
     return command;
@@ -311,7 +346,7 @@ public final class Tunnel {
     }
   };
 
-  private Tunnel() {}
+  protected Tunnel() {}
   static LogWriter vlog = new LogWriter("Tunnel");
   static LogWriter vlogSSH = new LogWriter("JSch");
 }

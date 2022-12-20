@@ -1,6 +1,7 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
+/* Copyright (C) 2012-2015, 2018, 2020-2021 D. R. Commander.
+ *                                          All Rights Reserved.
  * Copyright (C) 2011 Brian P. Hinz
- * Copyright (C) 2012-2015, 2018 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -44,6 +45,28 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
       } else if (method.getName().equals("handlePreferences")) {
         if (!cc.options.isShown())
           cc.options.showDialog(cc.viewport);
+      } else if (method.getName().equals("handleQuitRequestWith")) {
+        try {
+          Class quitResponseClass;
+
+          if (Utils.JAVA_VERSION >= 9)
+            quitResponseClass = Class.forName("java.awt.desktop.QuitResponse");
+          else
+            quitResponseClass = Class.forName("com.apple.eawt.QuitResponse");
+
+          Method cancelQuit =
+            quitResponseClass.getMethod("cancelQuit", (Class[])null);
+          Method performQuit =
+            quitResponseClass.getMethod("performQuit", (Class[])null);
+
+          if (cc.confirmClose())
+            performQuit.invoke(args[1]);
+          else
+            cancelQuit.invoke(args[1]);
+        } catch (Exception e) {
+          vlog.info("Could not handle quit request:");
+          vlog.info("  " + e.toString());
+        }
       }
       return null;
     }
@@ -53,15 +76,16 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
 
   void setupAppMenu() {
     try {
-      Class appClass, aboutHandlerClass, prefsHandlerClass;
+      Class appClass, aboutHandlerClass, prefsHandlerClass, quitHandlerClass;
       Object obj;
 
-      if (VncViewer.JAVA_VERSION >= 9) {
+      if (Utils.JAVA_VERSION >= 9) {
         appClass = Desktop.class;
         obj = Desktop.getDesktop();
         aboutHandlerClass = Class.forName("java.awt.desktop.AboutHandler");
         prefsHandlerClass =
           Class.forName("java.awt.desktop.PreferencesHandler");
+        quitHandlerClass = Class.forName("java.awt.desktop.QuitHandler");
       } else {
         appClass = Class.forName("com.apple.eawt.Application");
         Method getApplication = appClass.getMethod("getApplication",
@@ -69,6 +93,7 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
         obj = getApplication.invoke(appClass);
         aboutHandlerClass = Class.forName("com.apple.eawt.AboutHandler");
         prefsHandlerClass = Class.forName("com.apple.eawt.PreferencesHandler");
+        quitHandlerClass = Class.forName("com.apple.eawt.QuitHandler");
       }
 
       InvocationHandler aboutHandler = new MyInvocationHandler(cc);
@@ -86,6 +111,14 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
       Method setPreferencesHandler =
         appClass.getMethod("setPreferencesHandler", prefsHandlerClass);
       setPreferencesHandler.invoke(obj, new Object[]{ proxy });
+
+      InvocationHandler quitHandler = new MyInvocationHandler(cc);
+      proxy = Proxy.newProxyInstance(quitHandlerClass.getClassLoader(),
+                                     new Class[]{ quitHandlerClass },
+                                     quitHandler);
+      Method setQuitHandler =
+        appClass.getMethod("setQuitHandler", quitHandlerClass);
+      setQuitHandler.invoke(obj, new Object[]{ proxy });
     } catch (Exception e) {
       vlog.info("Could not override About/Preferences menu items:");
       vlog.info("  " + e.toString());
@@ -99,7 +132,7 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
     setupAppMenu();
 
     JMenu connMenu = new JMenu("Connection");
-    if (!VncViewer.noNewConn.getValue()) {
+    if (!Params.noNewConn.getValue()) {
       newConn = addMenuItem(connMenu, "New Connection...");
       newConn.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_N,
                                                     acceleratorMask));
@@ -125,6 +158,9 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
     losslessRefresh = addMenuItem(connMenu, "Request Lossless Refresh");
     losslessRefresh.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_L,
                                                           acceleratorMask));
+    screenshot = addMenuItem(connMenu, "Save Remote Desktop Image");
+    screenshot.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_M,
+                                                     acceleratorMask));
     connMenu.addSeparator();
     fullScreen = new JCheckBoxMenuItem("Full Screen");
     fullScreen.setSelected(cc.opts.fullScreen);
@@ -135,14 +171,30 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
     defaultSize = addMenuItem(connMenu, "Default Window Size/Position");
     defaultSize.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_Z,
                                                       acceleratorMask));
+    zoomIn = addMenuItem(connMenu, "Zoom In");
+    zoomIn.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_9,
+                                                 acceleratorMask));
+    zoomOut = addMenuItem(connMenu, "Zoom Out");
+    zoomOut.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_8,
+                                                  acceleratorMask));
+    zoom100 = addMenuItem(connMenu, "Zoom 100%", KeyEvent.VK_0);
+    zoom100.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_0,
+                                                  acceleratorMask));
+    tileWindows = addMenuItem(connMenu, "Tile All Viewer Windows");
+    tileWindows.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_X,
+                                                      acceleratorMask));
     showToolbar = new JCheckBoxMenuItem("Show Toolbar");
-    showToolbar.setSelected(cc.showToolbar);
+    showToolbar.setSelected(cc.opts.showToolbar);
     showToolbar.addActionListener(this);
     connMenu.add(showToolbar);
     showToolbar.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_T,
                                                       acceleratorMask));
     connMenu.addSeparator();
-    if (!VncViewer.restricted.getValue()) {
+    viewOnly = new JCheckBoxMenuItem("View Only");
+    viewOnly.setSelected(cc.opts.viewOnly);
+    viewOnly.addActionListener(this);
+    connMenu.add(viewOnly);
+    if (!Params.restricted.getValue()) {
       ctrlAltDel = addMenuItem(connMenu, "Send Ctrl-Alt-Del");
       ctrlEsc = addMenuItem(connMenu, "Send Ctrl-Esc");
       connMenu.addSeparator();
@@ -150,6 +202,8 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
     clipboard = addMenuItem(connMenu, "Clipboard ...");
 
     add(connMenu);
+
+    updateZoom();
   }
 
   JMenuItem addMenuItem(JMenu menu, String str, int mnemonic) {
@@ -175,9 +229,20 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
       cc.toggleFullScreen();
     } else if (actionMatch(ev, defaultSize)) {
       cc.sizeWindow();
+    } else if (actionMatch(ev, zoomIn)) {
+      cc.zoomIn();
+    } else if (actionMatch(ev, zoomOut)) {
+      cc.zoomOut();
+    } else if (actionMatch(ev, zoom100)) {
+      cc.zoom100();
+    } else if (actionMatch(ev, tileWindows)) {
+      VncViewer.tileWindows();
     } else if (actionMatch(ev, showToolbar)) {
       cc.toggleToolbar();
-      showToolbar.setSelected(cc.showToolbar);
+      showToolbar.setSelected(cc.opts.showToolbar);
+    } else if (actionMatch(ev, viewOnly)) {
+      cc.toggleViewOnly();
+      viewOnly.setSelected(cc.opts.viewOnly);
     } else if (actionMatch(ev, clipboard)) {
       cc.clipboardDialog.showDialog(cc.viewport);
     } else if (actionMatch(ev, ctrlAltDel) && !cc.opts.viewOnly) {
@@ -196,9 +261,11 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
       cc.refresh();
     } else if (actionMatch(ev, losslessRefresh)) {
       cc.losslessRefresh();
-    } else if (!VncViewer.noNewConn.getValue() && actionMatch(ev, newConn)) {
+    } else if (actionMatch(ev, screenshot)) {
+      cc.screenshot();
+    } else if (!Params.noNewConn.getValue() && actionMatch(ev, newConn)) {
       VncViewer.newViewer(cc.viewer);
-    } else if (!VncViewer.noNewConn.getValue() && actionMatch(ev, closeConn)) {
+    } else if (!Params.noNewConn.getValue() && actionMatch(ev, closeConn)) {
       cc.close();
     } else if (actionMatch(ev, info)) {
       cc.showInfo();
@@ -219,10 +286,24 @@ public class MacMenuBar extends JMenuBar implements ActionListener {
     profile.setSelected(cc.profileDialog.isVisible());
   }
 
+  void updateZoom() {
+    if (cc.opts.desktopSize.mode == Options.SIZE_AUTO ||
+        cc.opts.scalingFactor == Options.SCALE_AUTO ||
+        cc.opts.scalingFactor == Options.SCALE_FIXEDRATIO) {
+      zoomIn.setEnabled(false);
+      zoomOut.setEnabled(false);
+      zoom100.setEnabled(false);
+    } else {
+      zoomIn.setEnabled(true);
+      zoomOut.setEnabled(true);
+      zoom100.setEnabled(true);
+    }
+  }
+
   CConn cc;
-  JMenuItem defaultSize;
+  JMenuItem defaultSize, zoomIn, zoomOut, zoom100, tileWindows;
   JMenuItem clipboard, ctrlAltDel, ctrlEsc, refresh, losslessRefresh;
-  JMenuItem newConn, closeConn, info, profile, showToolbar;
-  JCheckBoxMenuItem fullScreen;
+  JMenuItem newConn, closeConn, info, screenshot;
+  JCheckBoxMenuItem profile, fullScreen, showToolbar, viewOnly;
   static LogWriter vlog = new LogWriter("MacMenuBar");
 }

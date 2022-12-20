@@ -1,7 +1,8 @@
 /* -*-mode:java; c-basic-offset:2; indent-tabs-mode:nil -*- */
 /*
-Copyright (c) 2002-2016 ymnk, JCraft,Inc. All rights reserved.
-Copyright (c) 2018, D. R. Commander. All rights reserved.
+Copyright (c) 2002-2018 ymnk, JCraft,Inc. All rights reserved.
+Copyright (c) 2018 D. R. Commander. All rights reserved.
+Copyright (c) 2020-2021 Jeremy Norris. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -2305,8 +2306,9 @@ break;
       if(config==null) 
         config=new java.util.Hashtable();
       for(java.util.Enumeration e=newconf.keys() ; e.hasMoreElements() ;) {
-        String key=(String)(e.nextElement());
-        config.put(key, (String)(newconf.get(key)));
+        String newkey=(String)(e.nextElement());
+        String key=(newkey.equals("PubkeyAcceptedKeyTypes") ? "PubkeyAcceptedAlgorithms" : newkey);
+        config.put(key, (String)(newconf.get(newkey)));
       }
     }
   }
@@ -2316,11 +2318,19 @@ break;
       if(config==null){
         config=new java.util.Hashtable();
       }
-      config.put(key, value);
+      if(key.equals("PubkeyAcceptedKeyTypes")){
+        config.put("PubkeyAcceptedAlgorithms", value);
+      }
+      else{
+        config.put(key, value);
+      }
     }
   }
 
   public String getConfig(String key){
+    if(key.equals("PubkeyAcceptedKeyTypes")){
+      key="PubkeyAcceptedAlgorithms";
+    }
     Object foo=null;
     if(config!=null){
       foo=config.get(key);
@@ -2679,9 +2689,11 @@ break;
 
     String value = null;
 
-    value = config.getUser();
-    if(value != null)
-      username = value;
+    if(username==null){
+      value = config.getUser();
+      if(value != null)
+        username = value;
+    }
 
     value = config.getHostname();
     if(value != null)
@@ -2705,6 +2717,7 @@ break;
     checkConfig(config, "StrictHostKeyChecking");
     checkConfig(config, "HashKnownHosts");
     checkConfig(config, "PreferredAuthentications");
+    checkConfig(config, "PubkeyAcceptedAlgorithms");
     checkConfig(config, "MaxAuthTries");
     checkConfig(config, "ClearAllForwardings");
 
@@ -2746,6 +2759,23 @@ break;
             continue;
           Identity identity =
             IdentityFile.newInstance(ifile, null, jsch);
+          /* Don't add private key without a passphrase if another private key
+             with the same fingerprint already exists with a passphrase. */
+          Identity decryptedIdentity=jsch.findDecryptedIdentity(identity);
+          if(decryptedIdentity!=null){
+            identity=decryptedIdentity;
+          }
+          if(JSch.getLogger().isEnabled(Logger.INFO)){
+            JSch.getLogger().log(Logger.INFO,
+                                 "Adding private key "+identity.getName()+
+                                 (identity.isEncrypted() ? " without" : " with")+
+                                 " passphrase");
+            if(identity.getFingerPrint()!=null){
+              JSch.getLogger().log(Logger.INFO,
+                                   "  Fingerprint: "+
+                                   identity.getFingerPrint());
+            }
+          }
           ir.add(identity);
         }
         this.setIdentityRepository(ir);
@@ -2834,6 +2864,8 @@ break;
 
   private void checkConfig(ConfigRepository.Config config, String key){
     String value = config.getValue(key);
+    if(value == null && key.equals("PubkeyAcceptedAlgorithms"))
+      value = config.getValue("PubkeyAcceptedKeyTypes");
     if(value != null)
       this.setConfig(key, value);
   }

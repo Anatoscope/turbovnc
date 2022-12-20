@@ -2,30 +2,30 @@
  * rfb.h - header file for RFB DDX implementation.
  */
 
-/*
- *  Copyright (C) 2010-2021 D. R. Commander.  All Rights Reserved.
- *  Copyright (C) 2011 Gernot Tenchio
- *  Copyright (C) 2011 Joel Martin
- *  Copyright (C) 2010 University Corporation for Atmospheric Research.
- *                     All Rights Reserved.
- *  Copyright (C) 2000-2004 Const Kaplinsky.  All Rights Reserved.
- *  Copyright (C) 2000 Tridia Corporation.  All Rights Reserved.
- *  Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
+/* Copyright (C) 2010-2022 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2011, 2015 Pierre Ossman for Cendio AB.  All Rights Reserved.
+ * Copyright (C) 2011 Joel Martin
+ * Copyright (C) 2011 Gernot Tenchio
+ * Copyright (C) 2010 University Corporation for Atmospheric Research.
+ *                    All Rights Reserved.
+ * Copyright (C) 2000-2004 Const Kaplinsky.  All Rights Reserved.
+ * Copyright (C) 2000 Tridia Corporation.  All Rights Reserved.
+ * Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 #ifndef __RFB_H__
@@ -42,7 +42,7 @@
 #include "osdep.h"
 #include "list.h"
 #include <rfbproto.h>
-#include <turbovnc_devtypes.h>
+#include <turbovnc_gii.h>
 #include <vncauth.h>
 #include <zlib.h>
 #include <stdarg.h>
@@ -98,7 +98,15 @@
 
 #define DEFAULT_MAX_CLIENT_WAIT 20000
 
-#define BASE_RTT_WINDOW 64
+/* Constants for handling the UltraVNC Viewer's multitouch GII valuator event
+   format */
+#define UVNCGII_MAX_TOUCHES 10
+#define UVNCGII_HC_FLAG 0x800000    /* High-performance counter flag */
+#define UVNCGII_TI_FLAG 0x1000000   /* Timestamp flag */
+#define UVNCGII_PR_FLAG 0x2000000   /* Pressure flag */
+#define UVNCGII_S1_FLAG 0x10000000  /* Size flag */
+#define UVNCGII_IF_FLAG 0x20000000  /* Primary flag */
+#define UVNCGII_PF_FLAG 0x80000000  /* Pressed flag */
 
 #define DEFAULT_CONG_TRACE_INTERVAL_MS 10000
 
@@ -205,6 +213,13 @@ typedef struct {
 } rfbSockAddr;
 
 typedef struct {
+  struct timeval tv;
+  unsigned pos, extra;
+  char congested;
+  struct xorg_list entry;
+} rfbRTTInfo;
+
+typedef struct {
   unsigned minRTT;
   unsigned baseRTT;
   unsigned congWindow;
@@ -231,6 +246,8 @@ typedef void (*rfbTranslateFnType) (char *table, rfbPixelFormat *in,
 typedef struct {
   char name[32];
   int numButtons;
+  Bool multitouch;
+  int numTouches;
   int numValuators;
   int mode;
   CARD32 eventMask;
@@ -239,6 +256,8 @@ typedef struct {
   rfbGIIValuator valuators[MAX_VALUATORS];
   int values[MAX_VALUATORS];
   CARD32 valFirst, valCount;
+  Bool multitouch_uvnc;
+  int active_touches_uvnc[UVNCGII_MAX_TOUCHES][4];
 } rfbDevInfo, *rfbDevInfoPtr;
 
 
@@ -249,6 +268,7 @@ typedef struct {
 #if USETLS
 typedef struct _rfbSslCtx rfbSslCtx;
 #endif
+typedef struct _wsCtx wsCtx;
 
 typedef struct rfbClientRec {
 
@@ -451,17 +471,18 @@ typedef struct rfbClientRec {
   unsigned fenceDataLen;
   char fenceData[64];
 
-  unsigned baseRTT;
-  unsigned RTT[BASE_RTT_WINDOW];
-  unsigned congWindow;
-  int ackedOffset, sentOffset, sockOffset;
-  unsigned minRTT;
-  Bool seenCongestion;
-  unsigned pingCounter;
-  OsTimerPtr updateTimer;
+  unsigned lastPosition, extraBuffer;
+  struct timeval lastUpdate, lastSent;
+  unsigned baseRTT, congWindow;
+  Bool inSlowStart;
+  int sockOffset;
+  struct xorg_list pings;
   OsTimerPtr congestionTimer;
-  Bool congestionTimerRunning;
-  struct timeval lastWrite;
+  rfbRTTInfo lastPong;
+  struct timeval lastPongArrival;
+  int measurements;
+  struct timeval lastAdjustment;
+  unsigned minRTT, minCongestedRTT;
 
   rfbCongInfo congInfoToTrace; /* biggest RTT over period of time */
   struct timeval lastCongTrace; /* last congestion summary trace time */
@@ -472,6 +493,7 @@ typedef struct rfbClientRec {
 #if USETLS
   rfbSslCtx *sslctx;
 #endif
+  wsCtx     *wsctx;
 
   /* Adaptive quality based on desired delay */
   CARD32 staleFBUThresholdMs;       /* if FBU is waiting for longer then
@@ -647,7 +669,6 @@ extern Bool  rfbAuthDisableRemoteResize;
 extern Bool  rfbAuthDisableRevCon;
 extern Bool  rfbAuthDisableCBSend;
 extern Bool  rfbAuthDisableCBRecv;
-extern Bool  rfbAuthDisableHTTP;
 extern Bool  rfbAuthDisableX11TCP;
 
 #ifdef XVNC_AuthPAM
@@ -679,9 +700,11 @@ extern void rfbClientAuthSucceeded(rfbClientPtr cl, CARD32 authType);
 extern int rfbAuthMaxFails;
 extern CARD32 rfbAuthFailTimeout;
 
-extern Bool rfbAuthConsiderBlocking(void);
-extern void rfbAuthUnblock(void);
-extern Bool rfbAuthIsBlocked(void);
+extern struct xorg_list rfbAuthFails;
+
+extern Bool rfbAuthConsiderBlocking(char *host);
+extern void rfbAuthUnblock(char *host);
+extern Bool rfbAuthIsBlocked(char *host);
 
 
 /* authpam.c */
@@ -775,28 +798,21 @@ extern RegionPtr rfbRestoreAreas(WindowPtr, RegionPtr);
 
 extern CARD32 rfbCongTraceIntervalMs;
 
-extern void HandleFence(rfbClientPtr cl, CARD32 flags, unsigned len,
-                        const char *data);
 extern void rfbInitFlowControl(rfbClientPtr cl);
+extern void rfbUpdatePosition(rfbClientPtr cl, unsigned pos);
+extern Bool rfbSendRTTPing(rfbClientPtr cl);
 extern Bool rfbIsCongested(rfbClientPtr cl);
-extern Bool rfbSendEndOfCU(rfbClientPtr cl);
 extern Bool rfbSendFence(rfbClientPtr cl, CARD32 flags, unsigned len,
                          const char *data);
-extern Bool rfbSendRTTPing(rfbClientPtr cl);
+extern void HandleFence(rfbClientPtr cl, CARD32 flags, unsigned len,
+                        const char *data);
+extern Bool rfbSendEndOfCU(rfbClientPtr cl);
 
 
 /* hextile.c */
 
 extern Bool rfbSendRectEncodingHextile(rfbClientPtr cl, int x, int y, int w,
                                        int h);
-
-
-/* httpd.c */
-
-extern int httpPort;
-extern char *httpDir;
-
-extern void httpInitSockets(void);
 
 
 /* init.c */
@@ -910,18 +926,21 @@ extern void InactTimerSet(void);
 extern void InactTimerCancel(void);
 extern Bool InterframeOn(rfbClientPtr cl);
 extern void InterframeOff(rfbClientPtr);
+extern BOOL rfbProfile;
 
 extern int rfbMaxWidth, rfbMaxHeight;
 
 extern Bool rfbAlwaysShared;
 extern Bool rfbNeverShared;
-extern Bool rfbDontDisconnect;
+extern Bool rfbDisconnect;
 extern Bool rfbViewOnly;  /* run server in view-only mode - Ehud Karni SW */
 extern Bool rfbSyncCutBuffer;
 extern Bool rfbCongestionControl;
 extern double rfbAutoLosslessRefresh;
+extern Bool rfbALRAll;
 extern int rfbALRQualityLevel;
 extern int rfbALRSubsampLevel;
+extern Bool rfbGIIDebug;
 extern int rfbInterframe;
 extern double rfbInterframeEps;
 extern BOOL rfbInterframeAllowConv;
@@ -942,8 +961,6 @@ extern void rfbNewClientConnection(int sock);
 extern rfbClientPtr rfbReverseConnection(char *host, int port, int id);
 extern void rfbClientConnectionGone(rfbClientPtr cl);
 extern void rfbProcessClientMessage(rfbClientPtr cl);
-extern void rfbNewUDPConnection(int sock);
-extern void rfbProcessUDPInput(int sock);
 extern Bool rfbSendFramebufferUpdate(rfbClientPtr cl);
 extern Bool rfbSendRectEncodingRaw(rfbClientPtr cl, int x, int y, int w,
                                    int h);
@@ -983,26 +1000,22 @@ extern Bool rfbSendRectEncodingRRE(rfbClientPtr cl, int x, int y, int w,
 extern int rfbMaxClientConnections;
 extern int rfbMaxClientWait;
 
-extern int udpPort;
-extern int udpSock;
-extern Bool udpSockConnected;
-
 extern int rfbPort;
 extern int rfbListenSock;
 
 extern void rfbInitSockets(void);
-extern void rfbDisconnectUDPSock(void);
 extern void rfbCloseSock(int);
 extern void rfbCloseClient(rfbClientPtr cl);
 extern int rfbConnect(char *host, int port);
 extern void rfbCorkSock(int sock);
 extern void rfbUncorkSock(int sock);
 
+extern int PeekExactTimeout(rfbClientPtr cl, char *buf, int len, int timeout);
 extern int ReadExact(rfbClientPtr cl, char *buf, int len);
+extern int ReadExactTimeout(rfbClientPtr cl, char *buf, int len, int timeout);
 extern int SkipExact(rfbClientPtr cl, int len);
 extern int WriteExact(rfbClientPtr cl, char *buf, int len);
 extern int ListenOnTCPPort(int port);
-extern int ListenOnUDPPort(int port);
 extern int ConnectToTcpAddr(char *host, int port);
 
 extern const char *sockaddr_string(rfbSockAddr *addr, char *buf, int len);
@@ -1024,6 +1037,7 @@ char *strsep(char **stringp, const char *delim);
 
 #define TVNC_SAMPOPT 4
 enum { TVNC_1X = 0, TVNC_4X, TVNC_2X, TVNC_GRAY };
+static const char subsampStr[TVNC_SAMPOPT][5] = { "1X", "4X", "2X", "Gray" };
 #define TIGHT_DEFAULT_COMPRESSION  1
 #define TIGHT_DEFAULT_SUBSAMP      TVNC_1X
 #define TIGHT_DEFAULT_QUALITY      95
@@ -1052,6 +1066,16 @@ extern int rfbColorCmpWithEps(char *a1, char *a2, size_t size, double eps);
 extern void rfbSetClientColourMaps(int firstColour, int nColours);
 extern Bool rfbSetClientColourMap(rfbClientPtr cl, int firstColour,
                                   int nColours);
+
+
+/* websockets.c */
+
+extern Bool webSocketsCheck(rfbClientPtr cl);
+extern int webSocketsEncode(rfbClientPtr cl, const char *src, int len,
+                            char **dst);
+extern int webSocketsDecode(rfbClientPtr cl, char *dst, int len);
+extern Bool webSocketsHasDataInBuffer(rfbClientPtr cl);
+extern void webSocketsFree(rfbClientPtr cl);
 
 
 /* zlib.c */

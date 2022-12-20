@@ -603,6 +603,8 @@ XineramaConfineCursorToWindow(DeviceIntPtr pDev,
 
     int x, y, off_x, off_y, i;
 
+    assert(!noPanoramiXExtension);
+
     if (!XineramaSetWindowPntrs(pDev, pWin))
         return;
 
@@ -1536,7 +1538,9 @@ ActivatePointerGrab(DeviceIntPtr mouse, GrabPtr grab,
                 mouse->spriteInfo->sprite->hotPhys.y = 0;
         ConfineCursorToWindow(mouse, grab->confineTo, FALSE, TRUE);
     }
-    DoEnterLeaveEvents(mouse, mouse->id, oldWin, grab->window, NotifyGrab);
+    if (! (grabinfo->grab && oldWin == grabinfo->grab->window
+			  && oldWin == grab->window))
+        DoEnterLeaveEvents(mouse, mouse->id, oldWin, grab->window, NotifyGrab);
     mouse->valuator->motionHintWindow = NullWindow;
     if (syncEvents.playingEvents)
         grabinfo->grabTime = syncEvents.time;
@@ -1646,7 +1650,9 @@ ActivateKeyboardGrab(DeviceIntPtr keybd, GrabPtr grab, TimeStamp time,
         oldWin = keybd->focus->win;
     if (keybd->valuator)
         keybd->valuator->motionHintWindow = NullWindow;
-    if (oldWin)
+    if (oldWin &&
+	! (grabinfo->grab && oldWin == grabinfo->grab->window
+			  && oldWin == grab->window))
         DoFocusEvents(keybd, oldWin, grab->window, NotifyGrab);
     if (syncEvents.playingEvents)
         grabinfo->grabTime = syncEvents.time;
@@ -3581,7 +3587,7 @@ ProcWarpPointer(ClientPtr client)
              winX + stuff->srcX + (int) stuff->srcWidth < x) ||
             (stuff->srcHeight != 0 &&
              winY + stuff->srcY + (int) stuff->srcHeight < y) ||
-            !PointInWindowIsVisible(source, x, y))
+            (source->parent && !PointInWindowIsVisible(source, x, y)))
             return Success;
     }
     if (dest) {

@@ -2,18 +2,18 @@
 .\" ** The above line should force tbl to be a preprocessor **
 .\" Man page for Xvnc
 .\"
-.\" Copyright (C) 1998 Marcus.Brinkmann@ruhr-uni-bochum.de
-.\" Copyright (C) 2000, 2001 Red Hat, Inc.
-.\" Copyright (C) 2001, 2002 Constantin Kaplinsky
-.\" Copyright (C) 2005-2008 Sun Microsystems, Inc.
-.\" Copyright (C) 2010, 2012, 2014-2020 D. R. Commander
+.\" Copyright (C) 2010, 2012, 2014-2021 D. R. Commander
 .\" Copyright (C) 2010 University Corporation for Atmospheric Research
+.\" Copyright (C) 2005-2008 Sun Microsystems, Inc.
+.\" Copyright (C) 2001, 2002 Constantin Kaplinsky
+.\" Copyright (C) 2000, 2001 Red Hat, Inc.
+.\" Copyright (C) 1998 Marcus.Brinkmann@ruhr-uni-bochum.de
 .\"
 .\" You may distribute under the terms of the GNU General Public
 .\" License as specified in the file LICENCE.TXT that comes with the
-.\" TightVNC distribution.
+.\" TurboVNC distribution.
 .\"
-.TH Xvnc 1 "September 2019" "" "TurboVNC"
+.TH Xvnc 1 "March 2021" "" "TurboVNC"
 .SH NAME
 Xvnc \- the TurboVNC X server
 .SH SYNOPSIS
@@ -42,7 +42,9 @@ untrusted network.
 Xvnc supports many standard X server options and a number of
 VNC-specific options.  To see which standard X server options are
 supported, please look at the output of \fBXvnc\fR \fI\-help\fR and read
-the \fBXserver\fR(1) manual page.
+the \fBXserver\fR(1) manual page.  Some command-line options have equivalent
+"Xvnc parameters" that can be configured dynamically using the
+\fBtvncconfig\fP(1) program.
 
 The VNC-specific options are as follows:
 
@@ -81,15 +83,6 @@ Set VNC desktop name [default: "x11"].
 \fB\-disconnect\fR
 Disconnect existing viewers when a new non-shared connection is established,
 rather than refusing the new connection.
-
-.TP
-\fB\-httpd\fR \fIdir\fR
-Specify directory where the Java viewer classes are located.
-
-.TP
-\fB\-httpport\fR \fIport\fR
-TCP port that the server should use when listening for connections from
-web browsers.
 
 .TP
 \fB\-idletimeout\fR \fItime\fR
@@ -225,10 +218,6 @@ Maximum time, in milliseconds, to wait for a send/receive operation to/from a
 connected viewer to complete [default: 20000].
 
 .TP
-\fB\-udpinputport\fR \fIport\fR
-UDP port for keyboard/pointer data.
-
-.TP
 \fBTURBOVNC INPUT OPTIONS\fR
 
 .TP
@@ -260,9 +249,7 @@ respective copies of the client-side devices.  If another viewer attempts to
 create a remote X Input device with the same name, then the existing
 server-side device is shared with the new viewer.  The server-side devices are
 deleted automatically when all viewers that use them have disconnected.  This
-is the most flexible way of handling extended input devices, because it allows
-any generic X Input pointer device (spaceballs, tablets, etc.) on the client
-machine to be used by the server.
+is the most flexible way of handling extended input devices.
 
 \fBVirtual\ Tablet\ Mode\fR (enabled with this command-line option)
 
@@ -271,13 +258,12 @@ touch, and pad devices designed to emulate a Wacom tablet, and it maps all
 extended input events from all viewers to these devices (events from
 client-side stylus, eraser, touch, and pad devices are mapped to the
 corresponding virtual device in the TurboVNC session, and other events are
-ignored.)  This mode is less generic than Remote X Input Mode, and it probably
-will not work with devices other than tablets (perhaps not even with non-Wacom
-tablets.)  Virtual Tablet mode is useful when running specific applications
-from xstartup.turbovnc, rather than a window manager.  Because applications
-usually check for the presence of X Input devices at startup, by the time the
-first viewer connects and requests that the client-side devices be cloned, it
-is too late.
+ignored.)  This mode is less flexible than Remote X Input Mode, since it relies
+on Wacom-specific driver behavior that may change in the future.  Virtual
+Tablet mode is useful when running specific applications from the X startup
+script, rather than a window manager.  Because applications usually check for
+the presence of X Input devices at startup, by the time the first viewer
+connects and requests that the client-side devices be cloned, it is too late.
 
 .TP
 \fBTURBOVNC DISPLAY OPTIONS\fR
@@ -391,14 +377,14 @@ to exceed the number of CPU cores.
 .TP
 \fB\-maxauthfails\fR \fIfail-count\fR
 Specify the number of consecutive VNC password or OTP authentication failures
-allowed before connections to the TurboVNC session are temporarily blocked
-[default: 5].  0 = no limit.
+allowed from a client's IP address before connections from that IP address are
+temporarily blocked [default: 5].  0 = no limit.
 
 .TP
 \fB\-authfailtimeout\fR \fItime\fR
-Specify the initial length of time, in seconds, during which connections to the
-TurboVNC session are blocked after the maximum number of consecutive VNC
-password or OTP authentication failures has been exceeded [default: 10].  This
+Specify the initial length of time, in seconds, during which connections are
+blocked from the IP address of a client that has exceeded the maximum number of
+consecutive VNC password or OTP authentication failures [default: 10].  This
 timeout period automatically doubles with each subsequent consecutive VNC
 password or OTP authentication failure.
 
@@ -436,16 +422,14 @@ Plain".  Security types are case-insensitive.
 .TP
 \fB\-x509cert\fR \fIcert\fR
 Specify the X.509 signed certificate file (in PEM format) to use with X.509
-encryption.  This argument has no effect if \fIpermitted-security-types\fR is
-specified in the security configuration file and none of the X.509 security
-types are listed as permitted security types.
+encryption (if X.509 security types are enabled and permitted) or the built-in
+WebSocket proxy.
 
 .TP
 \fB\-x509key\fR \fIkey\fR
 Specify the X.509 private key file (in PEM format) to use with X.509
-encryption.  This argument has no effect if \fIpermitted-security-types\fR is
-specified in the security configuration file and none of the X.509 security
-types are listed as permitted security types.
+encryption (if X.509 security types are enabled and permitted) or the built-in
+WebSocket proxy.
 
 .SH SECURITY EXTENSIONS
 The TurboVNC Server supports 13 security types, each of which specifies an
@@ -680,9 +664,6 @@ clipboard changes from their connected viewers.
 This prevents any TurboVNC sessions started on this host from sending clipboard
 changes to their connected viewers.
 
-.IP \fIno-httpd\fR
-Disable the built-in HTTP server in all TurboVNC sessions started on this host.
-
 .IP \fIno-pam-sessions\fR
 Do not allow PAM sessions to be created for any TurboVNC sessions started on
 this host.
@@ -756,7 +737,7 @@ tunneling or another suitable encryption mechanism is enforced, then the use of
 these authentication schemes will result in Unix passwords being sent
 unencrypted over the network.
 .SH SEE ALSO
-\fBvncserver\fR(1), \fBvncviewer\fR(1), \fBvncpasswd\fR(1),
+\fBtvncconfig\fR(1), \fBvncserver\fR(1), \fBvncviewer\fR(1), \fBvncpasswd\fR(1),
 \fBvncconnect\fR(1), \fBsshd\fR(1)
 .SH AUTHORS
 VNC was originally developed at AT&T Laboratories Cambridge.  TightVNC

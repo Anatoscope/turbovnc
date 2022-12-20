@@ -1,6 +1,7 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
+/* Copyright (C) 2012, 2014, 2016, 2018, 2020-2022 D. R. Commander.
+ *                                                 All Rights Reserved.
  * Copyright (C) 2011-2012 Brian P. Hinz
- * Copyright (C) 2012, 2014, 2016, 2018 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +25,6 @@ import java.util.*;
 
 import com.turbovnc.network.*;
 import com.turbovnc.rdr.*;
-import com.turbovnc.vncviewer.*;
 
 public abstract class CConnection extends CMsgHandler {
 
@@ -70,7 +70,11 @@ public abstract class CConnection extends CMsgHandler {
   }
 
   private void processVersionMsg() {
-    vlog.debug("reading protocol version");
+    if (!alreadyPrintedVersion) {
+      vlog.debug("reading protocol version");
+      alreadyPrintedVersion = true;
+    }
+
     if (!cp.readVersion(is)) {
       state = RFBSTATE_INVALID;
       throw new ErrorException("Reading version failed: not an RFB server?");
@@ -123,7 +127,7 @@ public abstract class CConnection extends CMsgHandler {
     int secType = RFB.SECTYPE_INVALID;
 
     List<Integer> secTypes = new ArrayList<Integer>();
-    secTypes = Security.getEnabledSecTypes();
+    secTypes = opts.getEnabledSecTypes();
 
     if (cp.isVersion(3, 3)) {
 
@@ -170,6 +174,9 @@ public abstract class CConnection extends CMsgHandler {
         if (serverSecType == RFB.SECTYPE_TIGHT)
           secType = RFB.SECTYPE_TIGHT;
 
+        if (opts.sessMgrActive && Params.sessMgrAuto.getValue())
+          secType = RFB.SECTYPE_VNCAUTH;
+
         /*
          * Use the first type sent by server which matches client's type.
          * It means server's order specifies priority.
@@ -201,12 +208,16 @@ public abstract class CConnection extends CMsgHandler {
     }
 
     state = RFBSTATE_SECURITY;
-    csecurity = security.getCSecurity(secType);
+    csecurity = security.getCSecurity(opts, secType);
     processSecurityMsg();
   }
 
   private void processSecurityMsg() {
-    vlog.debug("processing security message");
+    if (!alreadyPrintedSecurity) {
+      vlog.debug("processing security message");
+      alreadyPrintedSecurity = true;
+    }
+
     if (csecurity.processMsg(this)) {
       state = RFBSTATE_SECURITY_RESULT;
       processSecurityResultMsg();
@@ -214,7 +225,10 @@ public abstract class CConnection extends CMsgHandler {
   }
 
   private void processSecurityResultMsg() {
-    vlog.debug("processing security result message");
+    if (!alreadyPrintedSecurityResult) {
+      vlog.debug("processing security result message");
+      alreadyPrintedSecurityResult = true;
+    }
     int result;
     if (cp.beforeVersion(3, 8) &&
         (csecurity.getType() == RFB.SECTYPE_NONE ||
@@ -388,6 +402,14 @@ public abstract class CConnection extends CMsgHandler {
     throw new AuthFailureException(reason);
   }
 
+  public Socket getSocket() {
+    return sock;
+  }
+
+  public boolean getUserPasswd(StringBuffer user, StringBuffer password) {
+    throw new ErrorException("getUserPasswd() called in base class (this shouldn't happen.)");
+  }
+
   InStream is;
   OutStream os;
   protected CMsgReaderV3 reader;
@@ -400,6 +422,12 @@ public abstract class CConnection extends CMsgHandler {
   String serverName;
   int serverPort;
   boolean clientSecTypeOrder;
+  protected Socket sock;
+  boolean alreadyPrintedVersion, alreadyPrintedSecurity;
+  boolean alreadyPrintedSecurityResult;
+  // CHECKSTYLE VisibilityModifier:OFF
+  public Options opts;
+  // CHECKSTYLE VisibilityModifier:ON
 
   static LogWriter vlog = new LogWriter("CConnection");
 }

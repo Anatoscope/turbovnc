@@ -1,4 +1,4 @@
-/* Copyright (C) 2013-2014, 2018 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2013-2014, 2018, 2020 D. R. Commander.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,8 @@ package com.turbovnc.vncviewer;
 import java.awt.*;
 import java.awt.event.*;
 import javax.swing.*;
+
+import com.turbovnc.rfb.Utils;
 
 class ProfileDialog extends Dialog {
 
@@ -282,8 +284,19 @@ class ProfileDialog extends Dialog {
       KeyEvent.SHIFT_DOWN_MASK);
     dlg.getRootPane().registerKeyboardAction(actionListener, ks,
       JComponent.WHEN_IN_FOCUSED_WINDOW);
-    if (VncViewer.OS.startsWith("mac os x") &&
-        (VncViewer.JAVA_VERSION < 9 || VncViewer.JAVA_VERSION > 11)) {
+    // macOS always treats the RAlt key as an AltGr key.  For reasons that
+    // aren't clearly understood, after RAlt is pressed for the first time,
+    // the modifier mask will always contain KeyEvent.ALT_GRAPH_DOWN_MASK
+    // and KeyEvent.ALT_DOWN_MASK whenever LAlt is pressed, so we need to
+    // register a separate keyboard action to handle that situation.
+    if (Utils.isMac()) {
+      ks = KeyStroke.getKeyStroke(KeyEvent.VK_P,
+        KeyEvent.CTRL_DOWN_MASK | KeyEvent.ALT_GRAPH_DOWN_MASK |
+        KeyEvent.SHIFT_DOWN_MASK | KeyEvent.ALT_DOWN_MASK);
+      dlg.getRootPane().registerKeyboardAction(actionListener, ks,
+        JComponent.WHEN_IN_FOCUSED_WINDOW);
+    }
+    if (Utils.isMac() && (Utils.JAVA_VERSION < 9 || Utils.JAVA_VERSION > 11)) {
       int appleKey = VncViewer.getMenuShortcutKeyMask();
       ks = KeyStroke.getKeyStroke(KeyEvent.VK_P, appleKey);
       dlg.getRootPane().registerKeyboardAction(actionListener, ks,

@@ -1,6 +1,6 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
+/* Copyright (C) 2014, 2018, 2020 D. R. Commander.  All Rights Reserved.
  * Copyright (C) 2011 Brian P. Hinz
- * Copyright (C) 2014, 2018 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,18 +33,18 @@ public class TrayMenu extends PopupMenu implements ActionListener {
     super("TurboVNC Viewer");
     viewer = viewer_;
 
-    if (!VncViewer.noNewConn.getValue()) {
+    if (!Params.noNewConn.getValue()) {
       newConn = addMenuItem("New connection...");
     }
     options = addMenuItem("Default options...");
     addSeparator();
     about = addMenuItem("About TurboVNC Viewer...");
-    if (!VncViewer.noNewConn.getValue()) {
+    if (!Params.noNewConn.getValue()) {
       addSeparator();
       exit = addMenuItem("Close listener");
     }
 
-    if (VncViewer.OS.startsWith("mac os x")) {
+    if (Utils.isMac()) {
       setDockMenu(this);
     } else {
       trayIcon = new TrayIcon(VncViewer.FRAME_IMAGE);
@@ -63,7 +63,7 @@ public class TrayMenu extends PopupMenu implements ActionListener {
       Class appClass;
       Object obj;
 
-      if (VncViewer.JAVA_VERSION >= 9) {
+      if (Utils.JAVA_VERSION >= 9) {
         appClass = Class.forName("java.awt.Taskbar");
         Method getTaskbar =
           appClass.getMethod("getTaskbar", (Class[])null);
@@ -76,7 +76,7 @@ public class TrayMenu extends PopupMenu implements ActionListener {
       }
       Class[] paramTypes = new Class[1];
       paramTypes[0] = PopupMenu.class;
-      Method setDockMenu = VncViewer.JAVA_VERSION >= 9 ?
+      Method setDockMenu = Utils.JAVA_VERSION >= 9 ?
         appClass.getMethod("setMenu", paramTypes) :
         appClass.getMethod("setDockMenu", paramTypes);
       setDockMenu.invoke(obj, menu);
@@ -87,7 +87,7 @@ public class TrayMenu extends PopupMenu implements ActionListener {
   }
 
   static boolean isSupported() {
-    return (VncViewer.OS.startsWith("mac os x") || SystemTray.isSupported());
+    return (Utils.isMac() || SystemTray.isSupported());
   }
 
   MenuItem addMenuItem(String str) {
@@ -104,14 +104,14 @@ public class TrayMenu extends PopupMenu implements ActionListener {
   }
 
   public void actionPerformed(ActionEvent ev) {
-    if (!VncViewer.noNewConn.getValue() && actionMatch(ev, newConn)) {
+    if (!Params.noNewConn.getValue() && actionMatch(ev, newConn)) {
       VncViewer.newViewer(viewer);
     } else if (actionMatch(ev, options)) {
       viewer.showOptions();
     } else if (actionMatch(ev, about)) {
       VncViewer.showAbout(null);
     } else if (actionMatch(ev, exit)) {
-      if (VncViewer.OS.startsWith("mac os x"))
+      if (Utils.isMac())
         setDockMenu(null);
       else if (tray != null && trayIcon != null)
         tray.remove(trayIcon);

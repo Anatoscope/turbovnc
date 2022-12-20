@@ -1,7 +1,7 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
- * Copyright 2009-2011 Pierre Ossman <ossman@cendio.se> for Cendio AB
- * Copyright (C) 2011-2021 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2011-2022 D. R. Commander.  All Rights Reserved.
  * Copyright (C) 2011-2015 Brian P. Hinz
+ * Copyright 2009-2011 Pierre Ossman <ossman@cendio.se> for Cendio AB
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,6 +39,7 @@ import java.awt.event.*;
 import java.io.*;
 import java.lang.reflect.*;
 import javax.swing.*;
+import java.text.*;
 import java.util.*;
 
 import com.turbovnc.rdr.*;
@@ -63,10 +64,6 @@ public class CConn extends CConnection implements UserPasswdGetter,
     new PixelFormat(16, 16, false, true, 31, 63, 31, 11, 5, 0);
   static final int SUPER_MASK = 1 << 16;
 
-  static final double getTime() {
-    return (double)System.nanoTime() / 1.0e9;
-  }
-
   // RFB thread
   public CConn(VncViewer viewer_, Socket sock_) {
     sock = sock_;  viewer = viewer_;
@@ -78,7 +75,6 @@ public class CConn extends CConnection implements UserPasswdGetter,
 
     formatChange = false;  encodingChange = false;
     currentEncoding = opts.preferredEncoding;
-    showToolbar = opts.showToolbar && !benchmark;
     options = new OptionsDialog(this);
     options.initDialog();
     clipboardDialog = new ClipboardDialog(this);
@@ -91,27 +87,12 @@ public class CConn extends CConnection implements UserPasswdGetter,
     pressedKeys = new HashMap<Integer, Integer>();
 
     setShared(opts.shared);
-    upg = this;
 
     cp.supportsDesktopResize = true;
     cp.supportsExtendedDesktopSize = true;
-    cp.supportsClientRedirect = VncViewer.clientRedirect.getValue();
+    cp.supportsClientRedirect = Params.clientRedirect.getValue();
     cp.supportsDesktopRename = true;
     menu = new F8Menu(this);
-
-    if (VncViewer.noUnixLogin.getValue()) {
-      Security.disableSecType(RFB.SECTYPE_PLAIN);
-      Security.disableSecType(RFB.SECTYPE_TLS_PLAIN);
-      Security.disableSecType(RFB.SECTYPE_X509_PLAIN);
-      Security.disableSecType(RFB.SECTYPE_UNIX_LOGIN);
-    } else if (isUnixLoginForced()) {
-      Security.disableSecType(RFB.SECTYPE_VNCAUTH);
-      Security.disableSecType(RFB.SECTYPE_TLS_VNC);
-      Security.disableSecType(RFB.SECTYPE_X509_VNC);
-      Security.disableSecType(RFB.SECTYPE_NONE);
-      Security.disableSecType(RFB.SECTYPE_TLS_NONE);
-      Security.disableSecType(RFB.SECTYPE_X509_NONE);
-    }
 
     if (sock != null) {
       String name = sock.getPeerEndpoint();
@@ -121,7 +102,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
       int port = -1;
 
       if (opts.serverName != null &&
-          !VncViewer.alwaysShowConnectionDialog.getValue()) {
+          !Params.alwaysShowConnectionDialog.getValue()) {
         if (opts.via == null || opts.via.indexOf(':') < 0) {
           port = opts.port = Hostname.getPort(opts.serverName);
           serverName = opts.serverName = Hostname.getHost(opts.serverName);
@@ -140,13 +121,45 @@ public class CConn extends CConnection implements UserPasswdGetter,
       if (opts.via != null && opts.via.indexOf(':') >= 0) {
         port = Hostname.getPort(opts.via);
         serverName = Hostname.getHost(opts.via);
-      } else if (opts.via != null || opts.tunnel) {
+      } else if (opts.via != null || opts.tunnel ||
+                 (opts.port == 0 && Params.sessMgrAuto.getValue())) {
+        if (opts.port == 0) {
+          try {
+            // TurboVNC Session Manager
+            String session = SessionManager.createSession(opts);
+            if (session == null) {
+              close();
+              return;
+            }
+            opts.sessMgrActive = true;
+            opts.port = Hostname.getPort(session);
+          } catch (Exception e) {
+            throw new ErrorException("Session Manager Error:\n" +
+                                     e.getMessage());
+          }
+        }
         try {
           Tunnel.createTunnel(opts);
           port = Hostname.getPort(opts.serverName);
           serverName = Hostname.getHost(opts.serverName);
         } catch (Exception e) {
           throw new ErrorException("Could not create SSH tunnel:\n" +
+                                   e.getMessage());
+        }
+      }
+
+      if (port == 0) {
+        try {
+          // TurboVNC Session Manager
+          String session = SessionManager.createSession(opts);
+          if (session == null) {
+            close();
+            return;
+          }
+          port = Hostname.getPort(session);
+          opts.sshSession.disconnect();
+        } catch (Exception e) {
+          throw new ErrorException("Session Manager Error:\n" +
                                    e.getMessage());
         }
       }
@@ -200,17 +213,18 @@ public class CConn extends CConnection implements UserPasswdGetter,
 
   // RFB thread: getUserPasswd() is called by the CSecurity object when it
   // needs us to read a password from the user.
+  @Override
   public final boolean getUserPasswd(StringBuffer user, StringBuffer passwd) {
     String title = ((user == null ? "Standard VNC Authentication" :
                                     "Unix Login Authentication") +
                     " [" + csecurity.getDescription() + "]");
-    String passwordFileStr = VncViewer.passwordFile.getValue();
+    String passwordFileStr = Params.passwordFile.getValue();
     PasswdDialog dlg = null;
     String autoPass;
 
-    if (VncViewer.encPassword.getValue() != null) {
+    if (Params.encPassword.getValue() != null) {
       byte[] encryptedPassword = new byte[8];
-      String passwordString = VncViewer.encPassword.getValue();
+      String passwordString = Params.encPassword.getValue();
       if (passwordString.length() != 16)
         throw new ErrorException("Password specified in EncPassword parameter is invalid.");
       for (int c = 0; c < 16; c += 2) {
@@ -223,21 +237,21 @@ public class CConn extends CConnection implements UserPasswdGetter,
         else break;
       }
       autoPass = VncAuth.unobfuscatePasswd(encryptedPassword);
-    } else if (VncViewer.autoPass.getValue()) {
+    } else if (Params.autoPass.getValue()) {
       BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
       try {
         autoPass = in.readLine();
       } catch (IOException e) {
         throw new SystemException(e);
       }
-      VncViewer.autoPass.setParam("0");
+      Params.autoPass.setParam("0");
     } else
-      autoPass = VncViewer.password.getValue();
+      autoPass = Params.password.getValue();
 
     if (autoPass != null && passwd != null) {
       passwd.append(autoPass);
       passwd.setLength(autoPass.length());
-      VncViewer.password.setParam(null);
+      Params.password.setParam(null);
     }
 
     if (user == null && passwordFileStr != null && autoPass == null) {
@@ -262,19 +276,22 @@ public class CConn extends CConnection implements UserPasswdGetter,
 
     if (user == null) {
       if (autoPass == null)
-        dlg = new PasswdDialog(title, (user == null), null, (passwd == null));
+        dlg = new PasswdDialog(title, (user == null), null, (passwd == null),
+                               opts.sshTunnelActive,
+                               csecurity.getChosenType());
     } else {
       String userName = opts.user;
       if (opts.sendLocalUsername) {
         userName = (String)System.getProperties().get("user.name");
-        if (VncViewer.localUsernameLC.getValue())
+        if (Params.localUsernameLC.getValue())
           userName = userName.toLowerCase();
         if (passwd == null)
           return true;
       }
       if (autoPass == null)
         dlg = new PasswdDialog(title, (userName != null), userName,
-                               (passwd == null));
+                               (passwd == null), opts.sshTunnelActive,
+                               csecurity.getChosenType());
       else
         user.append(userName);
     }
@@ -311,20 +328,18 @@ public class CConn extends CConnection implements UserPasswdGetter,
     if (!benchmark)
       requestNewUpdate();
     else {
-      if (opts.colors < 0) {
-        pendingPF = fullColourPF;
+      if (Params.colors.getValue() == 8) {
+        pendingPF = VERY_LOW_COLOR_PF;
+      } else if (Params.colors.getValue() == 64) {
+        pendingPF = LOW_COLOR_PF;
+      } else if (Params.colors.getValue() == 256) {
+        pendingPF = MEDIUM_COLOR_PF;
+      } else if (Params.colors.getValue() == 32768) {
+        pendingPF = MEDIUMHIGH_COLOR_PF;
+      } else if (Params.colors.getValue() == 65536) {
+        pendingPF = HIGH_COLOR_PF;
       } else {
-        if (opts.colors == 8) {
-          pendingPF = VERY_LOW_COLOR_PF;
-        } else if (opts.colors == 64) {
-          pendingPF = LOW_COLOR_PF;
-        } else if (opts.colors == 256) {
-          pendingPF = MEDIUM_COLOR_PF;
-        } else if (opts.colors == 32768) {
-          pendingPF = MEDIUMHIGH_COLOR_PF;
-        } else {
-          pendingPF = HIGH_COLOR_PF;
-        }
+        pendingPF = fullColourPF;
       }
       pendingPFChange = true;
     }
@@ -346,6 +361,9 @@ public class CConn extends CConnection implements UserPasswdGetter,
     } catch (InvocationTargetException e) {
       SystemException.checkException(e);
       throw new SystemException(e);
+    }
+    synchronized(viewer) {
+      viewer.notify();
     }
   }
 
@@ -418,7 +436,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
   // update.  Here we try to send out a new framebuffer update request so that
   // the next update can be sent while we decode the current one.
   public void framebufferUpdateStart() {
-    tUpdateStart = getTime();
+    tUpdateStart = Utils.getTime();
     if (tStart < 0.) tStart = tUpdateStart;
 
     // Note: This might not be true if sync fences are supported.
@@ -469,11 +487,11 @@ public class CConn extends CConnection implements UserPasswdGetter,
       pendingPFChange = false;
     }
 
-    tUpdate += getTime() - tUpdateStart;
+    tUpdate += Utils.getTime() - tUpdateStart;
     updates++;
-    tElapsed = getTime() - tStart;
+    tElapsed = Utils.getTime() - tStart;
 
-    if (tElapsed > (double)VncViewer.profileInt.getValue() && !benchmark) {
+    if (tElapsed > (double)Params.profileInt.getValue() && !benchmark) {
       if (profileDialog.isVisible()) {
         String str;
         str = String.format("%.3f", (double)updates / tElapsed);
@@ -551,7 +569,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
       sock.inStream().resetReadTime();
       sock.inStream().resetBytesRead();
       decodePixels = decodeRect = blitPixels = blits = updates = 0;
-      tStart = getTime();
+      tStart = Utils.getTime();
     }
   }
 
@@ -561,7 +579,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
     ScreenSet layout;
 
     String env = System.getenv("TVNC_SINGLESCREEN");
-    if (VncViewer.getBooleanProperty("turbovnc.singlescreen", false) ||
+    if (Utils.getBooleanProperty("turbovnc.singlescreen", false) ||
         (env != null && env.equals("1"))) {
       layout = cp.screenLayout;
 
@@ -591,7 +609,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
 
     vpRect.x = vpPos.x;
     vpRect.y = vpPos.y;
-    if (showToolbar && !opts.fullScreen) {
+    if (opts.showToolbar && !opts.fullScreen) {
       vpRect.y += 22;
       vpRect.height -= 22;
     }
@@ -693,7 +711,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
   }
 
   public void startDecodeTimer() {
-    tDecodeStart = getTime();
+    tDecodeStart = Utils.getTime();
     if (benchmark)
       tReadOld = viewer.benchFile.getReadTime();
     else
@@ -706,7 +724,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
       tRead = viewer.benchFile.getReadTime();
     else
       tRead = sock.inStream().getReadTime();
-    tDecode += getTime() - tDecodeStart - (tRead - tReadOld);
+    tDecode += Utils.getTime() - tDecodeStart - (tRead - tReadOld);
   }
 
   public void beginRect(Rect r, int encoding) {
@@ -803,7 +821,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
     if (viewport != null && !benchmark) {
       vlog.info("Enabling GII");
       writer().writeGIIVersion();
-      if (VncViewer.osEID())
+      if (Utils.osEID())
         viewport.setupExtInputHelper();
     }
   }
@@ -825,7 +843,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
     if (viewport == null || benchmark)
       return;
 
-    Rectangle screenArea = getMaxSpannedSize();
+    Rectangle screenArea = getMaxSpannedSize(false);
     java.awt.Point spOffset = viewport.sp.getViewport().getViewPosition();
     java.awt.Point winOffset = viewport.sp.getLocationOnScreen();
 
@@ -958,6 +976,8 @@ public class CConn extends CConnection implements UserPasswdGetter,
   private void recreateViewport() { recreateViewport(false); }
 
   private void recreateViewport(boolean restore) {
+    if (desktop == null) return;
+
     if (viewport != null) {
       if (opts.fullScreen) {
         savedState = viewport.getExtendedState();
@@ -967,20 +987,19 @@ public class CConn extends CConnection implements UserPasswdGetter,
       if (viewport.timer != null)
         viewport.timer.stop();
       viewport.grabKeyboardHelper(false);
-      if (VncViewer.currentMonitorIsPrimary.getValue())
+      if (Params.currentMonitorIsPrimary.getValue())
         oldViewportBounds = viewport.getBounds();
       viewport.dispose();
     }
     viewport = new Viewport(this);
     // When in Lion full-screen mode, we need to create the viewport as if
     // full-screen mode was disabled.
-    boolean fullScreenWindow = opts.fullScreen && !viewport.lionFSSupported();
-    viewport.setUndecorated(fullScreenWindow);
+    viewport.setUndecorated(opts.fullScreen);
     desktop.setViewport(viewport);
     reconfigureViewport(restore);
     if ((cp.width > 0) && (cp.height > 0))
       viewport.setVisible(true);
-    if (VncViewer.isX11())
+    if (Utils.isX11())
       viewport.x11FullScreenHelper(opts.fullScreen);
     if (opts.fullScreen && viewport.lionFSSupported())
       viewport.toggleLionFS();
@@ -988,22 +1007,32 @@ public class CConn extends CConnection implements UserPasswdGetter,
     if (shouldGrab())
       viewport.grabKeyboardHelper(true);
     selectGrab(VncViewer.isKeyboardGrabbed(viewport));
-    if (VncViewer.osEID())
+    if (Utils.osEID())
       viewport.setupExtInputHelper();
   }
 
-  public Rectangle getMaxSpannedSize() {
+  public static Rectangle getMaxSpannedSize(boolean workArea) {
     GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
     GraphicsDevice[] gsList = ge.getScreenDevices();
     Rectangle s0 = null;
     Rectangle span = new Rectangle(-1, -1, 0, 0);
+    Insets in = new Insets(0, 0, 0, 0);
     int tLeft = 0, tTop = 0, tRight = 0, tBottom = 0;
     boolean equal = true;
+
+    Toolkit tk = Toolkit.getDefaultToolkit();
 
     for (GraphicsDevice gs : gsList) {
       GraphicsConfiguration[] gcList = gs.getConfigurations();
       for (GraphicsConfiguration gc : gcList) {
         Rectangle s = gc.getBounds();
+        if (workArea) {
+          if (gc == gcList[0])
+            in = tk.getScreenInsets(gc);
+          s.setBounds(s.x + in.left, s.y + in.top,
+                      s.width - in.left - in.right,
+                      s.height - in.top - in.bottom);
+        }
         if (s0 == null) {
           s0 = s;
           span.setBounds(s);
@@ -1051,8 +1080,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
   // EDT
   public Rectangle getSpannedSize() {
     boolean fullScreenWindow = opts.fullScreen &&
-                               (!VncViewer.OS.startsWith("mac os x") ||
-                                viewport.lionFSSupported());
+                               (!Utils.isMac() || viewport.lionFSSupported());
     GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
     GraphicsDevice[] gsList = ge.getScreenDevices();
     Rectangle primary = null, s0 = null;
@@ -1064,6 +1092,9 @@ public class CConn extends CConnection implements UserPasswdGetter,
     boolean equal = true;
     int sw = desktop.scaledWidth;
     int sh = desktop.scaledHeight;
+
+    viewport.leftMon = viewport.rightMon = viewport.topMon =
+      viewport.bottomMon = 0;
 
     if (opts.scalingFactor == Options.SCALE_AUTO ||
         opts.scalingFactor == Options.SCALE_FIXEDRATIO) {
@@ -1102,7 +1133,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
           primaryGD = gs;
           primaryID = i;
         }
-        if (VncViewer.currentMonitorIsPrimary.getValue() && viewport != null) {
+        if (Params.currentMonitorIsPrimary.getValue() && viewport != null) {
           Rectangle vpRect = oldViewportBounds != null ? oldViewportBounds :
                              viewport.getBounds();
           if (opts.fullScreen && savedRect.width > 0 && savedRect.height > 0)
@@ -1146,7 +1177,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
             s.height != s0.height ||
             (Math.abs(s.y - s0.y) % s0.height) != 0 ||
             (Math.abs(s.x - s0.x) % s0.width) != 0)
-            equal = false;
+          equal = false;
 
         // If the screen/work area of this monitor overlaps vertically with the
         // multi-screen span area, then allow the window to extend horizontally
@@ -1181,15 +1212,13 @@ public class CConn extends CConnection implements UserPasswdGetter,
         // isn't available (multi-screen spanning doesn't even pretend to work
         // under X11 except for full-screen windows, and even then, the
         // appropriate WM hints must be set using C.)
-        (VncViewer.isX11() && (!opts.fullScreen ||
-                               !Viewport.isHelperAvailable()))) {
+        (Utils.isX11() && (!opts.fullScreen || !Helper.isAvailable()))) {
       span = primary;
       viewport.leftMon = viewport.rightMon = viewport.topMon =
         viewport.bottomMon = primaryID;
     } else if (equal ||
                (fullScreenWindow && serverXinerama &&
-                opts.desktopSize.mode == Options.SIZE_AUTO &&
-                !VncViewer.isX11()))
+                opts.desktopSize.mode == Options.SIZE_AUTO && !Utils.isX11()))
       span = new Rectangle(tLeft, tTop, tRight - tLeft, tBottom - tTop);
 
     vlog.debug("Spanned " + (fullScreenWindow ? "FS " : "work ") + "area: " +
@@ -1205,7 +1234,6 @@ public class CConn extends CConnection implements UserPasswdGetter,
   public void sizeWindow() { sizeWindow(true); }
 
   public void sizeWindow(boolean manual) {
-    boolean fullScreenWindow = opts.fullScreen && !viewport.lionFSSupported();
     int w = desktop.scaledWidth;
     int h = desktop.scaledHeight;
     Rectangle span = getSpannedSize();
@@ -1213,7 +1241,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
 
     if ((opts.scalingFactor == Options.SCALE_AUTO ||
          opts.scalingFactor == Options.SCALE_FIXEDRATIO) &&
-        !fullScreenWindow) {
+        !opts.fullScreen) {
       w = cp.width;
       h = cp.height;
     }
@@ -1228,12 +1256,11 @@ public class CConn extends CConnection implements UserPasswdGetter,
     if (h >= span.height)
       h = span.height;
 
-    if (viewport.getExtendedState() != JFrame.ICONIFIED &&
-        !VncViewer.OS.startsWith("mac os x"))
+    if (viewport.getExtendedState() != JFrame.ICONIFIED && !Utils.isMac())
       viewport.setExtendedState(JFrame.NORMAL);
     int x = (span.width - w) / 2 + span.x;
     int y = (span.height - h) / 2 + span.y;
-    if (fullScreenWindow) {
+    if (opts.fullScreen) {
       java.awt.Point vpPos = viewport.getLocation();
       boolean checkLayoutNow = false;
       vpSize = viewport.getSize();
@@ -1308,9 +1335,8 @@ public class CConn extends CConnection implements UserPasswdGetter,
 
   // EDT
   private void reconfigureViewport(boolean restore) {
-    boolean fullScreenWindow = opts.fullScreen && !viewport.lionFSSupported();
     desktop.setScaledSize();
-    if (!fullScreenWindow && savedRect.width > 0 && savedRect.height > 0 &&
+    if (!opts.fullScreen && savedRect.width > 0 && savedRect.height > 0 &&
         restore) {
       if (savedState >= 0)
         viewport.setExtendedState(savedState);
@@ -1318,6 +1344,32 @@ public class CConn extends CConnection implements UserPasswdGetter,
                            savedRect.height);
     } else {
       sizeWindow(false);
+    }
+  }
+
+  private void reconfigureAndRepaintViewport(boolean restore) {
+    reconfigureViewport(false);
+    // The viewport's componentResized() method isn't guaranteed to be called
+    // when reconfiguring the viewport, and it generally won't be called if
+    // only the scaling factor has changed while in full-screen mode.  Thus, we
+    // need to ensure that the appropriate scrollbar policy is set and the
+    // viewport is repainted.
+    if (desktop != null) {
+      if (opts.scalingFactor == Options.SCALE_AUTO ||
+          opts.scalingFactor == Options.SCALE_FIXEDRATIO) {
+        viewport.sp.setHorizontalScrollBarPolicy(
+          ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        viewport.sp.setVerticalScrollBarPolicy(
+          ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);
+      } else {
+        viewport.sp.setHorizontalScrollBarPolicy(
+          ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
+        viewport.sp.setVerticalScrollBarPolicy(
+          ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
+      }
+      viewport.sp.validate();
+      desktop.resize();
+      desktop.paintImmediately(desktop.getBounds());
     }
   }
 
@@ -1330,20 +1382,18 @@ public class CConn extends CConnection implements UserPasswdGetter,
       // Catch incorrect requestNewUpdate calls
       assert(!pendingUpdate || supportsSyncFence);
 
-      if (opts.colors < 0) {
-        pf = fullColourPF;
+      if (Params.colors.getValue() == 8) {
+        pf = VERY_LOW_COLOR_PF;
+      } else if (Params.colors.getValue() == 64) {
+        pf = LOW_COLOR_PF;
+      } else if (Params.colors.getValue() == 256) {
+        pf = MEDIUM_COLOR_PF;
+      } else if (Params.colors.getValue() == 32768) {
+        pf = MEDIUMHIGH_COLOR_PF;
+      } else if (Params.colors.getValue() == 65536) {
+        pf = HIGH_COLOR_PF;
       } else {
-        if (opts.colors == 8) {
-          pf = VERY_LOW_COLOR_PF;
-        } else if (opts.colors == 64) {
-          pf = LOW_COLOR_PF;
-        } else if (opts.colors == 256) {
-          pf = MEDIUM_COLOR_PF;
-        } else if (opts.colors == 32768) {
-          pf = MEDIUMHIGH_COLOR_PF;
-        } else {
-          pf = HIGH_COLOR_PF;
-        }
+        pf = fullColourPF;
       }
 
       if (supportsSyncFence) {
@@ -1387,10 +1437,36 @@ public class CConn extends CConnection implements UserPasswdGetter,
   ////////////////////////////////////////////////////////////////////
   // The following methods are all called from the EDT.
 
+  public boolean confirmClose() {
+    if (Params.confirmClose.getValue() && state() == RFBSTATE_NORMAL &&
+        !shuttingDown && sock != null) {
+      JOptionPane pane;
+      Object[] dlgOptions = { UIManager.getString("OptionPane.yesButtonText"),
+                              UIManager.getString("OptionPane.noButtonText") };
+
+      int port = sock.getPeerPort();
+      String name = (port >= 5900 && port <= 5999 ?
+                     sock.getPeerName() + ":" + (port - 5900) :
+                     sock.getPeerName() + "::" + port);
+      pane = new JOptionPane("Are you sure you want to close the\n" +
+                             "connection to " + name + "?",
+                             JOptionPane.WARNING_MESSAGE,
+                             JOptionPane.YES_NO_OPTION, null, dlgOptions,
+                             dlgOptions[1]);
+      JDialog dlg = pane.createDialog(null, "TurboVNC Viewer");
+      dlg.setAlwaysOnTop(true);
+      dlg.setVisible(true);
+      if (pane.getValue() == dlgOptions[1])
+        return false;
+    }
+    return true;
+  }
+
   // close() shuts down the socket, thus waking up the RFB thread.
   public void close() { close(true); }
 
   public void close(boolean disposeViewport) {
+    if (disposeViewport && !confirmClose()) return;
     deleteWindow(disposeViewport);
     shuttingDown = true;
     if (sock != null)
@@ -1414,7 +1490,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
   // has been called, since the menu is only accessible from the DesktopWindow.
 
   void showMenu(int x, int y) {
-    if (VncViewer.OS.startsWith("windows"))
+    if (Utils.isWindows())
       UIManager.put("Button.showMnemonics", true);
     if (viewport != null && (viewport.dx > 0 || viewport.dy > 0)) {
       x += viewport.dx;
@@ -1436,9 +1512,9 @@ public class CConn extends CConnection implements UserPasswdGetter,
   }
 
   void showInfo() {
-    JOptionPane pane = new JOptionPane(
+    JOptionPane.showMessageDialog(viewport,
       "Desktop name:  " + cp.name() + "\n" +
-      "Host:  " + sock.getPeerName() + ":" + sock.getPeerPort() + "\n" +
+      "Host:  " + sock.getPeerName() + "::" + sock.getPeerPort() + "\n" +
       "Size:  " + cp.width + "x" + cp.height + "\n" +
       "Pixel format:  " + desktop.getPF().print() + "\n" +
       "(server default " + serverPF.print() + ")\n" +
@@ -1450,11 +1526,9 @@ public class CConn extends CConnection implements UserPasswdGetter,
       "Encryption protocol:  " + getEncryptionProtocol() + "\n" +
       "JPEG decompression:  " +
         (reader.isTurboJPEG() ? "Turbo" : "Unaccelerated") +
-      (VncViewer.osGrab() || VncViewer.osEID() ? "\nTurboVNC Helper:  " +
-        (Viewport.isHelperAvailable() ? "Loaded" : "Not found") : ""),
-      JOptionPane.PLAIN_MESSAGE);
-    JDialog dlg = pane.createDialog(viewport, "VNC connection info");
-    dlg.setVisible(true);
+      (Utils.osGrab() || Utils.osEID() ? "\nTurboVNC Helper:  " +
+        (Helper.isAvailable() ? "Loaded" : "Not found") : ""),
+      "VNC connection info", JOptionPane.PLAIN_MESSAGE);
   }
 
   public void refresh() {
@@ -1509,149 +1583,79 @@ public class CConn extends CConnection implements UserPasswdGetter,
   }
 
   public void setOptions() {
-    options.allowJpeg.setSelected(opts.allowJpeg);
-    options.subsamplingLevel.setValue(opts.getSubsamplingOrdinal());
-    options.jpegQualityLevel.setValue(opts.quality);
-    options.setCompressionLevel(opts.compressLevel);
-
+    options.setOptions(opts, cp.supportsSetDesktopSize || firstUpdate,
+                       state() == RFBSTATE_NORMAL, state() == RFBSTATE_NORMAL,
+                       state() == RFBSTATE_NORMAL);
     setTightOptions();
-
-    options.viewOnly.setSelected(opts.viewOnly);
-    options.reverseScroll.setSelected(opts.reverseScroll);
-    options.fsAltEnter.setSelected(opts.fsAltEnter);
-    options.recvClipboard.setSelected(opts.recvClipboard);
-    options.sendClipboard.setSelected(opts.sendClipboard);
-    options.menuKey.setSelectedItem(KeyEvent.getKeyText(opts.menuKeyCode));
-    if (VncViewer.osGrab() && Viewport.isHelperAvailable())
-      options.grabKeyboard.setSelectedIndex(opts.grabKeyboard);
-
-    if (state() == RFBSTATE_NORMAL) {
-      options.shared.setEnabled(false);
-      options.secVeNCrypt.setEnabled(false);
-      options.encNone.setEnabled(false);
-      options.encTLS.setEnabled(false);
-      options.encX509.setEnabled(false);
-      options.x509ca.setEnabled(false);
-      options.x509caButton.setEnabled(false);
-      options.x509crl.setEnabled(false);
-      options.x509crlButton.setEnabled(false);
-      options.secIdent.setEnabled(false);
-      options.secNone.setEnabled(false);
-      options.secVnc.setEnabled(false);
-      options.secUnixLogin.setEnabled(false);
-      options.secPlain.setEnabled(false);
-      options.sendLocalUsername.setEnabled(false);
-      options.gateway.setEnabled(false);
-      options.sshUser.setEnabled(false);
-      options.tunnel.setEnabled(false);
-    } else {
-      options.shared.setSelected(opts.shared);
-      options.sendLocalUsername.setSelected(opts.sendLocalUsername);
-      options.setSecurityOptions();
-      if (opts.via != null)
-        options.gateway.setText(opts.via);
-      if (opts.sshUser != null)
-        options.sshUser.setText(opts.sshUser);
-      options.tunnel.setSelected(opts.tunnel);
-      if (SecurityClient.x509ca.getValue() != null)
-        options.x509ca.setText(SecurityClient.x509ca.getValue());
-      if (SecurityClient.x509crl.getValue() != null)
-        options.x509crl.setText(SecurityClient.x509crl.getValue());
-    }
-
-    options.fullScreen.setSelected(opts.fullScreen);
-    options.span.setSelectedIndex(opts.span);
-    options.cursorShape.setSelected(opts.cursorShape);
-    options.acceptBell.setSelected(opts.acceptBell);
-    options.showToolbar.setSelected(opts.showToolbar);
-    options.desktopSize.setEnabled(cp.supportsSetDesktopSize || firstUpdate);
-    if (opts.scalingFactor == Options.SCALE_AUTO) {
-      options.scalingFactor.setSelectedItem("Auto");
-    } else if (opts.scalingFactor == Options.SCALE_FIXEDRATIO) {
-      options.scalingFactor.setSelectedItem("Fixed Aspect Ratio");
-    } else {
-      options.scalingFactor.setSelectedItem(opts.scalingFactor + "%");
-      if (desktop != null)
-        desktop.setScaledSize();
-    }
-    options.desktopSize.setSelectedItem(opts.desktopSize.getString());
-    if (opts.desktopSize.mode == Options.SIZE_AUTO)
-      options.scalingFactor.setEnabled(false);
-    else
-      options.scalingFactor.setEnabled(true);
+    if (opts.scalingFactor != Options.SCALE_AUTO &&
+        opts.scalingFactor != Options.SCALE_FIXEDRATIO && desktop != null)
+      desktop.setScaledSize();
   }
 
   public void getOptions() {
-    boolean recreate = false, reconfigure = false, defaultSize = false;
+    boolean recreate = false, reconfigure = false, deleteRestore = false;
 
-    if (opts.allowJpeg != options.allowJpeg.isSelected())
+    Options oldOpts = new Options(opts);
+
+    options.getOptions(opts);
+
+    if (opts.allowJpeg != oldOpts.allowJpeg ||
+        opts.quality != oldOpts.quality ||
+        opts.compressLevel != oldOpts.compressLevel ||
+        opts.subsampling != oldOpts.subsampling)
       encodingChange = true;
-    opts.allowJpeg = options.allowJpeg.isSelected();
 
-    if (opts.quality != options.jpegQualityLevel.getValue())
-      encodingChange = true;
-    opts.quality = options.jpegQualityLevel.getValue();
-
-    if (opts.compressLevel != options.getCompressionLevel())
-      encodingChange = true;
-    opts.compressLevel = options.getCompressionLevel();
-
-    if (opts.subsampling != options.getSubsamplingLevel())
-      encodingChange = true;
-    opts.subsampling = options.getSubsamplingLevel();
-
-    opts.sendLocalUsername = options.sendLocalUsername.isSelected();
-    if (opts.viewOnly != options.viewOnly.isSelected() && showToolbar)
+    if (opts.viewOnly != oldOpts.viewOnly && opts.showToolbar &&
+        !opts.fullScreen)
       recreate = true;
-    opts.viewOnly = options.viewOnly.isSelected();
-    opts.reverseScroll = options.reverseScroll.isSelected();
-    opts.fsAltEnter = options.fsAltEnter.isSelected();
-    opts.recvClipboard = options.recvClipboard.isSelected();
-    opts.sendClipboard = options.sendClipboard.isSelected();
-    opts.acceptBell = options.acceptBell.isSelected();
-    opts.showToolbar = options.showToolbar.isSelected();
+
     if (state() != RFBSTATE_NORMAL)
-      showToolbar = opts.showToolbar && !benchmark;
+      opts.showToolbar = opts.showToolbar && !benchmark;
 
-    int oldScalingFactor = opts.scalingFactor;
-    opts.setScalingFactor(options.scalingFactor.getSelectedItem().toString());
-    if (desktop != null && opts.scalingFactor != oldScalingFactor)
+    if (opts.showToolbar != oldOpts.showToolbar && !opts.fullScreen)
       recreate = true;
 
-    Options.DesktopSize oldDesktopSize = opts.desktopSize;
-    opts.setDesktopSize(options.desktopSize.getSelectedItem().toString());
-    if (desktop != null && !opts.desktopSize.equals(oldDesktopSize)) {
-      if (oldDesktopSize.mode != Options.SIZE_AUTO &&
-          opts.desktopSize.mode == Options.SIZE_AUTO &&
-          viewport.lionFSSupported() && opts.fullScreen &&
-          options.fullScreen.isSelected())
-        defaultSize = true;
-      if (opts.desktopSize.mode != Options.SIZE_SERVER) {
+    if (desktop != null && opts.scalingFactor != oldOpts.scalingFactor) {
+      deleteRestore = true;
+      savedState = -1;
+      savedRect = new Rectangle(-1, -1, 0, 0);
+      // Ideally we could recreate the viewport on all platforms, but due to a
+      // Java bug, doing so on macOS causes the viewer to exit full-screen
+      // mode.
+      if (!viewport.lionFSSupported() || !opts.fullScreen)
+        recreate = true;
+      else
         reconfigure = true;
+    }
+
+    if (desktop != null &&
+        !opts.desktopSize.equalsIgnoreID(oldOpts.desktopSize)) {
+      deleteRestore = true;
+      savedState = -1;
+      savedRect = new Rectangle(-1, -1, 0, 0);
+      if (opts.desktopSize.mode != Options.SIZE_SERVER) {
+        if (!viewport.lionFSSupported() || !opts.fullScreen)
+          recreate = true;
+        else
+          reconfigure = true;
         firstUpdate = true;
       }
     }
 
-    int oldSpan = opts.span;
-    int index = options.span.getSelectedIndex();
-    if (index >= 0 && index < Options.NUMSPANOPT)
-      opts.span = index;
-    if (desktop != null && opts.span != oldSpan) {
-      if (opts.fullScreen && !viewport.lionFSSupported())
+    if (desktop != null && opts.span != oldOpts.span) {
+      deleteRestore = true;
+      savedState = -1;
+      savedRect = new Rectangle(-1, -1, 0, 0);
+      if (!viewport.lionFSSupported() || !opts.fullScreen)
         recreate = true;
       else
         reconfigure = true;
     }
 
     clipboardDialog.setSendingEnabled(opts.sendClipboard);
-    opts.menuKeyCode =
-      MenuKey.getMenuKeySymbols()[options.menuKey.getSelectedIndex()].keycode;
-    opts.menuKeySym =
-      MenuKey.getMenuKeySymbols()[options.menuKey.getSelectedIndex()].keysym;
-    menu.updateMenuKey(opts.menuKeyCode);
+    menu.updateMenuKey(opts.menuKeyCode, opts.menuKeySym);
 
-    if (VncViewer.osGrab() && Viewport.isHelperAvailable()) {
-      opts.grabKeyboard = options.grabKeyboard.getSelectedIndex();
+    if (Utils.osGrab() && Helper.isAvailable()) {
       boolean isGrabbed = VncViewer.isKeyboardGrabbed(viewport);
       if (viewport != null &&
           ((opts.grabKeyboard == Options.GRAB_ALWAYS && !isGrabbed) ||
@@ -1662,10 +1666,8 @@ public class CConn extends CConnection implements UserPasswdGetter,
       }
     }
 
-    opts.shared = options.shared.isSelected();
     setShared(opts.shared);
-    if (opts.cursorShape != options.cursorShape.isSelected()) {
-      opts.cursorShape = options.cursorShape.isSelected();
+    if (opts.cursorShape != oldOpts.cursorShape) {
       encodingChange = true;
       if (desktop != null)
         desktop.resetLocalCursor();
@@ -1673,36 +1675,43 @@ public class CConn extends CConnection implements UserPasswdGetter,
 
     checkEncodings();
 
-    if (state() != RFBSTATE_NORMAL) {
-      options.getSecurityOptions();
-      String gateway = options.gateway.getText();
-      opts.via = (gateway.isEmpty() ? null : gateway);
-      String sshUser = options.sshUser.getText();
-      opts.sshUser = (sshUser.isEmpty() ? null : sshUser);
-      opts.tunnel = options.tunnel.isSelected();
-      SecurityClient.x509ca.setParam(options.x509ca.getText());
-      SecurityClient.x509crl.setParam(options.x509crl.getText());
-    }
-
-    if (options.fullScreen.isSelected() != opts.fullScreen)
+    if (opts.fullScreen != oldOpts.fullScreen) {
+      opts.fullScreen = !opts.fullScreen;
       toggleFullScreen();
-    else if (recreate)
+    } else if (recreate)
       recreateViewport();
-    else if (reconfigure) {
-      if (defaultSize)
-        sizeWindow(true);
-      else
-        reconfigureViewport(false);
+    else if (reconfigure)
+      reconfigureAndRepaintViewport(false);
+    if (opts.showToolbar != oldOpts.showToolbar) {
+      if (viewport != null)
+        viewport.showToolbar(opts.showToolbar);
+      menu.showToolbar.setSelected(opts.showToolbar);
+    }
+    if (opts.viewOnly != oldOpts.viewOnly) {
+      if (viewport != null)
+        viewport.updateMacMenuViewOnly();
+      menu.viewOnly.setSelected(opts.viewOnly);
+    }
+    if (opts.scalingFactor != oldOpts.scalingFactor ||
+        !opts.desktopSize.equalsIgnoreID(oldOpts.desktopSize)) {
+      if (viewport != null)
+        viewport.updateMacMenuZoom();
+      menu.updateZoom();
+    }
+    if (deleteRestore) {
+      savedState = -1;
+      savedRect = new Rectangle(-1, -1, 0, 0);
     }
     // Force a framebuffer update if we're initiating a manual or auto remote
     // desktop resize.  Otherwise, it won't occur until the mouse is moved or
     // something changes on the server (manual) or until the window is resized
     // (auto.)
-    if (firstUpdate && state() == RFBSTATE_NORMAL) {
+    if ((encodingChange || firstUpdate) && state() == RFBSTATE_NORMAL) {
       forceNonincremental = true;
       requestNewUpdate();
     }
 
+    opts.save();
     VncViewer.opts = new Options(opts);
   }
 
@@ -1711,32 +1720,143 @@ public class CConn extends CConnection implements UserPasswdGetter,
   }
 
   // EDT
+  public void zoomIn() {
+    if (opts.desktopSize.mode == Options.SIZE_AUTO ||
+        opts.scalingFactor == Options.SCALE_AUTO ||
+        opts.scalingFactor == Options.SCALE_FIXEDRATIO)
+      return;
+
+    int sf = opts.scalingFactor;
+    if (sf < 100)
+      sf = ((sf / 10) + 1) * 10;
+    else if (sf >= 100 && sf <= 200)
+      sf = ((sf / 25) + 1) * 25;
+    else
+      sf = ((sf / 50) + 1) * 50;
+    if (sf > 400) sf = 400;
+    opts.scalingFactor = sf;
+
+    savedState = -1;
+    savedRect = new Rectangle(-1, -1, 0, 0);
+    if (!viewport.lionFSSupported() || !opts.fullScreen)
+      recreateViewport();
+    else
+      reconfigureAndRepaintViewport(false);
+    savedState = -1;
+    savedRect = new Rectangle(-1, -1, 0, 0);
+  }
+
+  // EDT
+  public void zoomOut() {
+    if (opts.desktopSize.mode == Options.SIZE_AUTO ||
+        opts.scalingFactor == Options.SCALE_AUTO ||
+        opts.scalingFactor == Options.SCALE_FIXEDRATIO)
+      return;
+
+    int sf = opts.scalingFactor;
+    if (sf <= 100)
+      sf = (((sf + 9) / 10) - 1) * 10;
+    else if (sf >= 100 && sf <= 200)
+      sf = (((sf + 24) / 25) - 1) * 25;
+    else
+      sf = (((sf + 49) / 50) - 1) * 50;
+    if (sf < 10) sf = 10;
+    if (sf > 400) sf = 400;
+    opts.scalingFactor = sf;
+
+    savedState = -1;
+    savedRect = new Rectangle(-1, -1, 0, 0);
+    if (!viewport.lionFSSupported() || !opts.fullScreen)
+      recreateViewport();
+    else
+      reconfigureAndRepaintViewport(false);
+    savedState = -1;
+    savedRect = new Rectangle(-1, -1, 0, 0);
+  }
+
+  // EDT
+  public void zoom100() {
+    if (opts.desktopSize.mode == Options.SIZE_AUTO ||
+        opts.scalingFactor == Options.SCALE_AUTO ||
+        opts.scalingFactor == Options.SCALE_FIXEDRATIO)
+      return;
+
+    opts.scalingFactor = 100;
+
+    savedState = -1;
+    savedRect = new Rectangle(-1, -1, 0, 0);
+    if (!viewport.lionFSSupported() || !opts.fullScreen)
+      recreateViewport();
+    else
+      reconfigureAndRepaintViewport(false);
+    savedState = -1;
+    savedRect = new Rectangle(-1, -1, 0, 0);
+  }
+
+  // EDT
   public void toggleToolbar() {
     if (opts.fullScreen)
       return;
-    showToolbar = !showToolbar;
+    opts.showToolbar = !opts.showToolbar;
     if (viewport != null) {
       recreateViewport();
-      viewport.showToolbar(showToolbar);
+      viewport.showToolbar(opts.showToolbar);
     }
-    menu.showToolbar.setSelected(showToolbar);
+    menu.showToolbar.setSelected(opts.showToolbar);
   }
 
   // EDT
   public void toggleFullScreen() {
     opts.fullScreen = !opts.fullScreen;
     menu.fullScreen.setSelected(opts.fullScreen);
+    if (viewport != null)
+      recreateViewport(true);
+  }
+
+  // EDT
+  public void toggleViewOnly() {
+    opts.viewOnly = !opts.viewOnly;
+    menu.viewOnly.setSelected(opts.viewOnly);
     if (viewport != null) {
-      if (!viewport.lionFSSupported()) {
+      viewport.updateMacMenuViewOnly();
+      if (opts.showToolbar && !opts.fullScreen)
         recreateViewport(true);
-      } else {
-        viewport.toggleLionFS();
-      }
     }
   }
 
+  // EDT
+  public void resize(int x, int y, int w, int h) {
+    if (viewport != null) {
+      if (opts.fullScreen)
+        toggleFullScreen();
+
+      Dimension vpSize = viewport.getSize();
+
+      // If the window size is unchanged, check whether we need to force a
+      // desktop resize message to inform the server of a new screen layout
+      if (opts.desktopSize.mode == Options.SIZE_AUTO && w == vpSize.width &&
+          h == vpSize.height)
+        checkLayout = true;
+      viewport.setGeometry(x, y, w, h);
+    }
+  }
+
+  // EDT
+  public void screenshot() {
+    JFileChooser fc =
+      new JFileChooser(System.getProperty("user.home") + "/Desktop");
+    SimpleDateFormat df =
+      new SimpleDateFormat("yyyy-MM-dd_HH.mm.ss");
+    fc.setDialogTitle("Save Remote Desktop Image");
+    fc.setSelectedFile(new File("TurboVNC_Screenshot_" +
+                       df.format(Calendar.getInstance().getTime()) + ".png"));
+    int ret = fc.showSaveDialog(null);
+    if (ret == JFileChooser.APPROVE_OPTION)
+      desktop.screenshot(fc.getSelectedFile());
+  }
+
   public boolean shouldGrab() {
-    return VncViewer.osGrab() &&
+    return Utils.osGrab() &&
            (opts.grabKeyboard == Options.GRAB_ALWAYS ||
             (opts.grabKeyboard == Options.GRAB_MANUAL && isGrabSelected()) ||
             (opts.grabKeyboard == Options.GRAB_FS && opts.fullScreen));
@@ -1853,7 +1973,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
 
     if (!down) {
       Integer hashedKey = keycode;
-      if (VncViewer.OS.startsWith("mac os x")) {
+      if (Utils.isMac()) {
         if (hashedKey == KeyEvent.VK_ALT_GRAPH)
           hashedKey = KeyEvent.VK_ALT;
       } else
@@ -1872,7 +1992,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
       // message if both Shift keys are pressed and only one is released.  If
       // we receive a key release event for one Shift key and the other is in
       // the pressed keys hash, we release both of them.
-      if (VncViewer.OS.startsWith("windows")) {
+      if (Utils.isWindows()) {
         if (sym == Keysyms.SHIFT_R &&
             pressedKeys.containsValue(Keysyms.SHIFT_L)) {
           writeKeyEvent(Keysyms.SHIFT_L, down);
@@ -1953,7 +2073,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
             // Mac has no AltGr key, but the Option/Alt keys serve the same
             // purpose.  Thus, we allow RAlt to be used as AltGr and LAlt to be
             // used as a regular Alt key.
-            if (VncViewer.OS.startsWith("mac os x"))
+            if (Utils.isMac())
               keysym = Keysyms.ISO_LEVEL3_SHIFT;
             else
               keysym = Keysyms.ALT_R;
@@ -1984,7 +2104,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
           // press events for the same modifiers.
           if (pressedKeys.containsValue(Keysyms.ALT_R) &&
               pressedKeys.containsValue(Keysyms.CONTROL_L) &&
-              VncViewer.OS.startsWith("windows")) {
+              Utils.isWindows()) {
             winAltGr = true;
           } else if (ev.isControlDown()) {
             // For CTRL-<letter>, CTRL is sent separately, so just send
@@ -2012,7 +2132,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
                 key = keycode;
             }
           } else if (pressedKeys.containsValue(Keysyms.ALT_L) &&
-                     VncViewer.OS.startsWith("mac os x") && key > 127) {
+                     Utils.isMac() && key > 127) {
             // Un*x and Windows servers expect that, if Alt + an ASCII key is
             // pressed, the key event for the ASCII key will be the same as if
             // Alt had not been pressed.  On OS X, however, the Alt/Option keys
@@ -2256,7 +2376,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
     // when LAlt and RAlt are pressed simultaneously, so for the purposes of
     // matching key release events to key press events, it is necessary to
     // treat the RAlt key as an Alt key rather than an AltGr key.
-    if (VncViewer.OS.startsWith("mac os x")) {
+    if (Utils.isMac()) {
       if (hashedKey == KeyEvent.VK_ALT_GRAPH)
         hashedKey = KeyEvent.VK_ALT;
     // On Mac platforms, modifier key press/release events have a key code of 0
@@ -2365,6 +2485,14 @@ public class CConn extends CConnection implements UserPasswdGetter,
       wheelMask = buttonMask | RFB.BUTTON5_MASK;
     }
 
+    if (cp.width != desktop.scaledWidth ||
+        cp.height != desktop.scaledHeight) {
+      int sx = (desktop.scaleWidthRatio == 1.00) ?
+        ev.getX() : (int)Math.floor(ev.getX() / desktop.scaleWidthRatio);
+      int sy = (desktop.scaleHeightRatio == 1.00) ?
+        ev.getY() : (int)Math.floor(ev.getY() / desktop.scaleHeightRatio);
+      ev.translatePoint(sx - ev.getX(), sy - ev.getY());
+    }
     if (viewport != null && (viewport.dx > 0 || viewport.dy > 0)) {
       int dx = (int)Math.floor(viewport.dx / desktop.scaleWidthRatio);
       int dy = (int)Math.floor(viewport.dy / desktop.scaleHeightRatio);
@@ -2397,11 +2525,6 @@ public class CConn extends CConnection implements UserPasswdGetter,
   }
 
 
-  public Socket getSocket() {
-    return sock;
-  }
-
-
   ////////////////////////////////////////////////////////////////////
   // The following methods are called from both the RFB thread and EDT.
 
@@ -2419,8 +2542,6 @@ public class CConn extends CConnection implements UserPasswdGetter,
 
   // The following need no synchronization:
   VncViewer viewer;
-  @SuppressWarnings("checkstyle:VisibilityModifier")
-  public static UserPasswdGetter upg;
 
   // shuttingDown is set in the EDT and is only ever tested by the RFB thread
   // after the window has been destroyed.
@@ -2434,11 +2555,7 @@ public class CConn extends CConnection implements UserPasswdGetter,
   // clipboard sync issues?
   ClipboardDialog clipboardDialog;
 
-  Options opts;
-
   int buttonMask;  // EDT only
-
-  private Socket sock;
 
   protected DesktopWindow desktop;
 
@@ -2468,7 +2585,6 @@ public class CConn extends CConnection implements UserPasswdGetter,
   private HashMap<Integer, Integer> pressedKeys;
   Viewport viewport;
   Rectangle oldViewportBounds;
-  boolean showToolbar;
   boolean keyboardGrabbed;
   GraphicsDevice primaryGD;
 

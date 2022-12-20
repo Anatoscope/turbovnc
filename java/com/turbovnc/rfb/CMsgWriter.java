@@ -1,8 +1,8 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
- * Copyright 2009-2011 Pierre Ossman for Cendio AB
+/* Copyright (C) 2012, 2015, 2017-2018, 2020-2021 D. R. Commander.
+ *                                                All Rights Reserved.
  * Copyright (C) 2011, 2015 Brian P. Hinz
- * Copyright (C) 2012, 2015, 2017-2018, 2020 D. R. Commander.
- *                                           All Rights Reserved.
+ * Copyright 2009-2011 Pierre Ossman for Cendio AB
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,7 +25,6 @@ package com.turbovnc.rfb;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import com.turbovnc.rdr.*;
-import com.turbovnc.vncviewer.*;
 
 public abstract class CMsgWriter {
 
@@ -58,7 +57,7 @@ public abstract class CMsgWriter {
     int nEncodings = 0;
     int[] encodings = new int[RFB.ENCODING_MAX + 3];
     if (opts.cursorShape) {
-      if (!VncViewer.getBooleanProperty("turbovnc.forcexcursor", false))
+      if (!Utils.getBooleanProperty("turbovnc.forcexcursor", false))
         encodings[nEncodings++] = RFB.ENCODING_RICH_CURSOR;
       encodings[nEncodings++] = RFB.ENCODING_X_CURSOR;
     }
@@ -72,18 +71,18 @@ public abstract class CMsgWriter {
       encodings[nEncodings++] = RFB.ENCODING_CLIENT_REDIRECT;
 
     encodings[nEncodings++] = RFB.ENCODING_LAST_RECT;
-    if (opts.continuousUpdates) {
+    if (Params.continuousUpdates.getValue()) {
       encodings[nEncodings++] = RFB.ENCODING_CONTINUOUS_UPDATES;
       encodings[nEncodings++] = RFB.ENCODING_FENCE;
     }
-    if (VncViewer.getBooleanProperty("turbovnc.gii", true))
+    if (Utils.getBooleanProperty("turbovnc.gii", true))
       encodings[nEncodings++] = RFB.ENCODING_GII;
 
     if (Decoder.supported(preferredEncoding)) {
       encodings[nEncodings++] = preferredEncoding;
     }
 
-    if (opts.copyRect) {
+    if (Params.copyRect.getValue()) {
       encodings[nEncodings++] = RFB.ENCODING_COPYRECT;
     }
 

@@ -37,7 +37,9 @@ extern "C" {
 
 enum
 {
-   ARB_create_context_bit = 0,
+   ARB_context_flush_control_bit = 0,
+   ARB_create_context_bit,
+   ARB_create_context_no_error_bit,
    ARB_create_context_profile_bit,
    ARB_create_context_robustness_bit,
    ARB_fbconfig_float_bit,
@@ -49,6 +51,8 @@ enum
    EXT_fbconfig_packed_float_bit,
    EXT_framebuffer_sRGB_bit,
    EXT_import_context_bit,
+   EXT_swap_control_bit,
+   EXT_swap_control_tear_bit,
    EXT_texture_from_pixmap_bit,
    EXT_visual_info_bit,
    EXT_visual_rating_bit,
@@ -66,13 +70,15 @@ enum
    SGIS_multisample_bit,
    SGIX_fbconfig_bit,
    SGIX_pbuffer_bit,
-   SGIX_swap_barrier_bit,
-   SGIX_swap_group_bit,
    SGIX_visual_select_group_bit,
    SGI_make_current_read_bit,
    SGI_swap_control_bit,
    SGI_video_sync_bit,
+
+   __NUM_GLX_EXTS,
 };
+
+#define __GLX_EXT_BYTES   ((__NUM_GLX_EXTS + 7) / 8)
 
 /* From the GLX perspective, the ARB and EXT extensions are identical.  Use a
  * single bit for both.
@@ -259,6 +265,10 @@ extern void __glXCalculateUsableExtensions(struct glx_screen *psc,
                                            display_is_direct_capable,
                                            int server_minor_version);
 
+extern void __glXParseExtensionOverride(struct glx_screen *psc,
+                                        const char *override);
+extern void __IndirectGlParseExtensionOverride(struct glx_screen *psc,
+                                               const char *override);
 extern void __glXCalculateUsableGLExtensions(struct glx_context *gc,
                                              const char *server_string,
                                              int major_version,

@@ -1,6 +1,6 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
- * Copyright (C) 2011-2012, 2015, 2018 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2011-2012, 2015, 2018 D. R. Commander.  All Rights Reserved.
  * Copyright (C) 2012 Brian P. Hinz
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,16 +27,6 @@ public class ConnParams {
   static LogWriter vlog = new LogWriter("ConnParams");
 
   public ConnParams() {
-    majorVersion = 0;  minorVersion = 0;
-    width = 0;  height = 0;
-    supportsDesktopResize = false;  supportsExtendedDesktopSize = false;
-    supportsDesktopRename = false;  supportsLastRect = false;
-    supportsSetDesktopSize = false;  supportsFence = false;
-    supportsContinuousUpdates = false;
-    supportsClientRedirect = false;
-    supportsGII = false;
-    name = null;  nEncodings = 0;  encodings = null;
-    verStrPos = 0;
     screenLayout = new ScreenSet();
 
     setName("");

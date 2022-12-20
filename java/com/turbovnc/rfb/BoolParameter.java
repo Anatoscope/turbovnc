@@ -1,5 +1,5 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
- * Copyright (C) 2012, 2017-2018 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2012, 2017-2018 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,8 +45,12 @@ public class BoolParameter extends VoidParameter {
   public boolean setParam() { setParam(true);  return true; }
   public synchronized void setParam(boolean b) { value = b; }
 
+  public synchronized void reset() {
+    value = defValue;
+    reverse = false;
+  }
+
   public String getDefaultStr() { return defValue ? "1" : "0"; }
-  public synchronized String getValueStr() { return value ? "1" : "0"; }
   public String getValues() { return "0, 1"; }
   public boolean isBool() { return true; }
 

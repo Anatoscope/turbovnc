@@ -1,7 +1,7 @@
 //  Based on LowLevelHook.h from Ultr@VNC, written by Assaf Gordon
 //  (Assaf@mazleg.com), 10/9/2003 (original source lacks copyright attribution)
 //  Modifications:
-//  Copyright (C) 2012, 2020 D. R. Commander.  All Rights Reserved.
+//  Copyright (C) 2012, 2015, 2020 D. R. Commander.  All Rights Reserved.
 //
 //  The VNC system is free software; you can redistribute it and/or modify
 //  it under the terms of the GNU General Public License as published by
@@ -15,7 +15,7 @@
 //
 //  You should have received a copy of the GNU General Public License
 //  along with this program; if not, write to the Free Software
-//  Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307,
+//  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
 //  USA.
 
 // This is the source for the low-level keyboard hook, which allows
@@ -25,7 +25,9 @@
 
 #pragma once
 
-#include "vncviewer.h"
+#include <windows.h>
+#include "omnithread.h"
+#include <map>
 
 
 class LowLevelHook
@@ -34,7 +36,6 @@ class LowLevelHook
     static void Initialize(HINSTANCE);
     static void Activate(HWND);
     static bool isActive(HWND);
-    static bool isActive();
     static void Deactivate();
     static void Release();
 

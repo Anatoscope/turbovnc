@@ -1,7 +1,7 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
+/* Copyright (C) 2012-2015, 2017-2018, 2020-2022 D. R. Commander.
+ *                                               All Rights Reserved.
  * Copyright (C) 2011, 2013 Brian P. Hinz
- * Copyright (C) 2012-2015, 2017-2018, 2020 D. R. Commander.
- *                                          All Rights Reserved.
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ public class F8Menu extends JPopupMenu implements ActionListener {
     setLightWeightPopupEnabled(false);
     cc = cc_;
 
-    if (!VncViewer.noNewConn.getValue()) {
+    if (!Params.noNewConn.getValue()) {
       exit = addMenuItem("Close Connection", KeyEvent.VK_C);
       addSeparator();
     }
@@ -55,6 +55,10 @@ public class F8Menu extends JPopupMenu implements ActionListener {
       addMenuItem("Request Lossless Refresh   (Ctrl-Alt-Shift-L)",
                   KeyEvent.VK_L);
     losslessRefresh.setDisplayedMnemonicIndex(8);
+    screenshot =
+      addMenuItem("Save Remote Desktop Image...   (Ctrl-Alt-Shift-M)",
+                  KeyEvent.VK_M);
+    screenshot.setDisplayedMnemonicIndex(21);
     addSeparator();
     fullScreen = new JCheckBoxMenuItem("Full Screen   (Ctrl-Alt-Shift-F)");
     fullScreen.setMnemonic(KeyEvent.VK_F);
@@ -64,13 +68,23 @@ public class F8Menu extends JPopupMenu implements ActionListener {
     defaultSize =
       addMenuItem("Default Window Size/Position   (Ctrl-Alt-Shift-Z)",
                   KeyEvent.VK_Z);
+    zoomIn = addMenuItem("Zoom In   (Ctrl-Alt-Shift-9)", KeyEvent.VK_9);
+    zoomOut = addMenuItem("Zoom Out   (Ctrl-Alt-Shift-8)", KeyEvent.VK_8);
+    zoom100 = addMenuItem("Zoom 100%   (Ctrl-Alt-Shift-0)", KeyEvent.VK_0);
     showToolbar = new JCheckBoxMenuItem("Show Toolbar   (Ctrl-Alt-Shift-T)");
     showToolbar.setMnemonic(KeyEvent.VK_T);
-    showToolbar.setSelected(cc.showToolbar);
+    showToolbar.setSelected(cc.opts.showToolbar);
     showToolbar.addActionListener(this);
     add(showToolbar);
+    tileWindows = addMenuItem("Tile All Viewer Windows   (Ctrl-Alt-Shift-X)",
+                              KeyEvent.VK_X);
     addSeparator();
-    if (VncViewer.osGrab() && Viewport.isHelperAvailable()) {
+    viewOnly = new JCheckBoxMenuItem("View Only   (Ctrl-Alt-Shift-V)");
+    viewOnly.setMnemonic(KeyEvent.VK_V);
+    viewOnly.setSelected(cc.opts.viewOnly);
+    viewOnly.addActionListener(this);
+    add(viewOnly);
+    if (Utils.osGrab() && Helper.isAvailable()) {
       grabKeyboard =
         new JCheckBoxMenuItem("Grab Keyboard   (Ctrl-Alt-Shift-G)");
       grabKeyboard.setMnemonic(KeyEvent.VK_G);
@@ -78,17 +92,18 @@ public class F8Menu extends JPopupMenu implements ActionListener {
       grabKeyboard.addActionListener(this);
       add(grabKeyboard);
     }
-    f8 = addMenuItem("Send " + KeyEvent.getKeyText(cc.opts.menuKeyCode));
+    f8 = addMenuItem("Send " + MenuKey.getMenuKeyName(cc.opts.menuKeyCode,
+                                                      cc.opts.menuKeySym));
     KeyStroke ks = KeyStroke.getKeyStroke(cc.opts.menuKeyCode, 0);
     f8.setAccelerator(ks);
-    if (!VncViewer.restricted.getValue()) {
+    if (!Params.restricted.getValue()) {
       ctrlAltDel = addMenuItem("Send Ctrl-Alt-Del");
       ctrlEsc = addMenuItem("Send Ctrl-Esc");
     }
     addSeparator();
     clipboard = addMenuItem("Clipboard...");
     addSeparator();
-    if (!VncViewer.noNewConn.getValue()) {
+    if (!Params.noNewConn.getValue()) {
       newConn = addMenuItem("New Connection...   (Ctrl-Alt-Shift-N)",
                             KeyEvent.VK_N);
       addSeparator();
@@ -98,7 +113,7 @@ public class F8Menu extends JPopupMenu implements ActionListener {
     dismiss = addMenuItem("Dismiss Menu");
     setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
 
-    if (VncViewer.osGrab())
+    if (Utils.osGrab())
       addPopupMenuListener(new PopupMenuListener() {
         public void popupMenuCanceled(PopupMenuEvent e) {
           if (cc.isGrabSelected())
@@ -107,6 +122,8 @@ public class F8Menu extends JPopupMenu implements ActionListener {
         public void popupMenuWillBecomeInvisible(PopupMenuEvent e) {}
         public void popupMenuWillBecomeVisible(PopupMenuEvent e) {}
       });
+
+    updateZoom();
   }
 
   JMenuItem addMenuItem(String str, int mnemonic) {
@@ -123,8 +140,8 @@ public class F8Menu extends JPopupMenu implements ActionListener {
     return item;
   }
 
-  void updateMenuKey(int keyCode) {
-    f8.setText("Send " + KeyEvent.getKeyText(keyCode));
+  void updateMenuKey(int keyCode, int keySym) {
+    f8.setText("Send " + MenuKey.getMenuKeyName(keyCode, keySym));
     KeyStroke ks = KeyStroke.getKeyStroke(keyCode, 0);
     f8.setAccelerator(ks);
   }
@@ -136,18 +153,31 @@ public class F8Menu extends JPopupMenu implements ActionListener {
   }
 
   public void actionPerformed(ActionEvent ev) {
-    if (!VncViewer.noNewConn.getValue() && actionMatch(ev, exit)) {
+    if (!Params.noNewConn.getValue() && actionMatch(ev, exit)) {
       cc.close();
     } else if (actionMatch(ev, fullScreen)) {
       cc.toggleFullScreen();
     } else if (actionMatch(ev, showToolbar)) {
       cc.toggleToolbar();
-      showToolbar.setSelected(cc.showToolbar);
+      showToolbar.setSelected(cc.opts.showToolbar);
     } else if (actionMatch(ev, defaultSize)) {
       cc.sizeWindow();
       firePopupMenuCanceled();
+    } else if (actionMatch(ev, zoomIn)) {
+      cc.zoomIn();
+      firePopupMenuCanceled();
+    } else if (actionMatch(ev, zoomOut)) {
+      cc.zoomOut();
+      firePopupMenuCanceled();
+    } else if (actionMatch(ev, zoom100)) {
+      cc.zoom100();
+      firePopupMenuCanceled();
+    } else if (actionMatch(ev, tileWindows)) {
+      VncViewer.tileWindows();
     } else if (actionMatch(ev, clipboard)) {
       cc.clipboardDialog.showDialog(cc.viewport);
+    } else if (actionMatch(ev, viewOnly)) {
+      cc.toggleViewOnly();
     } else if (actionMatch(ev, grabKeyboard)) {
       if (cc.viewport != null)
         cc.viewport.grabKeyboardHelper(grabKeyboard.isSelected());
@@ -175,7 +205,9 @@ public class F8Menu extends JPopupMenu implements ActionListener {
     } else if (actionMatch(ev, losslessRefresh)) {
       cc.losslessRefresh();
       firePopupMenuCanceled();
-    } else if (!VncViewer.noNewConn.getValue() && actionMatch(ev, newConn)) {
+    } else if (actionMatch(ev, screenshot)) {
+      cc.screenshot();
+    } else if (!Params.noNewConn.getValue() && actionMatch(ev, newConn)) {
       VncViewer.newViewer(cc.viewer);
     } else if (actionMatch(ev, options)) {
       cc.options.showDialog(cc.viewport);
@@ -194,12 +226,26 @@ public class F8Menu extends JPopupMenu implements ActionListener {
     }
   }
 
+  void updateZoom() {
+    if (cc.opts.desktopSize.mode == Options.SIZE_AUTO ||
+        cc.opts.scalingFactor == Options.SCALE_AUTO ||
+        cc.opts.scalingFactor == Options.SCALE_FIXEDRATIO) {
+      zoomIn.setEnabled(false);
+      zoomOut.setEnabled(false);
+      zoom100.setEnabled(false);
+    } else {
+      zoomIn.setEnabled(true);
+      zoomOut.setEnabled(true);
+      zoom100.setEnabled(true);
+    }
+  }
+
   CConn cc;
-  JMenuItem defaultSize;
+  JMenuItem defaultSize, zoomIn, zoomOut, zoom100, tileWindows;
   JMenuItem exit, clipboard, ctrlAltDel, ctrlEsc, refresh, losslessRefresh;
-  JMenuItem newConn, options, info, profile, about, dismiss;
+  JMenuItem newConn, options, info, profile, screenshot, about, dismiss;
   static JMenuItem f8;
-  JCheckBoxMenuItem fullScreen, showToolbar, grabKeyboard;
+  JCheckBoxMenuItem fullScreen, showToolbar, viewOnly, grabKeyboard;
 
   static LogWriter vlog = new LogWriter("F8Menu");
 }

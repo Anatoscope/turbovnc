@@ -4,27 +4,27 @@
  * Routines to implement Tight Encoding
  */
 
-/*
- *  Copyright (C) 2010-2012, 2014, 2017 D. R. Commander.  All Rights Reserved.
- *  Copyright (C) 2005-2008 Sun Microsystems, Inc.  All Rights Reserved.
- *  Copyright (C) 2004 Landmark Graphics Corporation.  All Rights Reserved.
- *  Copyright (C) 2000, 2001 Const Kaplinsky.  All Rights Reserved.
- *  Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
+/* Copyright (C) 2010-2012, 2014, 2017, 2022 D. R. Commander.
+ *                                           All Rights Reserved.
+ * Copyright (C) 2005-2008 Sun Microsystems, Inc.  All Rights Reserved.
+ * Copyright (C) 2004 Landmark Graphics Corporation.  All Rights Reserved.
+ * Copyright (C) 2000, 2001 Const Kaplinsky.  All Rights Reserved.
+ * Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 #include <stdio.h>
@@ -239,15 +239,15 @@ int rfbNumCodedRectsTight(rfbClientPtr cl, int x, int y, int w, int h)
 
 int rfbTightCompressLevel(rfbClientPtr cl)
 {
-  int compressLevel = cl->tightCompressLevel;
+  int tightCompressLevel = cl->tightCompressLevel;
 
   /* If the interframe comparison engine is set to automatic, then
      interframe comparison will be enabled for compression levels 5 and
      above.  Thus, we map 5-8 internally to 0-4 so that we can get
      interframe-enabled equivalents of all of the documented TurboVNC modes.
      */
-  if (compressLevel >= 5 && compressLevel <= 8)
-    compressLevel -= 5;
+  if (tightCompressLevel >= 5 && tightCompressLevel <= 8)
+    tightCompressLevel -= 5;
 
   /* We only allow compression levels that have a demonstrable performance
      benefit.  CL 0 with JPEG reduces CPU usage for workloads that have low
@@ -259,13 +259,13 @@ int rfbTightCompressLevel(rfbClientPtr cl)
      levels increase CPU usage for these workloads without providing any
      significant reduction in bandwidth. */
   if (cl->tightQualityLevel != -1) {
-    if (compressLevel < 1) compressLevel = 1;
-    if (compressLevel > 2) compressLevel = 2;
+    if (tightCompressLevel < 1) tightCompressLevel = 1;
+    if (tightCompressLevel > 2) tightCompressLevel = 2;
   }
 
   /* With JPEG disabled, CL 2 offers no significant bandwidth savings over
      CL 1, so we don't include it. */
-  else if (compressLevel > 1) compressLevel = 1;
+  else if (tightCompressLevel > 1) tightCompressLevel = 1;
 
   /* CL 9 (which maps internally to CL 3) is included mainly for backward
      compatibility with TightVNC Compression Levels 5-9.  It should be used
@@ -274,9 +274,9 @@ int rfbTightCompressLevel(rfbClientPtr cl)
      better compression than CL 2 with JPEG and CL 1 without JPEG, and it
      uses, on average, twice as much CPU time.  Interframe comparison is
      always enabled with this mode. */
-  if (cl->tightCompressLevel == 9) compressLevel = 3;
+  if (cl->tightCompressLevel == 9) tightCompressLevel = 3;
 
-  return compressLevel;
+  return tightCompressLevel;
 }
 
 
@@ -534,9 +534,9 @@ static Bool SendRectEncodingTight(threadparam *t, int x, int y, int w, int h)
           CARD32 r = (colorValue >> 16) & 0xFF;
           CARD32 g = (colorValue >> 8) & 0xFF;
           CARD32 b = (colorValue) & 0xFF;
-          double y = (0.257 * (double)r) + (0.504 * (double)g) +
-                     (0.098 * (double)b) + 16.;
-          colorValue = (int)y + (((int)y) << 8) + (((int)y) << 16);
+          double lum = (0.257 * (double)r) + (0.504 * (double)g) +
+                       (0.098 * (double)b) + 16.;
+          colorValue = (int)lum + (((int)lum) << 8) + (((int)lum) << 16);
         }
 
         /* Get dimensions of solid-color area. */

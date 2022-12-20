@@ -1,6 +1,6 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
+/* Copyright (C) 2012-2015, 2018, 2020 D. R. Commander.  All Rights Reserved.
  * Copyright (C) 2011-2013 Brian P. Hinz
- * Copyright (C) 2012-2015, 2018 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -47,6 +47,12 @@ class ServerDialog extends Dialog implements ActionListener {
     } else {
       server = new JComboBox();
     }
+    JLabel sessionLabel =
+      new JLabel(Utils.getBooleanProperty("turbovnc.sessmgr", true) ?
+                 "host:displayNum, host::port = connect to VNC server" : "");
+    JLabel sessionLabel2 =
+      new JLabel(Utils.getBooleanProperty("turbovnc.sessmgr", true) ?
+                 "[user@]host = start TurboVNC Session Manager for host" : "");
 
     // Hack to set the left inset on editable JComboBox
     if (UIManager.getLookAndFeel().getID().equals("Windows")) {
@@ -79,7 +85,7 @@ class ServerDialog extends Dialog implements ActionListener {
     topPanel = new JPanel(new GridBagLayout());
 
     Dialog.addGBComponent(new JLabel(VncViewer.LOGO_ICON), topPanel,
-                          0, 0, 1, 1, 0, 0, 0, 1,
+                          0, 0, 1, 3, 0, 0, 0, 1,
                           GridBagConstraints.HORIZONTAL,
                           GridBagConstraints.LINE_START,
                           new Insets(5, 5, 5, 15));
@@ -93,6 +99,16 @@ class ServerDialog extends Dialog implements ActionListener {
                           GridBagConstraints.HORIZONTAL,
                           GridBagConstraints.CENTER,
                           new Insets(10, 0, 5, 20));
+    Dialog.addGBComponent(sessionLabel, topPanel,
+                          1, 1, 2, 1, 0, 0, 1, 1,
+                          GridBagConstraints.HORIZONTAL,
+                          GridBagConstraints.CENTER,
+                          new Insets(0, 0, 0, 20));
+    Dialog.addGBComponent(sessionLabel2, topPanel,
+                          1, 2, 2, 1, 0, 0, 1, 1,
+                          GridBagConstraints.HORIZONTAL,
+                          GridBagConstraints.CENTER,
+                          new Insets(0, 0, 0, 20));
 
     optionsButton = new JButton("Options...");
     aboutButton = new JButton("About...");
@@ -207,7 +223,14 @@ class ServerDialog extends Dialog implements ActionListener {
       if (opts.via != null && opts.via.indexOf(':') >= 0) {
         opts.serverName = serverName;
       } else {
-        opts.serverName = Hostname.getHost(serverName);
+        int atIndex = serverName.lastIndexOf('@');
+        if (atIndex >= 0) {
+          opts.serverName =
+            Hostname.getHost(serverName.substring(atIndex + 1));
+          opts.sshUser = serverName.substring(0, atIndex);
+        } else {
+          opts.serverName = Hostname.getHost(serverName);
+        }
         opts.port = Hostname.getPort(serverName);
       }
 

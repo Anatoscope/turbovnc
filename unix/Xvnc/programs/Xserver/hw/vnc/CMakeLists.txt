@@ -8,21 +8,26 @@ include_directories(. ../../fb ../../mi ../../os ../../randr ../../render
 add_definitions(${ServerOSDefines})
 set(PAMSRC "")
 if(TVNC_USEPAM)
+	if(NOT APPLE)
+		check_include_files(security/pam_appl.h HAVE_PAM_APPL_H)
+		if(NOT HAVE_PAM_APPL_H)
+			message(FATAL_ERROR "Could not find PAM headers")
+		endif()
+	endif()
 	add_definitions(-DXVNC_AuthPAM)
 	set(PAMSRC authpam.c)
 endif()
 
 set(NVCTRLSRC "")
 if(TVNC_NVCONTROL)
-	handle_type_puns(nvctrlext.c)
 	set(NVCTRLSRC nvctrlext.c)
 	include_directories(${CMAKE_SOURCE_DIR}/unix/libXNVCtrl ${X11_INCLUDE_DIR})
 endif()
 
 set(TVNC_USETLS_DESC
-	"Implement server-side TLS encryption using the specified library [Options: OpenSSL (default), GnuTLS, None]")
+	"Implement server-side TLS encryption using the specified library [Options: OpenSSL (default), None]")
 set(TVNC_USETLS "OpenSSL" CACHE STRING ${TVNC_USETLS_DESC})
-set_property(CACHE TVNC_USETLS PROPERTY STRINGS OpenSSL GnuTLS None)
+set_property(CACHE TVNC_USETLS PROPERTY STRINGS OpenSSL None)
 string(TOLOWER "${TVNC_USETLS}" TVNC_USETLS)
 
 if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "(OpenBSD|FreeBSD|NetBSD|DragonFly)")
@@ -49,18 +54,6 @@ if(TVNC_USETLS STREQUAL "openssl")
 	if(TVNC_DLOPENSSL)
 		add_definitions(-DDLOPENSSL)
 	endif()
-elseif(TVNC_USETLS STREQUAL "gnutls")
-	include(FindGnuTLS)
-	if(NOT GNUTLS_FOUND)
-		message(STATUS "GnuTLS not found.  Disabling TLS encryption")
-		set(TVNC_USETLS "None" CACHE STRING ${TVNC_USETLS_DESC} FORCE)
-	else()
-		set(RFBSSLSRC rfbssl_gnutls.c)
-		message(STATUS "Enabling TLS encryption using GnuTLS")
-		add_definitions(-DUSETLS ${GNUTLS_DEFINITIONS})
-		set_property(SOURCE ${RFBSSLSRC} APPEND_STRING PROPERTY COMPILE_FLAGS
-			" -I${GNUTLS_INCLUDE_DIR}")
-	endif()
 else()
 	message(STATUS "Disabling TLS encryption")
 endif()
@@ -72,10 +65,9 @@ else()
 	add_definitions(-DHAVE_STRSEP)
 endif()
 
-handle_type_puns(vncextinit.c)
-
 add_library(vnc STATIC
 	auth.c
+	base64.c
 	cmap.c
 	corre.c
 	cursor.c
@@ -85,7 +77,6 @@ add_library(vnc STATIC
 	draw.c
 	flowcontrol.c
 	hextile.c
-	httpd.c
 	init.c
 	input-xkb.c
 	kbdptr.c
@@ -103,6 +94,8 @@ add_library(vnc STATIC
 	tight.c
 	translate.c
 	vncextinit.c
+	websockets.c
+	ws_decode.c
 	zlib.c
 	zrle.c
 	zrleoutstream.c
@@ -113,6 +106,4 @@ add_library(vnc STATIC
 
 if(TVNC_USETLS STREQUAL "openssl" AND NOT TVNC_DLOPENSSL)
 	target_link_libraries(vnc ${OPENSSL_LIBRARIES})
-elseif(TVNC_USETLS STREQUAL "gnutls")
-	target_link_libraries(vnc ${GNUTLS_LIBRARIES})
 endif()

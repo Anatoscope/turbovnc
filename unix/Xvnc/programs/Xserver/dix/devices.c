@@ -1186,6 +1186,7 @@ RemoveDevice(DeviceIntPtr dev, BOOL sendevent)
             flags[tmp->id] = IsMaster(tmp) ? XIMasterRemoved : XISlaveRemoved;
             CloseDevice(tmp);
             ret = Success;
+            break;
         }
     }
 
@@ -1202,6 +1203,7 @@ RemoveDevice(DeviceIntPtr dev, BOOL sendevent)
                 prev->next = next;
 
             ret = Success;
+            break;
         }
     }
 
@@ -2268,6 +2270,9 @@ ProcChangePointerControl(ClientPtr client)
     REQUEST(xChangePointerControlReq);
     REQUEST_SIZE_MATCH(xChangePointerControlReq);
 
+    /* If the device has no PtrFeedbackPtr, the xserver has a bug */
+    BUG_RETURN_VAL (!mouse->ptrfeed, BadImplementation);
+
     ctrl = mouse->ptrfeed->ctrl;
     if ((stuff->doAccel != xTrue) && (stuff->doAccel != xFalse)) {
         client->errorValue = stuff->doAccel;
@@ -2663,7 +2668,7 @@ GetPairedDevice(DeviceIntPtr dev)
     if (!IsMaster(dev) && !IsFloating(dev))
         dev = GetMaster(dev, MASTER_ATTACHED);
 
-    return dev->spriteInfo->paired;
+    return dev->spriteInfo? dev->spriteInfo->paired: NULL;
 }
 
 /**

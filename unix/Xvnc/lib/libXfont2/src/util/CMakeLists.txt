@@ -1,3 +1,10 @@
+if(NOT HAVE_STRLCAT)
+	set(EXTRASRCS ${EXTRASRCS} strlcat.c)
+endif()
+if(NOT HAVE_STRLCPY)
+	set(EXTRASRCS ${EXTRASRCS} strlcpy.c)
+endif()
+
 add_library(util OBJECT
 	fontaccel.c
 	fontnames.c
@@ -7,4 +14,6 @@ add_library(util OBJECT
 	miscutil.c
 	patcache.c
 	private.c
-	utilbitmap.c)
+	reallocarray.c
+	utilbitmap.c
+	${EXTRASRCS})

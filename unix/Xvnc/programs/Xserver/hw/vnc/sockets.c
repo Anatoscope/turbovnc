@@ -1,5 +1,5 @@
 /*
- * sockets.c - deal with TCP & UDP sockets.
+ * sockets.c - deal with TCP sockets.
  *
  * This code should be independent of any changes in the RFB protocol.  It just
  * deals with the X server scheduling stuff, calling rfbNewClientConnection and
@@ -18,25 +18,25 @@
  * not EWOULDBLOCK.
  */
 
-/*
- *  Copyright (C) 2012-2020 D. R. Commander.  All Rights Reserved.
- *  Copyright (C) 2011 Gernot Tenchio
- *  Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
+/* Copyright (C) 2012-2020, 2022 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2011 Joel Martin
+ * Copyright (C) 2011 Gernot Tenchio
+ * Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 #ifdef HAVE_DIX_CONFIG_H
@@ -75,11 +75,6 @@ int rfbPort = 0;
 int rfbListenSock = -1;
 int rfbMaxClientConnections = DEFAULT_MAX_CONNECTIONS;
 
-int udpPort = 0;
-int udpSock = -1;
-Bool udpSockConnected = FALSE;
-static rfbSockAddr udpRemoteAddr;
-
 extern unsigned long long sendBytes;
 
 static void rfbSockNotify(int fd, int ready, void *data);
@@ -110,8 +105,8 @@ const char *sockaddr_string(rfbSockAddr *addr, char *buf, int len)
 
 
 /*
- * rfbInitSockets sets up the TCP and UDP sockets to listen for RFB
- * connections.  It does nothing if called again.
+ * rfbInitSockets sets up the TCP sockets to listen for RFB connections.
+ * It does nothing if called again.
  */
 
 void rfbInitSockets(void)
@@ -126,16 +121,12 @@ void rfbInitSockets(void)
   if (inetdSock != -1) {
     const int one = 1;
 
-    if (fcntl(inetdSock, F_SETFL, O_NONBLOCK) < 0) {
-      rfbLogPerror("fcntl");
-      exit(1);
-    }
+    if (fcntl(inetdSock, F_SETFL, O_NONBLOCK) < 0)
+      FatalError("fcntl() failed: %s", strerror(errno));
 
     if (setsockopt(inetdSock, IPPROTO_TCP, TCP_NODELAY, (char *)&one,
-                   sizeof(one)) < 0) {
-      rfbLogPerror("setsockopt");
-      exit(1);
-    }
+                   sizeof(one)) < 0)
+      FatalError("setsockopt() failed: %s", strerror(errno));
 
     SetNotifyFd(inetdSock, rfbSockNotify, X_NOTIFY_READ, NULL);
     return;
@@ -146,22 +137,10 @@ void rfbInitSockets(void)
 
   rfbLog("Listening for VNC connections on TCP port %d\n", rfbPort);
 
-  if ((rfbListenSock = ListenOnTCPPort(rfbPort)) < 0) {
-    rfbLogPerror("ListenOnTCPPort");
-    exit(1);
-  }
+  if ((rfbListenSock = ListenOnTCPPort(rfbPort)) < 0)
+    FatalError("ListenOnTCPPort() failed: %s", strerror(errno));
 
   SetNotifyFd(rfbListenSock, rfbSockNotify, X_NOTIFY_READ, NULL);
-
-  if (udpPort != 0) {
-    rfbLog("rfbInitSockets: listening for input on UDP port %d\n", udpPort);
-
-    if ((udpSock = ListenOnUDPPort(udpPort)) < 0) {
-      rfbLogPerror("ListenOnUDPPort");
-      exit(1);
-    }
-    SetNotifyFd(udpSock, rfbSockNotify, X_NOTIFY_READ, NULL);
-  }
 }
 
 
@@ -170,7 +149,6 @@ static void rfbSockNotify(int fd, int ready, void *data)
   rfbSockAddr addr;
   socklen_t addrlen = sizeof(struct sockaddr_storage);
   char addrStr[INET6_ADDRSTRLEN];
-  char buf[6];
   const int one = 1;
   int sock, numClientConnections = 0;
   rfbClientPtr cl, nextCl;
@@ -244,47 +222,13 @@ static void rfbSockNotify(int fd, int ready, void *data)
     return;
   }
 
-  if ((udpSock != -1) && fd == udpSock) {
-
-    if (recvfrom(udpSock, buf, 1, MSG_PEEK, &addr.u.sa, &addrlen) < 0) {
-
-      rfbLogPerror("rfbSockNotify: UDP: recvfrom");
-      rfbDisconnectUDPSock();
-
-    } else {
-
-      if (!udpSockConnected || (memcmp(&addr, &udpRemoteAddr, addrlen) != 0)) {
-        /* new remote end */
-        rfbLog("rfbSockNotify: UDP: got connection\n");
-
-        memcpy(&udpRemoteAddr, &addr, addrlen);
-        udpSockConnected = TRUE;
-
-        if (connect(udpSock, &addr.u.sa, addrlen) < 0) {
-          rfbLogPerror("rfbSockNotify: UDP: connect");
-          rfbDisconnectUDPSock();
-          return;
-        }
-
-        rfbNewUDPConnection(udpSock);
-      }
-
-      rfbProcessUDPInput(udpSock);
-    }
-    return;
-  }
-
   for (cl = rfbClientHead; cl; cl = nextCl) {
     nextCl = cl->next;
     if (fd == cl->sock) {
-#if USETLS
       do {
         rfbProcessClientMessage(cl);
         CHECK_CLIENT_PTR(cl, break)
-      } while (cl->sslctx && rfbssl_pending(cl) > 0);
-#else
-      rfbProcessClientMessage(cl);
-#endif
+      } while (cl->sock > 0 && webSocketsHasDataInBuffer(cl));
     }
   }
 }
@@ -337,12 +281,6 @@ void rfbUncorkSock(int sock)
 }
 
 
-void rfbDisconnectUDPSock(void)
-{
-  udpSockConnected = FALSE;
-}
-
-
 void rfbCloseSock(int sock)
 {
   close(sock);
@@ -362,6 +300,8 @@ void rfbCloseClient(rfbClientPtr cl)
     rfbssl_destroy(cl);
   }
 #endif
+  if (cl->wsctx)
+    webSocketsFree(cl);
   close(sock);
   RemoveNotifyFd(sock);
   rfbClientConnectionGone(cl);
@@ -412,21 +352,23 @@ int rfbConnect(char *host, int port)
  * occurred (errno is set to ETIMEDOUT if it timed out).
  */
 
-int ReadExact(rfbClientPtr cl, char *buf, int len)
+int ReadExactTimeout(rfbClientPtr cl, char *buf, int len, int timeout)
 {
   int n;
-  fd_set fds;
+  fd_set readfds, exceptfds;
   struct timeval tv;
   int sock = cl->sock;
 
   while (len > 0) {
     do {
+      if (cl->wsctx)
+        n = webSocketsDecode(cl, buf, len);
 #if USETLS
-      if (cl->sslctx)
+      else if (cl->sslctx)
         n = rfbssl_read(cl, buf, len);
-      else
 #endif
-      n = read(sock, buf, len);
+      else
+        n = read(sock, buf, len);
     } while (n < 0 && errno == EINTR);
 
     if (n > 0) {
@@ -448,12 +390,14 @@ int ReadExact(rfbClientPtr cl, char *buf, int len)
           continue;
       }
 #endif
-      FD_ZERO(&fds);
-      FD_SET(sock, &fds);
-      tv.tv_sec = rfbMaxClientWait / 1000;
-      tv.tv_usec = (rfbMaxClientWait % 1000) * 1000;
+      FD_ZERO(&readfds);
+      FD_SET(sock, &readfds);
+      FD_ZERO(&exceptfds);
+      FD_SET(sock, &exceptfds);
+      tv.tv_sec = timeout / 1000;
+      tv.tv_usec = (timeout % 1000) * 1000;
       do {
-        n = select(sock + 1, &fds, NULL, NULL, &tv);
+        n = select(sock + 1, &readfds, NULL, &exceptfds, &tv);
       } while (n < 0 && errno == EINTR);
       if (n < 0) {
         rfbLogPerror("ReadExact: select");
@@ -466,6 +410,12 @@ int ReadExact(rfbClientPtr cl, char *buf, int len)
     }
   }
   return 1;
+}
+
+
+int ReadExact(rfbClientPtr cl, char *buf, int len)
+{
+  return ReadExactTimeout(cl, buf, len, rfbMaxClientWait);
 }
 
 
@@ -494,6 +444,70 @@ int SkipExact(rfbClientPtr cl, int len)
 
 
 /*
+ * PeekExact peeks at an exact number of bytes from a client.  Returns 1 if
+ * those bytes have been read, 0 if the other end has closed, or -1 if an
+ * error occurred (errno is set to ETIMEDOUT if it timed out).
+ */
+
+int PeekExactTimeout(rfbClientPtr cl, char *buf, int len, int timeout)
+{
+  int n;
+  fd_set readfds, exceptfds;
+  struct timeval tv;
+  int sock = cl->sock;
+
+  while (len > 0) {
+    do {
+#if USETLS
+      if (cl->sslctx)
+        n = rfbssl_peek(cl, buf, len);
+      else
+#endif
+      n = recv(sock, buf, len, MSG_PEEK);
+    } while (n < 0 && errno == EINTR);
+
+    if (n == len) {
+
+      break;
+
+    } else if (n == 0) {
+
+      return 0;
+
+    } else {
+      if (errno != EWOULDBLOCK && errno != EAGAIN)
+        return n;
+
+#if USETLS
+      if (cl->sslctx) {
+        if (rfbssl_pending(cl))
+          continue;
+      }
+#endif
+      FD_ZERO(&readfds);
+      FD_SET(sock, &readfds);
+      FD_ZERO(&exceptfds);
+      FD_SET(sock, &exceptfds);
+      tv.tv_sec = timeout / 1000;
+      tv.tv_usec = (timeout % 1000) * 1000;
+      do {
+        n = select(sock + 1, &readfds, NULL, &exceptfds, &tv);
+      } while (n < 0 && errno == EINTR);
+      if (n < 0) {
+        rfbLogPerror("PeekExact: select");
+        return n;
+      }
+      if (n == 0) {
+        errno = ETIMEDOUT;
+        return -1;
+      }
+    }
+  }
+  return 1;
+}
+
+
+/*
  * WriteExact writes an exact number of bytes on a TCP socket.  Returns 1 if
  * those bytes have been written, or -1 if an error occurred (errno is set to
  * ETIMEDOUT if it timed out).
@@ -506,6 +520,15 @@ int WriteExact(rfbClientPtr cl, char *buf, int len)
   struct timeval tv;
   int totalTimeWaited = 0;
   int sock = cl->sock;
+
+  if (cl->wsctx) {
+    char *tmp = NULL;
+    if ((len = webSocketsEncode(cl, buf, len, &tmp)) < 0) {
+      rfbLog("WriteExact: WebSockets encode error\n");
+      return -1;
+    }
+    buf = tmp;
+  }
 
   while (len > 0) {
     do {
@@ -560,7 +583,6 @@ int WriteExact(rfbClientPtr cl, char *buf, int len)
     }
   }
 
-  gettimeofday(&cl->lastWrite, NULL);
   cl->sockOffset += bytesWritten;
 
   return 1;
@@ -640,39 +662,5 @@ int ConnectToTcpAddr(char *host, int port)
   }
 
   freeaddrinfo(addr);
-  return sock;
-}
-
-
-int ListenOnUDPPort(int port)
-{
-  rfbSockAddr addr;
-  socklen_t addrlen;
-  int sock;
-  int one = 1;
-
-  memset(&addr, 0, sizeof(addr));
-  if (family == AF_INET6) {
-    addr.u.sin6.sin6_family = family;
-    addr.u.sin6.sin6_port = htons(port);
-    addr.u.sin6.sin6_addr = interface6;
-    addrlen = sizeof(struct sockaddr_in6);
-  } else {
-    family = AF_INET;
-    addr.u.sin.sin_family = family;
-    addr.u.sin.sin_port = htons(port);
-    addr.u.sin.sin_addr.s_addr = interface.s_addr;
-    addrlen = sizeof(struct sockaddr_in);
-  }
-
-  if ((sock = socket(family, SOCK_DGRAM, 0)) < 0)
-    return -1;
-
-  if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, (char *)&one,
-                 sizeof(one)) < 0)
-    return -1;
-  if (bind(sock, &addr.u.sa, addrlen) < 0)
-    return -1;
-
   return sock;
 }

@@ -1,7 +1,9 @@
 /* -*-mode:java; c-basic-offset:2; indent-tabs-mode:nil -*- */
 /*
-Copyright (c) 2002-2016 ymnk, JCraft,Inc. All rights reserved.
-Copyright (c) 2018, D. R. Commander. All rights reserved.
+Copyright (c) 2002-2018 ymnk, JCraft,Inc. All rights reserved.
+Copyright (c) 2018 D. R. Commander. All rights reserved.
+Copyright (c) 2020 Jeremy Norris. All rights reserved.
+Copyright (c) 2020 Matthias Wiedemann. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -34,7 +36,7 @@ import java.math.BigInteger;
 
 public class KeyPairRSA extends KeyPair{
   private byte[] n_array;   // modulus   p multiply q
-  private byte[] pub_array; // e         
+  private byte[] pub_array; // e
   private byte[] prv_array; // d         e^-1 mod (p-1)(q-1)
 
   private byte[] p_array;  // prime p
@@ -82,7 +84,7 @@ public class KeyPairRSA extends KeyPair{
       keypairgen=null;
     }
     catch(Exception e){
-      //System.err.println("KeyPairRSA: "+e); 
+      //System.err.println("KeyPairRSA: "+e);
       if(e instanceof Throwable)
         throw new JSchException(e.toString(), (Throwable)e);
       throw new JSchException(e.toString());
@@ -173,6 +175,24 @@ public class KeyPairRSA extends KeyPair{
 	}
 	return false;
       }
+
+            // OPENSSH Key v1 Format
+            if (vendor == VENDOR_OPENSSH_V1) {
+                final Buffer prvKEyBuffer = new Buffer(plain);
+                int checkInt1 = prvKEyBuffer.getInt(); // uint32 checkint1
+                int checkInt2 = prvKEyBuffer.getInt(); // uint32 checkint2
+                if (checkInt1 != checkInt2) {
+                    throw new JSchException("check failed");
+                }
+                String keyType = Util.byte2str(prvKEyBuffer.getString()); // string keytype
+                n_array = prvKEyBuffer.getMPInt(); // Modulus
+                pub_array=prvKEyBuffer.getMPInt(); // Public Exponent
+                prv_array = prvKEyBuffer.getMPInt(); // Private Exponent
+                c_array= prvKEyBuffer.getMPInt(); // iqmp (q^-1 mod p)
+                p_array=prvKEyBuffer.getMPInt(); // p (Prime 1)
+                q_array=prvKEyBuffer.getMPInt(); // q (Prime 2)
+                return true;
+            }
 
       /*
         Key must be in the following ASN.1 DER encoding,
@@ -319,8 +339,12 @@ public class KeyPairRSA extends KeyPair{
   }
 
   public byte[] getSignature(byte[] data){
-    try{      
-      Class c=Class.forName((String)JSch.getConfig("signature.rsa"));
+    return getSignature(data, "ssh-rsa");
+  }
+
+  public byte[] getSignature(byte[] data, String alg){
+    try{
+      Class c=Class.forName(JSch.getConfig(alg));
       SignatureRSA rsa=
         (SignatureRSA)(c.getDeclaredConstructor().newInstance());
       rsa.init();
@@ -329,7 +353,7 @@ public class KeyPairRSA extends KeyPair{
       rsa.update(data);
       byte[] sig = rsa.sign();
       byte[][] tmp = new byte[2][];
-      tmp[0] = sshrsa;
+      tmp[0] = Util.str2byte(alg);
       tmp[1] = sig;
       return Buffer.fromBytes(tmp).buffer;
     }
@@ -339,8 +363,12 @@ public class KeyPairRSA extends KeyPair{
   }
 
   public Signature getVerifier(){
-    try{      
-      Class c=Class.forName((String)JSch.getConfig("signature.rsa"));
+    return getVerifier("ssh-rsa");
+  }
+
+  public Signature getVerifier(String alg){
+    try{
+      Class c=Class.forName(JSch.getConfig(alg));
       SignatureRSA rsa=
         (SignatureRSA)(c.getDeclaredConstructor().newInstance());
       rsa.init();
@@ -350,7 +378,7 @@ public class KeyPairRSA extends KeyPair{
         buf.getString();
         pub_array = buf.getString();
         n_array = buf.getString();
-      } 
+      }
 
       rsa.setPubKey(pub_array, n_array);
       return rsa;
@@ -399,21 +427,21 @@ public class KeyPairRSA extends KeyPair{
       ep_array=(new BigInteger(prv_array)).mod(new BigInteger(p_array).subtract(BigInteger.ONE)).toByteArray();
     }
     return ep_array;
-  } 
+  }
 
   private byte[] getEQArray(){
     if(eq_array==null){
       eq_array=(new BigInteger(prv_array)).mod(new BigInteger(q_array).subtract(BigInteger.ONE)).toByteArray();
     }
     return eq_array;
-  } 
+  }
 
   private byte[] getCArray(){
     if(c_array==null){
       c_array=(new BigInteger(q_array)).modInverse(new BigInteger(p_array)).toByteArray();
     }
     return c_array;
-  } 
+  }
 
   public void dispose(){
     super.dispose();

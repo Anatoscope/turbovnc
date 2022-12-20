@@ -27,6 +27,7 @@
 #include <dix-config.h>
 #endif
 
+#include <ctype.h>
 #include <stdint.h>
 #include <errno.h>
 #include <dlfcn.h>
@@ -35,6 +36,7 @@
 #include <GL/glxtokens.h>
 #include <GL/internal/dri_interface.h>
 #include <os.h>
+#include "extinit.h"
 #include "glxserver.h"
 #include "glxext.h"
 #include "glxcontext.h"
@@ -183,28 +185,30 @@ createModeFromConfig(const __DRIcoreExtension * core,
     config->config.yInverted = GL_TRUE;
 
 #ifdef COMPOSITE
-    /*
-     * Here we decide what fbconfigs will be duplicated for compositing.
-     * fgbconfigs marked with duplicatedForConf will be reserved for
-     * compositing visuals.
-     * It might look strange to do this decision this late when translation
-     * from a __DRIConfig is already done, but using the __DRIConfig
-     * accessor function becomes worse both with respect to code complexity
-     * and CPU usage.
-     */
-    if (duplicateForComp &&
-        (render_type_is_pbuffer_only(renderType) ||
-         config->config.rgbBits != 32 ||
-         config->config.redBits != 8 ||
-         config->config.greenBits != 8 ||
-         config->config.blueBits != 8 ||
-         config->config.visualRating != GLX_NONE ||
-         config->config.sampleBuffers != 0)) {
-        free(config);
-        return NULL;
-    }
+    if (!noCompositeExtension) {
+        /*
+        * Here we decide what fbconfigs will be duplicated for compositing.
+        * fgbconfigs marked with duplicatedForConf will be reserved for
+        * compositing visuals.
+        * It might look strange to do this decision this late when translation
+        * from a __DRIConfig is already done, but using the __DRIConfig
+        * accessor function becomes worse both with respect to code complexity
+        * and CPU usage.
+        */
+        if (duplicateForComp &&
+            (render_type_is_pbuffer_only(renderType) ||
+            config->config.rgbBits != 32 ||
+            config->config.redBits != 8 ||
+            config->config.greenBits != 8 ||
+            config->config.blueBits != 8 ||
+            config->config.visualRating != GLX_NONE ||
+            config->config.sampleBuffers != 0)) {
+            free(config);
+            return NULL;
+        }
 
-    config->config.duplicatedForComp = duplicateForComp;
+        config->config.duplicatedForComp = duplicateForComp;
+    }
 #endif
 
     return &config->config;
@@ -238,21 +242,23 @@ glxConvertConfigs(const __DRIcoreExtension * core,
     }
 
 #ifdef COMPOSITE
-    /* Duplicate fbconfigs for use with compositing visuals */
-    for (i = 0; configs[i]; i++) {
-        tail->next = createModeFromConfig(core, configs[i], GLX_TRUE_COLOR,
-                                          GL_TRUE);
-        if (tail->next == NULL)
-            continue;
+    if (!noCompositeExtension) {
+        /* Duplicate fbconfigs for use with compositing visuals */
+        for (i = 0; configs[i]; i++) {
+            tail->next = createModeFromConfig(core, configs[i], GLX_TRUE_COLOR,
+                                            GL_TRUE);
+            if (tail->next == NULL)
+                continue;
 
-	tail = tail->next;
+            tail = tail->next;
+        }
     }
 #endif
 
     return head.next;
 }
 
-#ifdef TURBOVNC
+#if defined(TURBOVNC) && !defined(TURBOVNC_STATIC_XORG_PATH)
 char *dri_driver_path = DRI_DRIVER_PATH;
 #else
 static const char dri_driver_path[] = DRI_DRIVER_PATH;
@@ -276,20 +282,59 @@ glxProbeDriver(const char *driverName,
     char filename[PATH_MAX];
     char *get_extensions_name;
     const __DRIextension **extensions = NULL;
+    const char *path = NULL;
 
-    snprintf(filename, sizeof filename, "%s/%s_dri.so",
-             dri_driver_path, driverName);
+    /* Search in LIBGL_DRIVERS_PATH if we're not setuid. */
+    if (!PrivsElevated())
+        path = getenv("LIBGL_DRIVERS_PATH");
 
-    driver = dlopen(filename, RTLD_LAZY | RTLD_LOCAL);
-    if (driver == NULL) {
+    if (!path)
+        path = dri_driver_path;
+
+    do {
+        const char *next;
+        int path_len;
+
+        next = strchr(path, ':');
+        if (next) {
+            path_len = next - path;
+            next++;
+        } else {
+            path_len = strlen(path);
+            next = NULL;
+        }
+
+        snprintf(filename, sizeof filename, "%.*s/%s_dri.so", path_len, path,
+                 driverName);
+
+        driver = dlopen(filename, RTLD_LAZY | RTLD_LOCAL);
+        if (driver != NULL)
+            break;
+
         LogMessage(X_ERROR, "AIGLX error: dlopen of %s failed (%s)\n",
                    filename, dlerror());
+
+        path = next;
+    } while (path);
+
+    if (driver == NULL) {
+        LogMessage(X_ERROR, "AIGLX error: unable to load driver %s\n",
+                  driverName);
         goto cleanup_failure;
     }
 
     if (asprintf(&get_extensions_name, "%s_%s",
                  __DRI_DRIVER_GET_EXTENSIONS, driverName) != -1) {
         const __DRIextension **(*get_extensions)(void);
+
+        for (i = 0; i < strlen(get_extensions_name); i++) {
+            /* Replace all non-alphanumeric characters with underscore,
+             * since they are not allowed in C symbol names. That fixes up
+             * symbol name for drivers with '-drm' suffix
+             */
+            if (!isalnum(get_extensions_name[i]))
+                get_extensions_name[i] = '_';
+        }
 
         get_extensions = dlsym(driver, get_extensions_name);
         if (get_extensions)

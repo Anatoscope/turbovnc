@@ -2,31 +2,32 @@
  * rfbserver.c - deal with server-side of the RFB protocol.
  */
 
-/*
- *  Copyright (C) 2009-2021 D. R. Commander.  All Rights Reserved.
- *  Copyright (C) 2021 AnatoScope SA.  All Rights Reserved.
- *  Copyright (C) 2010 University Corporation for Atmospheric Research.
- *                     All Rights Reserved.
- *  Copyright (C) 2005-2008 Sun Microsystems, Inc.  All Rights Reserved.
- *  Copyright (C) 2004 Landmark Graphics Corporation.  All Rights Reserved.
- *  Copyright (C) 2000-2006 Constantin Kaplinsky.  All Rights Reserved.
- *  Copyright (C) 2000 Tridia Corporation.  All Rights Reserved.
- *  Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
+/* Copyright (C) 2009-2022 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2021 AnatoScope SA.  All Rights Reserved.
+ * Copyright (C) 2015 Pierre Ossman for Cendio AB.  All Rights Reserved.
+ * Copyright (C) 2011 Joel Martin
+ * Copyright (C) 2010 University Corporation for Atmospheric Research.
+ *                    All Rights Reserved.
+ * Copyright (C) 2005-2008 Sun Microsystems, Inc.  All Rights Reserved.
+ * Copyright (C) 2000-2006 Constantin Kaplinsky.  All Rights Reserved.
+ * Copyright (C) 2004 Landmark Graphics Corporation.  All Rights Reserved.
+ * Copyright (C) 2000 Tridia Corporation.  All Rights Reserved.
+ * Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 #ifdef HAVE_DIX_CONFIG_H
@@ -49,8 +50,6 @@
 #include "rfbplainjson.h"
 #include "sprite.h"
 
-/* #define GII_DEBUG */
-
 char updateBuf[UPDATE_BUF_SIZE];
 int ublen;
 
@@ -68,16 +67,18 @@ rfbClientPtr pointerOwner = NULL;
 
 Bool rfbAlwaysShared = FALSE;
 Bool rfbNeverShared = FALSE;
-Bool rfbDontDisconnect = TRUE;
+Bool rfbDisconnect = FALSE;
 Bool rfbViewOnly = FALSE;  /* run server in view only mode - Ehud Karni SW */
 Bool rfbSyncCutBuffer = TRUE;
 Bool rfbCongestionControl = TRUE;
 double rfbAutoLosslessRefresh = 0.0;
+Bool rfbALRAll = FALSE;
 int rfbALRQualityLevel = -1;
 int rfbALRSubsampLevel = TVNC_1X;
 int rfbCombineRect = 100;
 int rfbICEBlockSize = 256;
 Bool rfbInterframeDebug = FALSE;
+Bool rfbGIIDebug = FALSE;
 int rfbMaxWidth = MAXSHORT, rfbMaxHeight = MAXSHORT;
 int rfbMaxClipboard = MAX_CUTTEXT_LEN;
 Bool rfbVirtualTablet = FALSE;
@@ -397,10 +398,10 @@ void InactTimerCancel(void)
  * Profiling stuff
  */
 
-static BOOL rfbProfile = FALSE;
+BOOL rfbProfile = FALSE;
 static double tUpdate = 0., tStart = -1., tElapsed, mpixels = 0.,
   idmpixels = 0.;
-static unsigned long iter = 0;
+static unsigned long updates = 0;
 unsigned long long sendBytes = 0;
 
 double gettime(void)
@@ -416,7 +417,7 @@ double gettime(void)
  * Auto Lossless Refresh
  */
 
-static Bool putImageOnly = TRUE, alrCopyRect = TRUE;
+static Bool alrCopyRect = TRUE;
 
 static CARD32 alrCallback(OsTimerPtr timer, CARD32 time, pointer arg)
 {
@@ -428,7 +429,7 @@ static CARD32 alrCallback(OsTimerPtr timer, CARD32 time, pointer arg)
   RegionRec tmpRegion;
 
   REGION_INIT(pScreen, &tmpRegion, NullBox, 0);
-  if (putImageOnly && !cl->firstUpdate)
+  if (!rfbALRAll && !cl->firstUpdate)
     REGION_INTERSECT(pScreen, &tmpRegion, &cl->alrRegion, &cl->lossyRegion);
   else
     REGION_COPY(pScreen, &tmpRegion, &cl->lossyRegion);
@@ -490,15 +491,6 @@ static CARD32 alrCallback(OsTimerPtr timer, CARD32 time, pointer arg)
   }
 
   REGION_UNINIT(pScreen, &tmpRegion);
-  return 0;
-}
-
-
-static CARD32 updateCallback(OsTimerPtr timer, CARD32 time, pointer arg)
-{
-  rfbClientPtr cl = (rfbClientPtr)arg;
-
-  rfbSendFramebufferUpdate(cl);
   return 0;
 }
 
@@ -584,13 +576,13 @@ rfbClientPtr rfbReverseConnection(char *host, int port, int id)
     return (rfbClientPtr)NULL;
 
   if (id > 0) {
-    rfbClientRec cl;
+    rfbClientRec clTemp;
     char temps[250];
     memset(temps, 0, 250);
     snprintf(temps, 250, "ID:%d", id);
     rfbLog("UltraVNC Repeater Mode II ID is %d\n", id);
-    cl.sock = sock;
-    if (WriteExact(&cl, temps, 250) < 0) {
+    clTemp.sock = sock;
+    if (WriteExact(&clTemp, temps, 250) < 0) {
       rfbLogPerror("rfbReverseConnection: write");
       rfbCloseSock(sock);
       return NULL;
@@ -683,6 +675,18 @@ static rfbClientPtr rfbNewClient(int sock)
 
   cl->zlibCompressLevel = 5;
 
+  xorg_list_init(&cl->pings);
+
+  /*
+   * Wait a few ms for the client to send WebSockets connection
+   * (TLS/SSL or plain)
+   */
+  if (!webSocketsCheck(cl)) {
+    /* Error reporting handled in webSocketsHandshake */
+    rfbCloseClient(cl);
+    return NULL;
+  }
+
   sprintf(pv, rfbProtocolVersionFormat, 3, 8);
 
   if (WriteExact(cl, pv, sz_rfbProtocolVersionMsg) < 0) {
@@ -719,7 +723,7 @@ static rfbClientPtr rfbNewClient(int sock)
   if (rfbAutoLosslessRefresh > 0.0) {
     REGION_INIT(pScreen, &cl->lossyRegion, NullBox, 0);
     if ((env = getenv("TVNC_ALRALL")) != NULL && !strcmp(env, "1"))
-      putImageOnly = FALSE;
+      rfbALRAll = TRUE;
     if ((env = getenv("TVNC_ALRCOPYRECT")) != NULL && !strcmp(env, "0"))
       alrCopyRect = FALSE;
     REGION_INIT(pScreen, &cl->alrRegion, NullBox, 0);
@@ -751,10 +755,7 @@ static rfbClientPtr rfbNewClient(int sock)
   if (rfbIdleTimeout > 0)
     IdleTimerCancel();
 
-  cl->baseRTT = cl->minRTT = (unsigned)-1;
-  for (int i = 0; i != BASE_RTT_WINDOW; ++i)
-    cl->RTT[i] = (unsigned)-1;
-  gettimeofday(&cl->lastWrite, NULL);
+  cl->baseRTT = cl->minRTT = cl->minCongestedRTT = (unsigned)-1;
 
   cl->congInfoToTrace.minRTT = (unsigned)-1;
   memset(&cl->lastCongTrace, 0, sizeof(cl->lastCongTrace));
@@ -783,6 +784,7 @@ static rfbClientPtr rfbNewClient(int sock)
 void rfbClientConnectionGone(rfbClientPtr cl)
 {
   int i;
+  rfbRTTInfo *rttInfo, *tmp;
 
   if (cl->prev)
     cl->prev->next = cl->next;
@@ -793,7 +795,6 @@ void rfbClientConnectionGone(rfbClientPtr cl)
 
   TimerFree(cl->alrTimer);
   TimerFree(cl->deferredUpdateTimer);
-  TimerFree(cl->updateTimer);
   TimerFree(cl->congestionTimer);
   TimerFree(cl->staleUpdateTimer);
   TimerFree(cl->usualUpdateTimer);
@@ -844,6 +845,11 @@ void rfbClientConnectionGone(rfbClientPtr cl)
   rfbFreeZrleData(cl);
 
   free(cl->cutText);
+
+  xorg_list_for_each_entry_safe(rttInfo, tmp, &cl->pings, entry) {
+    xorg_list_del(&rttInfo->entry);
+    free(rttInfo);
+  }
 
   InterframeOff(cl);
 
@@ -1021,7 +1027,7 @@ static void rfbProcessClientInitMessage(rfbClientPtr cl)
   if (!cl->reverseConnection &&
       (rfbNeverShared || (!rfbAlwaysShared && !ci.shared))) {
 
-    if (rfbDontDisconnect) {
+    if (!rfbDisconnect) {
       for (otherCl = rfbClientHead; otherCl; otherCl = otherCl->next) {
         if ((otherCl != cl) && (otherCl->state == RFB_NORMAL)) {
           rfbLog("-dontdisconnect: Not shared & existing client\n");
@@ -1491,7 +1497,8 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       }
 
       if (cl->enableFence && firstFence) {
-        if (!rfbSendFence(cl, rfbFenceFlagRequest, 0, NULL))
+        char type = 0;
+        if (!rfbSendFence(cl, rfbFenceFlagRequest, sizeof(type), &type))
           return;
       }
 
@@ -1502,16 +1509,16 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 
       if (cl->enableGII && firstGII) {
         /* Send GII server version message to all clients */
-        rfbGIIServerVersionMsg msg;
+        rfbGIIServerVersionMsg svmsg;
 
-        msg.type = rfbGIIServer;
+        svmsg.type = rfbGIIServer;
         /* We always send as big endian to make things easier on the Java
            viewer. */
-        msg.endianAndSubType = rfbGIIVersion | rfbGIIBE;
-        msg.length = Swap16IfLE(sz_rfbGIIServerVersionMsg - 4);
-        msg.maximumVersion = msg.minimumVersion = Swap16IfLE(1);
+        svmsg.endianAndSubType = rfbGIIVersion | rfbGIIBE;
+        svmsg.length = Swap16IfLE(sz_rfbGIIServerVersionMsg - 4);
+        svmsg.maximumVersion = svmsg.minimumVersion = Swap16IfLE(1);
 
-        if (WriteExact(cl, (char *)&msg, sz_rfbGIIServerVersionMsg) < 0) {
+        if (WriteExact(cl, (char *)&svmsg, sz_rfbGIIServerVersionMsg) < 0) {
           rfbLogPerror("rfbProcessClientNormalMessage: write");
           rfbCloseClient(cl);
           return;
@@ -1609,9 +1616,10 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
           pointerOwner = NULL;
 
         PtrAddEvent(msg.pe.buttonMask, cl->cursorX, cl->cursorY, cl);
-        seenInput = TRUE;
 
         pointerOwner = cl;
+
+        seenInput = TRUE;
       }
       return;
 
@@ -1623,7 +1631,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 
       msg.cct.length = Swap32IfLE(msg.cct.length);
       if (msg.cct.length > rfbMaxClipboard) {
-        rfbLog("Truncating %d-byte clipboard update to %d bytes.\n",
+        rfbLog("Truncating %d-byte incoming clipboard update to %d bytes.\n",
                msg.cct.length, rfbMaxClipboard);
         ignoredBytes = msg.cct.length - rfbMaxClipboard;
         msg.cct.length = rfbMaxClipboard;
@@ -1872,11 +1880,13 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 
         case rfbGIIDeviceCreate:
         {
-          int i;
+          int i, t;
           rfbDevInfo dev;
           rfbGIIDeviceCreatedMsg dcmsg;
 
           memset(&dev, 0, sizeof(dev));
+          for (t = 0; t < UVNCGII_MAX_TOUCHES; t++)
+            dev.active_touches_uvnc[t][2] = -1;
           dcmsg.deviceOrigin = 0;
 
           READ((char *)&msg.giidc.length, sz_rfbGIIDeviceCreateMsg - 2);
@@ -1891,14 +1901,14 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
           }
 
           rfbLog("GII Device Create: %s\n", msg.giidc.deviceName);
-#ifdef GII_DEBUG
-          rfbLog("    Vendor ID: %d\n", msg.giidc.vendorID);
-          rfbLog("    Product ID: %d\n", msg.giidc.productID);
-          rfbLog("    Event mask: %.8x\n", msg.giidc.canGenerate);
-          rfbLog("    Registers: %d\n", msg.giidc.numRegisters);
-          rfbLog("    Valuators: %d\n", msg.giidc.numValuators);
-          rfbLog("    Buttons: %d\n", msg.giidc.numButtons);
-#endif
+          if (rfbGIIDebug) {
+            rfbLog("    Vendor ID: %d\n", msg.giidc.vendorID);
+            rfbLog("    Product ID: %d\n", msg.giidc.productID);
+            rfbLog("    Event mask: %.8x\n", msg.giidc.canGenerate);
+            rfbLog("    Registers: %d\n", msg.giidc.numRegisters);
+            rfbLog("    Valuators: %d\n", msg.giidc.numValuators);
+            rfbLog("    Buttons: %d\n", msg.giidc.numButtons);
+          }
 
           if (msg.giidc.length != sz_rfbGIIDeviceCreateMsg - 4 +
               msg.giidc.numValuators * sz_rfbGIIValuator) {
@@ -1922,6 +1932,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 
           memcpy(&dev.name, msg.giidc.deviceName, 32);
           dev.numButtons = msg.giidc.numButtons;
+          dev.numTouches = msg.giidc.numRegisters;
           dev.numValuators = msg.giidc.numValuators;
           dev.eventMask = msg.giidc.canGenerate;
           dev.mode =
@@ -1949,17 +1960,17 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               v->siShift = Swap32((CARD32)v->siShift);
             }
 
-#ifdef GII_DEBUG
-            rfbLog("    Valuator: %s (%s)\n", v->longName, v->shortName);
-            rfbLog("        Index: %d\n", v->index);
-            rfbLog("        Range: min = %d, center = %d, max = %d\n",
-                   v->rangeMin, v->rangeCenter, v->rangeMax);
-            rfbLog("        SI unit: %d\n", v->siUnit);
-            rfbLog("        SI add: %d\n", v->siAdd);
-            rfbLog("        SI multiply: %d\n", v->siMul);
-            rfbLog("        SI divide: %d\n", v->siDiv);
-            rfbLog("        SI shift: %d\n", v->siShift);
-#endif
+            if (rfbGIIDebug) {
+              rfbLog("    Valuator: %s (%s)\n", v->longName, v->shortName);
+              rfbLog("        Index: %d\n", v->index);
+              rfbLog("        Range: min = %d, center = %d, max = %d\n",
+                     v->rangeMin, v->rangeCenter, v->rangeMax);
+              rfbLog("        SI unit: %d\n", v->siUnit);
+              rfbLog("        SI add: %d\n", v->siAdd);
+              rfbLog("        SI multiply: %d\n", v->siMul);
+              rfbLog("        SI divide: %d\n", v->siDiv);
+              rfbLog("        SI shift: %d\n", v->siShift);
+            }
           }
 
           for (i = 0; i < cl->numDevices; i++) {
@@ -1969,6 +1980,67 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               dcmsg.deviceOrigin = Swap32IfLE(i + 1);
               goto sendMessage;
             }
+          }
+
+          /* The UltraVNC Viewer sends multitouch events by way of the GII RFB
+             extension, but it uses a different GII valuator event format than
+             that of the TurboVNC Viewer.  Thus, we create fake valuators
+             similar to those used by the TurboVNC Viewer, and we map the
+             UltraVNC Viewer's multitouch GII valuator events to those fake
+             valuators.  "TCVNC-MT" is the stock UltraVNC Viewer, and
+             "HMI_Emb_VNC_Viewer" is the SINUMERIK VNC client, which is based
+             on UltraVNC. */
+          if ((!strcmp(dev.name, "TCVNC-MT") &&
+               !strcmp((char *)dev.valuators[0].longName,
+                       "TCVNC Multitouch Device") &&
+               !strcmp((char *)dev.valuators[0].shortName, "TMD") &&
+               msg.giidc.vendorID == 0x0908 && dev.productID == 0x000b) ||
+              (!strcmp(dev.name, "HMI_Emb_VNC_Viewer") &&
+               !strcmp((char *)dev.valuators[0].longName,
+                       "HMI Embedded VNC Viewer Redirection") &&
+               !strcmp((char *)dev.valuators[0].shortName, "EmbV") &&
+               msg.giidc.vendorID == 0x0908 && dev.productID == 0x00737772)) {
+            dev.multitouch_uvnc = TRUE;
+            dev.numTouches = dev.numButtons;
+            if (dev.numTouches > UVNCGII_MAX_TOUCHES) {
+              rfbLog("WARNING: Requested number of simultaneous touches (%d) exceeds maximum of 10.\n",
+                     dev.numTouches);
+              rfbLog("    Additional touches will be ignored.\n");
+            }
+            dev.numButtons = 7;
+            dev.numValuators = 4;
+            dev.mode = Absolute;
+            dev.productID = rfbGIIDevTypeTouch;
+
+            dev.valuators[0].index = 0;
+            snprintf((char *)dev.valuators[0].longName, 75,
+                     "Abs MT Position X");
+            snprintf((char *)dev.valuators[0].shortName, 5, "0");
+            dev.valuators[0].rangeMax = 65535;
+            dev.valuators[0].rangeCenter = dev.valuators[0].rangeMax / 2;
+            dev.valuators[0].siUnit = rfbGIIUnitLength;
+
+            dev.valuators[1].index = 1;
+            snprintf((char *)dev.valuators[1].longName, 75,
+                     "Abs MT Position Y");
+            snprintf((char *)dev.valuators[1].shortName, 5, "1");
+            dev.valuators[1].rangeMax = 65535;
+            dev.valuators[1].rangeCenter = dev.valuators[1].rangeMax / 2;
+            dev.valuators[1].siUnit = rfbGIIUnitLength;
+
+            dev.valuators[2].index = 2;
+            snprintf((char *)dev.valuators[2].longName, 75,
+                     "__TURBOVNC FAKE TOUCH ID__");
+            snprintf((char *)dev.valuators[2].shortName, 5, "TFTI");
+            dev.valuators[2].rangeMax = INT_MAX;
+            dev.valuators[2].rangeCenter = dev.valuators[2].rangeMax / 2;
+
+            dev.valuators[3].index = 3;
+            snprintf((char *)dev.valuators[3].longName, 75,
+                     "__TURBOVNC FAKE TOUCH TYPE__");
+            snprintf((char *)dev.valuators[3].shortName, 5, "TFTT");
+            dev.valuators[3].rangeMax = 5;
+            dev.valuators[3].rangeCenter = dev.valuators[3].rangeMax / 2;
           }
 
           if (rfbVirtualTablet || AddExtInputDevice(&dev)) {
@@ -2073,12 +2145,12 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
                   rfbCloseClient(cl);
                   return;
                 }
-#ifdef GII_DEBUG
-                rfbLog("Device %d button %d %s\n", b.deviceOrigin,
-                       b.buttonNumber,
-                       eventType == rfbGIIButtonPress ? "PRESS" : "release");
-                fflush(stderr);
-#endif
+                if (rfbGIIDebug) {
+                  rfbLog("Device %d button %d %s\n", b.deviceOrigin,
+                         b.buttonNumber,
+                         eventType == rfbGIIButtonPress ? "PRESS" : "release");
+                  fflush(stderr);
+                }
                 ExtInputAddEvent(dev, eventType == rfbGIIButtonPress ?
                                  ButtonPress : ButtonRelease, b.buttonNumber);
                 seenInput = TRUE;
@@ -2089,7 +2161,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
               case rfbGIIValuatorAbsolute:
               {
                 rfbGIIValuatorEvent v;
-                int i;
+                int i, t;
                 rfbDevInfo *dev;
 
                 READ((char *)&v.pad, sz_rfbGIIValuatorEvent - 2);
@@ -2117,6 +2189,11 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
                   return;
                 }
                 dev = &cl->devices[v.deviceOrigin - 1];
+                /* The UltraVNC Viewer sends absolute valuator events but
+                   labels them as relative valuator events. */
+                if (dev->multitouch_uvnc &&
+                    eventType == rfbGIIValuatorRelative)
+                  eventType = rfbGIIValuatorAbsolute;
                 if ((eventType == rfbGIIValuatorRelative &&
                      (dev->eventMask & rfbGIIValuatorRelativeMask) == 0) ||
                     (eventType == rfbGIIValuatorAbsolute &&
@@ -2126,29 +2203,195 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
                   rfbCloseClient(cl);
                   return;
                 }
+
+                /* Parse the UltraVNC Viewer's multitouch GII valuator event
+                   format */
+                if (dev->multitouch_uvnc) {
+                  CARD32 numTouchEvents = v.first, numValues = v.count;
+                  static const char *touch_type_string[6] = {
+                    "TouchBegin", "TouchUpdate", "TouchEnd",
+                    "TouchBegin (pointer emulation)",
+                    "TouchUpdate (pointer emulation)",
+                    "TouchEnd (pointer emulation)"
+                  };
+
+                  if (rfbGIIDebug)
+                    rfbLog("Device %d count=%d:\n", v.deviceOrigin,
+                           numTouchEvents);
+                  for (i = 0; i < numTouchEvents; i++) {
+                    CARD32 formatFlags, expectedValues = 1, dummy;
+                    CARD64 dummy64;
+
+                    READ((char *)&formatFlags, sizeof(CARD32));
+                    if (littleEndian != *(const char *)&rfbEndianTest)
+                      formatFlags = Swap32(formatFlags);
+                    if (rfbGIIDebug)
+                      rfbLog("  %d: format flags = 0x%.8x\n", i, formatFlags);
+                    if ((formatFlags & 0xFF) == 0x11) expectedValues += 2;
+                    if (formatFlags & UVNCGII_S1_FLAG) expectedValues++;
+                    if (formatFlags & UVNCGII_PR_FLAG) expectedValues++;
+                    if (formatFlags & UVNCGII_TI_FLAG) expectedValues++;
+                    if (formatFlags & UVNCGII_HC_FLAG) expectedValues += 2;
+                    /* Some implementations of the UltraVNC Viewer hard-code
+                       rfbGIIValuatorEvent.count to
+                       6 * rfbGIIValuatorEvent.first regardless of the number
+                       of DWORDs actually sent, so we have to be lenient here.
+                       As long as the viewer sends the number of DWORDs
+                       specified by the format flags, everything should still
+                       work. */
+                    if (expectedValues * numTouchEvents != numValues) {
+                      static int alreadyWarned = 0;
+                      if (!alreadyWarned) {
+                        rfbLog("WARNING: Malformed GII valuator event\n");
+                        rfbLog("    (Count should be %d, not %d.)\n",
+                               expectedValues * numTouchEvents, numValues);
+                        alreadyWarned = 1;
+                      }
+                    }
+
+                    if ((formatFlags & 0xFF) == 0x1F) {
+                      /* Empty multitouch event received.  End all active
+                         touches. */
+                      for (t = 0; t < numValues - 1; t++)
+                        READ((char *)&dummy, sizeof(CARD32));
+                      for (t = 0; t < UVNCGII_MAX_TOUCHES; t++) {
+                        if (dev->active_touches_uvnc[t][2] != -1) {
+                          dev->valFirst = 0;
+                          dev->valCount = 4;
+                          dev->values[0] =
+                            dev->active_touches_uvnc[t][0];  /* X */
+                          dev->values[1] =
+                            dev->active_touches_uvnc[t][1];  /* Y */
+                          dev->values[2] =
+                            dev->active_touches_uvnc[t][2];  /* ID */
+                          if (dev->active_touches_uvnc[t][3] >=
+                              rfbGIITouchBeginEP)
+                            dev->values[3] = rfbGIITouchEndEP;  /* Type */
+                          else
+                            dev->values[3] = rfbGIITouchEnd;
+                          if (rfbGIIDebug) {
+                            rfbLog("  %d: touch ID = %d\n", i, dev->values[2]);
+                            rfbLog("  %d: touch position = %d, %d\n", i,
+                                   dev->values[0], dev->values[1]);
+                            rfbLog("  %d: touch type = %d [%s]\n", i,
+                                   dev->values[3],
+                                   dev->values[3] >= 0 && dev->values[3] < 6 ?
+                                   touch_type_string[dev->values[3]] : "");
+                          }
+                          ExtInputAddEvent(dev, MotionNotify, 0);
+                          dev->active_touches_uvnc[t][2] = -1;
+                        }
+                      }
+                      continue;
+                    } else if ((formatFlags & 0xFF) != 0x11) {
+                      rfbLog("ERROR: Unsupported multitouch event format\n");
+                      rfbCloseClient(cl);
+                      return;
+                    }
+
+                    READ((char *)&dev->values[2], sizeof(int));  /* ID */
+                    if (littleEndian != *(const char *)&rfbEndianTest)
+                      dev->values[2] = Swap32(dev->values[2]);
+                    if (rfbGIIDebug)
+                      rfbLog("  %d: touch ID = %d\n", i, dev->values[2]);
+
+                    if (formatFlags & 0x10) {
+                      CARD32 touchPos;
+
+                      READ((char *)&touchPos, sizeof(CARD32));
+                      if (littleEndian != *(const char *)&rfbEndianTest)
+                        touchPos = Swap32(touchPos);
+                      dev->values[0] = touchPos >> 16;  /* X */
+                      dev->values[0] =
+                        (int)round((double)dev->values[0] * 65535.0 /
+                                   (double)rfbFB.width);
+                      dev->values[1] = touchPos & 0xFFFF;  /* Y */
+                      dev->values[1] =
+                        (int)round((double)dev->values[1] * 65535.0 /
+                                   (double)rfbFB.height);
+                      if (rfbGIIDebug)
+                        rfbLog("  %d: touch position = %d, %d\n", i,
+                               dev->values[0], dev->values[1]);
+                    }
+
+                    /* Ignore touch area */
+                    if (formatFlags & UVNCGII_S1_FLAG)
+                      READ((char *)&dummy, sizeof(CARD32));
+                    /* Ignore touch pressure */
+                    if (formatFlags & UVNCGII_PR_FLAG)
+                      READ((char *)&dummy, sizeof(CARD32));
+                    /* Ignore timestamp */
+                    if (formatFlags & UVNCGII_TI_FLAG)
+                      READ((char *)&dummy, sizeof(CARD32));
+                    /* Ignore high-resolution timestamp */
+                    if (formatFlags & UVNCGII_HC_FLAG)
+                      READ((char *)&dummy64, sizeof(CARD64));
+
+                    dev->values[3] = -1;
+                    for (t = 0; t < UVNCGII_MAX_TOUCHES; t++) {
+                      if (dev->active_touches_uvnc[t][2] == dev->values[2]) {
+                        if (formatFlags & UVNCGII_PF_FLAG) {
+                          if (formatFlags & UVNCGII_IF_FLAG)
+                            dev->values[3] = rfbGIITouchUpdateEP;
+                          else
+                            dev->values[3] = rfbGIITouchUpdate;
+                          memcpy(dev->active_touches_uvnc[t], dev->values,
+                                 4 * sizeof(int));
+                        } else {
+                          if (formatFlags & UVNCGII_IF_FLAG)
+                            dev->values[3] = rfbGIITouchEndEP;
+                          else
+                            dev->values[3] = rfbGIITouchEnd;
+                          dev->active_touches_uvnc[t][2] = -1;
+                        }
+                        break;
+                      }
+                    }
+                    if (dev->values[3] == -1) {
+                      if (formatFlags & UVNCGII_IF_FLAG)
+                        dev->values[3] = rfbGIITouchBeginEP;
+                      else
+                        dev->values[3] = rfbGIITouchBegin;
+                      for (t = 0; t < UVNCGII_MAX_TOUCHES; t++) {
+                        if (dev->active_touches_uvnc[t][2] == -1) {
+                          memcpy(dev->active_touches_uvnc[t], dev->values,
+                                 4 * sizeof(int));
+                          break;
+                        }
+                      }
+                    }
+                    if (rfbGIIDebug)
+                      rfbLog("  %d: touch type = %d [%s]\n", i, dev->values[3],
+                             dev->values[3] >= 0 && dev->values[3] < 6 ?
+                             touch_type_string[dev->values[3]] : "");
+
+                    dev->valFirst = 0;
+                    dev->valCount = 4;
+                    ExtInputAddEvent(dev, MotionNotify, 0);
+                  }
+                  break;
+                }
+
                 if (v.first + v.count > dev->numValuators) {
                   rfbLog("ERROR: GII valuator event for device %d exceeds valuator count (%d)\n",
                          v.deviceOrigin, dev->numValuators);
                   rfbCloseClient(cl);
                   return;
                 }
-#ifdef GII_DEBUG
-                rfbLog("Device %d Valuator %s first=%d count=%d:\n",
-                       v.deviceOrigin,
-                       eventType == rfbGIIValuatorRelative ? "rel" : "ABS",
-                       v.first, v.count);
-#endif
+                if (rfbGIIDebug)
+                  rfbLog("Device %d Valuator %s first=%d count=%d:\n",
+                         v.deviceOrigin,
+                         eventType == rfbGIIValuatorRelative ? "rel" : "ABS",
+                         v.first, v.count);
                 for (i = v.first; i < v.first + v.count; i++) {
                   READ((char *)&dev->values[i], sizeof(int));
                   if (littleEndian != *(const char *)&rfbEndianTest)
                     dev->values[i] = Swap32((CARD32)dev->values[i]);
-#ifdef GII_DEBUG
-                  fprintf(stderr, "v[%d]=%d ", i, dev->values[i]);
-#endif
+                  if (rfbGIIDebug)
+                    fprintf(stderr, "v[%d]=%d ", i, dev->values[i]);
                 }
-#ifdef GII_DEBUG
-                fprintf(stderr, "\n");
-#endif
+                if (rfbGIIDebug)
+                  fprintf(stderr, "\n");
                 if (v.count > 0) {
                   dev->valFirst = v.first;
                   dev->valCount = v.count;
@@ -2340,7 +2583,7 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
   Bool redundantUpdate = FALSE;
   double tUpdateStart = 0.0;
 
-  TimerCancel(cl->updateTimer);
+  rfbUpdatePosition(cl, cl->sockOffset);
 
   /*
    * We're in the middle of processing a command that's supposed to be
@@ -2361,7 +2604,6 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
      bit if things are congested. */
 
   if (rfbCongestionControl && rfbIsCongested(cl) && !cl->inALR) {
-    cl->updateTimer = TimerSet(cl->updateTimer, 0, 50, updateCallback, cl);
     /* if the quality wasn't set after init */
     if (cl->staleFBUThresholdMs) {
       if (cl->firstQualityAdaptAllowed) {
@@ -2882,22 +3124,22 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
   if (rfbProfile) {
     tUpdate += gettime() - tUpdateStart;
     tElapsed = gettime() - tStart;
-    iter++;
+    updates++;
 
     if (tElapsed > 5.) {
       rfbLog("%.2f updates/sec,  %.2f Mpixels/sec,  %.3f Mbits/sec\n",
-             (double)iter / tElapsed, mpixels / tElapsed,
+             (double)updates / tElapsed, mpixels / tElapsed,
              (double)sendBytes / 125000. / tElapsed);
       rfbLog("Time/update:  Encode = %.3f ms,  Other = %.3f ms\n",
-             tUpdate / (double)iter * 1000.,
-             (tElapsed - tUpdate) / (double)iter * 1000.);
+             tUpdate / (double)updates * 1000.,
+             (tElapsed - tUpdate) / (double)updates * 1000.);
       if (cl->compareFB) {
         rfbLog("Identical Mpixels/sec:  %.2f  (%f %%)\n",
                (double)idmpixels / tElapsed, idmpixels / mpixels * 100.0);
         idmpixels = 0.;
       }
       tUpdate = 0.;
-      iter = 0;
+      updates = 0;
       mpixels = 0.;
       sendBytes = 0;
       tStart = gettime();
@@ -2905,11 +3147,11 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
   }
 
   if (rfbAutoLosslessRefresh > 0.0 && !redundantUpdate && !cl->inALR &&
-      (!putImageOnly || REGION_NOTEMPTY(pScreen, &cl->alrEligibleRegion) ||
+      (rfbALRAll || REGION_NOTEMPTY(pScreen, &cl->alrEligibleRegion) ||
        cl->firstUpdate)) {
     CARD32 timeout = (CARD32)(rfbAutoLosslessRefresh * 1000.0);
 
-    if (putImageOnly)
+    if (!rfbALRAll)
       REGION_UNION(pScreen, &cl->alrRegion, &cl->alrRegion,
                    &cl->alrEligibleRegion);
     REGION_EMPTY(pScreen, &cl->alrEligibleRegion);
@@ -2923,6 +3165,7 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
   }
 
   rfbUncorkSock(cl->sock);
+  rfbUpdatePosition(cl, cl->sockOffset);
   return TRUE;
 
   abort:
@@ -3290,6 +3533,12 @@ void rfbSendServerCutText(char *str, int len)
   if (rfbViewOnly || rfbAuthDisableCBSend || !str || len <= 0)
     return;
 
+  if (len > rfbMaxClipboard) {
+    rfbLog("Truncating %d-byte outgoing clipboard update to %d bytes.\n", len,
+           rfbMaxClipboard);
+    len = rfbMaxClipboard;
+  }
+
   for (cl = rfbClientHead; cl; cl = nextCl) {
     nextCl = cl->next;
     if (cl->state != RFB_NORMAL || cl->viewOnly)
@@ -3371,9 +3620,6 @@ Bool rfbSendExtDesktopSize(rfbClientPtr cl)
 
   if (!cl->enableExtDesktopSize)
     return TRUE;
-  /* Error messages can only be sent with the EDS extension */
-  if (!cl->enableExtDesktopSize && cl->result != rfbEDSResultSuccess)
-    return TRUE;
 
   memset(&fu, 0, sz_rfbFramebufferUpdateMsg);
   fu.type = rfbFramebufferUpdate;
@@ -3447,70 +3693,4 @@ Bool rfbSendExtDesktopSize(rfbClientPtr cl)
   }
 
   return TRUE;
-}
-
-
-/*****************************************************************************
- *
- * UDP can be used for keyboard and pointer events when the underlying
- * network is highly reliable.  This is really here to support ORL's
- * videotile, whose TCP implementation doesn't like sending lots of small
- * packets (such as 100s of pen readings per second!).
- */
-
-void rfbNewUDPConnection(int sock)
-{
-  if (write(sock, &ptrAcceleration, 1) < 0)
-    rfbLogPerror("rfbNewUDPConnection: write");
-}
-
-/*
- * Because UDP is a message based service, we can't read the first byte and
- * then the rest of the packet separately like we do with TCP.  We will always
- * get a whole packet delivered in one go, so we ask read() for the maximum
- * number of bytes we can possibly get.
- */
-
-void rfbProcessUDPInput(int sock)
-{
-  int n;
-  rfbClientToServerMsg msg;
-
-  if ((n = read(sock, (char *)&msg, sizeof(msg))) <= 0) {
-    if (n < 0)
-      rfbLogPerror("rfbProcessUDPInput: read");
-    rfbDisconnectUDPSock();
-    return;
-  }
-
-  switch (msg.type) {
-    case rfbKeyEvent:
-      if (n != sz_rfbKeyEventMsg) {
-        rfbLog("rfbProcessUDPInput: key event incorrect length\n");
-        rfbDisconnectUDPSock();
-        return;
-      }
-      if (!rfbViewOnly) {
-        KeyEvent((KeySym)Swap32IfLE(msg.ke.key), msg.ke.down);
-        seenInput = TRUE;
-      }
-      break;
-
-    case rfbPointerEvent:
-      if (n != sz_rfbPointerEventMsg) {
-        rfbLog("rfbProcessUDPInput: ptr event incorrect length\n");
-        rfbDisconnectUDPSock();
-        return;
-      }
-      if (!rfbViewOnly) {
-        PtrAddEvent(msg.pe.buttonMask, Swap16IfLE(msg.pe.x),
-                    Swap16IfLE(msg.pe.y), 0);
-        seenInput = TRUE;
-      }
-      break;
-
-    default:
-      rfbLog("rfbProcessUDPInput: unknown message type %d\n", msg.type);
-      rfbDisconnectUDPSock();
-  }
 }

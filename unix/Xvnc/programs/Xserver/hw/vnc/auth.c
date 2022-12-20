@@ -4,27 +4,26 @@
  * This file implements authentication when setting up an RFB connection.
  */
 
-/*
- *  Copyright (C) 2010, 2012-2020 D. R. Commander.  All Rights Reserved.
- *  Copyright (C) 2010 University Corporation for Atmospheric Research.
- *                     All Rights Reserved.
- *  Copyright (C) 2003-2006 Constantin Kaplinsky.  All Rights Reserved.
- *  Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
+/* Copyright (C) 2010, 2012-2021 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2010 University Corporation for Atmospheric Research.
+ *                    All Rights Reserved.
+ * Copyright (C) 2003-2006 Constantin Kaplinsky.  All Rights Reserved.
+ * Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 #ifndef _POSIX_PTHREAD_SEMANTICS
@@ -65,7 +64,6 @@ Bool rfbAuthDisableRemoteResize = FALSE;
 Bool rfbAuthDisableRevCon = FALSE;
 Bool rfbAuthDisableCBSend = FALSE;
 Bool rfbAuthDisableCBRecv = FALSE;
-Bool rfbAuthDisableHTTP = FALSE;
 Bool rfbAuthDisableX11TCP = FALSE;
 
 static int nSecTypesEnabled = 0;
@@ -174,7 +172,7 @@ static void AuthPAMUserPwdRspFunc(rfbClientPtr cl)
 
   pwdLen = Swap32IfLE(pwdLen);
   if ((userLen > MAX_USER_LEN) || (pwdLen > MAX_PWD_LEN)) {
-    rfbLogPerror("AuthPAMUserPwdRspFunc: excessively large user name or password in response");
+    rfbLogPerror("AuthPAMUserPwdRspFunc: excessively large username or password in response");
     rfbCloseClient(cl);
     return;
   }
@@ -182,7 +180,7 @@ static void AuthPAMUserPwdRspFunc(rfbClientPtr cl)
   n = ReadExact(cl, userBuf, userLen);
   if (n <= 0) {
     if (n != 0)
-      rfbLogPerror("AuthPAMUserPwdRspFunc: error reading user name");
+      rfbLogPerror("AuthPAMUserPwdRspFunc: error reading username");
     rfbCloseClient(cl);
     return;
   }
@@ -574,11 +572,6 @@ static void ReadConfigFile(void)
       continue;
     }
 
-    if (!strcmp(buf2, "no-httpd")) {
-      rfbAuthDisableHTTP = TRUE;
-      continue;
-    }
-
     if (!strcmp(buf2, "no-x11-tcp-connections")) {
       rfbAuthDisableX11TCP = TRUE;
       continue;
@@ -821,9 +814,9 @@ void rfbAuthNewClient(rfbClientPtr cl)
   RFBSecTypeData **p;
   RFBSecTypeData *r;
 
-  if (rfbAuthIsBlocked()) {
+  if (rfbAuthIsBlocked(cl->host)) {
     rfbLog("Too many authentication failures - client rejected\n");
-    rfbClientConnFailed(cl, "Too many authentication failures.  Connections temporarily blocked");
+    rfbClientConnFailed(cl, "Too many authentication failures.  Client temporarily blocked");
     return;
   }
 
@@ -903,6 +896,12 @@ static void rfbSendSecurityTypeList(rfbClientPtr cl)
     for (s = secTypes; s->name != NULL; s++) {
       if (((s->preference != -1) && (i != s->preference)) || !s->enabled)
         continue;
+
+      if (cl->reverseConnection && !strncmp(s->name, "x509", 4)) {
+        rfbLog("Security type \'%s\' disabled for reverse connections\n",
+               s->name);
+        continue;
+      }
 
       r = s->rfbSecType;
 
@@ -1055,6 +1054,9 @@ void rfbVeNCryptAuthenticate(rfbClientPtr cl)
     for (s = secTypes; s->name != NULL; s++) {
       if (((s->preference != -1) && (i != s->preference)) || !s->enabled ||
           s->subType == -1)
+        continue;
+
+      if (cl->reverseConnection && !strncmp(s->name, "x509", 4))
         continue;
 
       if (count > MAX_VENCRYPT_SUBTYPES)
@@ -1263,60 +1265,59 @@ static void rfbSendAuthCaps(rfbClientPtr cl)
   rfbAuthenticationCapsMsg caps;
   rfbCapabilityInfo caplist[MAX_AUTH_CAPS];
   int count = 0;
-  int j;
+  int i, j;
   SecTypeData *s;
   AuthCapData *c;
   rfbCapabilityInfo *pcap;
   char tempstr[9];
 
-  if (!cl->reverseConnection) {
-    int i;
+  /*
+   * When no preference order was set using "permitted-security-types",
+   * the default value of preferenceLimit (1) will cause us to execute
+   * the outer loop once.  In this case, the s->preference members will
+   * all be the default value (-1), and we skip the order testing.
+   */
+  for (i = 0; i < preferenceLimit; i++) {
+    for (s = secTypes; s->name != NULL; s++) {
+      if (((s->preference != -1) && (i != s->preference)) || !s->enabled)
+        continue;
 
-    /*
-     * When no preference order was set using "permitted-security-types",
-     * the default value of preferenceLimit (1) will cause us to execute
-     * the outer loop once.  In this case, the s->preference members will
-     * all be the default value (-1), and we skip the order testing.
-     */
-    for (i = 0; i < preferenceLimit; i++) {
-      for (s = secTypes; s->name != NULL; s++) {
-        if (((s->preference != -1) && (i != s->preference)) || !s->enabled)
-          continue;
+      if (cl->reverseConnection && !strncmp(s->name, "x509", 4))
+        continue;
 
-        c = s->authCap;
+      c = s->authCap;
 
-        if (count > MAX_AUTH_CAPS)
-          FatalError("rfbSendAuthCaps: # enabled security types > MAX_AUTH_CAPS");
+      if (count > MAX_AUTH_CAPS)
+        FatalError("rfbSendAuthCaps: # enabled security types > MAX_AUTH_CAPS");
 
-        /*
-         * Check to see if we have already advertised this auth cap.
-         * VNC password and OTP both use the VNC authentication cap.
-         */
-        for (j = 0; j < count; j++) {
-          if (cl->authCaps[j] == c->authType)
-            break;
-        }
-
-        if (j < count)
-          continue;
-
-        pcap = &caplist[count];
-        pcap->code = Swap32IfLE(c->authType);
-        memcpy(pcap->vendorSignature, c->vendorSignature,
-               sz_rfbCapabilityInfoVendor);
-        memcpy(pcap->nameSignature, c->nameSignature,
-               sz_rfbCapabilityInfoName);
-        cl->authCaps[count] = c->authType;
-        strncpy(tempstr, (char *)pcap->nameSignature, 8);
-        tempstr[8] = 0;
-        rfbLog("Advertising Tight auth cap '%s'\n", tempstr);
-        count++;
+      /*
+       * Check to see if we have already advertised this auth cap.
+       * VNC password and OTP both use the VNC authentication cap.
+       */
+      for (j = 0; j < count; j++) {
+        if (cl->authCaps[j] == c->authType)
+          break;
       }
-    }
 
-    if (count == 0)
-      FatalError("rfbSendAuthCaps: authentication required but no security types enabled! This should not have happened!");
+      if (j < count)
+        continue;
+
+      pcap = &caplist[count];
+      pcap->code = Swap32IfLE(c->authType);
+      memcpy(pcap->vendorSignature, c->vendorSignature,
+             sz_rfbCapabilityInfoVendor);
+      memcpy(pcap->nameSignature, c->nameSignature,
+             sz_rfbCapabilityInfoName);
+      cl->authCaps[count] = c->authType;
+      strncpy(tempstr, (char *)pcap->nameSignature, 8);
+      tempstr[8] = 0;
+      rfbLog("Advertising Tight auth cap '%s'\n", tempstr);
+      count++;
+    }
   }
+
+  if (count == 0)
+    FatalError("rfbSendAuthCaps: authentication required but no security types enabled! This should not have happened!");
 
   cl->nAuthCaps = count;
   caps.nAuthTypes = Swap32IfLE((CARD32)count);
@@ -1516,8 +1517,8 @@ void rfbVncAuthProcessResponse(rfbClientPtr cl)
   if (ok) {
     rfbClientPtr otherCl;
 
-    rfbAuthUnblock();
-    if (!cl->reverseConnection && rfbNeverShared && rfbDontDisconnect) {
+    rfbAuthUnblock(cl->host);
+    if (!cl->reverseConnection && rfbNeverShared && !rfbDisconnect) {
       for (otherCl = rfbClientHead; otherCl; otherCl = otherCl->next) {
         if ((otherCl != cl) && (otherCl->state == RFB_NORMAL)) {
           rfbLog("-dontdisconnect: Not shared & existing client\n");
@@ -1531,8 +1532,8 @@ void rfbVncAuthProcessResponse(rfbClientPtr cl)
   } else {
     rfbLog("rfbVncAuthProcessResponse: authentication failed from %s\n",
            cl->host);
-    if (rfbAuthConsiderBlocking())
-      rfbClientAuthFailed(cl, "Authentication failed.  Connections temporarily blocked");
+    if (rfbAuthConsiderBlocking(cl->host))
+      rfbClientAuthFailed(cl, "Authentication failed.  Client temporarily blocked");
     else
       rfbClientAuthFailed(cl, "Authentication failed");
   }
@@ -1620,8 +1621,6 @@ void rfbClientAuthSucceeded(rfbClientPtr cl, CARD32 authType)
 
 /*********************************************************************
  * Functions to prevent too many successive authentication failures.
- *
- * FIXME: This should be performed separately for each client.
  */
 
 /* Maximum authentication failures before blocking connections */
@@ -1630,9 +1629,15 @@ int rfbAuthMaxFails = DEFAULT_AUTH_MAX_FAILS;
 /* Delay in seconds.  This doubles for each failure over rfbAuthMaxFails. */
 CARD32 rfbAuthFailTimeout = DEFAULT_AUTH_FAIL_TIMEOUT;
 
-static int rfbAuthFails = 0;
-static Bool rfbAuthTooManyFails = FALSE;
-static OsTimerPtr timer = NULL;
+struct xorg_list rfbAuthFails;
+
+typedef struct {
+  char *host;
+  int numFails;
+  Bool tooManyFails;
+  OsTimerPtr timer;
+  struct xorg_list entry;
+} rfbFailInfo;
 
 
 /*
@@ -1642,7 +1647,9 @@ static OsTimerPtr timer = NULL;
 
 static CARD32 rfbAuthReenable(OsTimerPtr timer, CARD32 now, pointer arg)
 {
-  rfbAuthTooManyFails = FALSE;
+  rfbFailInfo *fail = (rfbFailInfo *)arg;
+
+  fail->tooManyFails = FALSE;
   return 0;
 }
 
@@ -1652,22 +1659,36 @@ static CARD32 rfbAuthReenable(OsTimerPtr timer, CARD32 now, pointer arg)
  * return value will be true if there were too many failures.
  */
 
-Bool rfbAuthConsiderBlocking(void)
+Bool rfbAuthConsiderBlocking(char *host)
 {
   int i;
+  rfbFailInfo *fail = NULL, *iter;
 
   if (rfbAuthMaxFails == 0)
     return FALSE;
 
-  rfbAuthFails++;
+  xorg_list_for_each_entry(iter, &rfbAuthFails, entry) {
+    if (!strcmp(iter->host, host)) {
+      fail = iter;
+      break;
+    }
+  }
+  if (!fail) {
+    fail = (rfbFailInfo *)rfbAlloc0(sizeof(rfbFailInfo));
+    fail->host = strdup(host);
+    xorg_list_append(&fail->entry, &rfbAuthFails);
+  }
 
-  if (rfbAuthFails >= rfbAuthMaxFails) {
+  fail->numFails++;
+
+  if (fail->numFails >= rfbAuthMaxFails) {
     CARD32 delay = rfbAuthFailTimeout * 1000;
 
-    for (i = rfbAuthMaxFails; i < rfbAuthFails; i++)
+    for (i = rfbAuthMaxFails; i < fail->numFails; i++)
       delay *= 2;
-    timer = TimerSet(timer, 0, delay, rfbAuthReenable, NULL);
-    rfbAuthTooManyFails = TRUE;
+    fail->timer = TimerSet(fail->timer, 0, delay, rfbAuthReenable,
+                           (pointer)fail);
+    fail->tooManyFails = TRUE;
     return TRUE;
   }
 
@@ -1682,12 +1703,22 @@ Bool rfbAuthConsiderBlocking(void)
  * function.
  */
 
-void rfbAuthUnblock(void)
+void rfbAuthUnblock(char *host)
 {
+  rfbFailInfo *iter, *tmp;
+
   if (rfbAuthMaxFails == 0)
     return;
 
-  rfbAuthFails = 0;
+  xorg_list_for_each_entry_safe(iter, tmp, &rfbAuthFails, entry) {
+    if (!strcmp(iter->host, host)) {
+      TimerFree(iter->timer);
+      xorg_list_del(&iter->entry);
+      free(iter->host);
+      free(iter);
+      return;
+    }
+  }
 }
 
 
@@ -1697,10 +1728,17 @@ void rfbAuthUnblock(void)
  * should not allow another try.
  */
 
-Bool rfbAuthIsBlocked(void)
+Bool rfbAuthIsBlocked(char *host)
 {
+  rfbFailInfo *iter;
+
   if (rfbAuthMaxFails == 0)
     return FALSE;
 
-  return rfbAuthTooManyFails;
+  xorg_list_for_each_entry(iter, &rfbAuthFails, entry) {
+    if (!strcmp(iter->host, host))
+      return iter->tooManyFails;
+  }
+
+  return FALSE;
 }

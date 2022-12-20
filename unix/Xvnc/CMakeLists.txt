@@ -1,4 +1,5 @@
 include(CheckCSourceCompiles)
+include(CheckIncludeFiles)
 include(CheckSymbolExists)
 
 set(GLIBC_SOURCE "\n
@@ -34,6 +35,11 @@ if(FOUND_SVR4)
 	add_definitions(-DSVR4)
 endif()
 
+check_include_files(unistd.h HAVE_UNISTD_H)
+if(HAVE_UNISTD_H)
+	add_definitions(-DHAVE_UNISTD_H)
+endif()
+
 if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "(OpenBSD|FreeBSD|NetBSD|DragonFly)")
 	message(STATUS "BSD-like system detected")
 	add_definitions(-DCSRG_BASED)
@@ -44,9 +50,34 @@ endif()
 
 add_definitions(-DIPv6)
 
+check_symbol_exists(arc4random_buf stdlib.h HAVE_ARC4RANDOM_BUF)
+if(HAVE_ARC4RANDOM_BUF)
+	add_definitions(-DHAVE_ARC4RANDOM_BUF)
+endif()
+
 check_symbol_exists(poll poll.h USE_POLL)
 if(USE_POLL)
 	add_definitions(-DUSE_POLL)
+endif()
+
+check_symbol_exists(reallocarray stdlib.h HAVE_REALLOCARRAY)
+if(HAVE_REALLOCARRAY)
+	add_definitions(-DHAVE_REALLOCARRAY)
+endif()
+
+check_symbol_exists(strcasecmp strings.h HAVE_STRCASECMP)
+if(HAVE_STRCASECMP)
+	add_definitions(-DHAVE_STRCASECMP)
+endif()
+
+check_symbol_exists(strlcat string.h HAVE_STRLCAT)
+if(HAVE_STRLCAT)
+	add_definitions(-DHAVE_STRLCAT)
+endif()
+
+check_symbol_exists(strlcpy string.h HAVE_STRLCPY)
+if(HAVE_STRLCPY)
+	add_definitions(-DHAVE_STRLCPY)
 endif()
 
 option(TVNC_SYSTEMX11
@@ -62,46 +93,21 @@ if(NOT TVNC_SYSTEMX11)
 	endfunction()
 endif()
 
-function(handle_type_puns)
-	# NOTE: For whatever reason, Clang doesn't need this
-	if(CMAKE_COMPILER_IS_GNUCC)
-		if(ARGC EQUAL 0)
-			set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -fno-strict-aliasing" PARENT_SCOPE)
-		else()
-			foreach(file ${ARGV})
-				set_property(SOURCE ${file} APPEND_STRING PROPERTY COMPILE_FLAGS
-					" -fno-strict-aliasing")
-			endforeach()
-		endif()
-	endif()
-endfunction()
-
-function(handle_unused)
-	if(CMAKE_COMPILER_IS_GNUCC OR CMAKE_C_COMPILER_ID STREQUAL "Clang")
-		if(ARGC EQUAL 0)
-			set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unused" PARENT_SCOPE)
-		else()
-			foreach(file ${ARGV})
-				set_property(SOURCE ${file} APPEND_STRING PROPERTY COMPILE_FLAGS
-					" -Wno-unused")
-			endforeach()
-		endif()
-	endif()
-endfunction()
-
 if(TVNC_SYSTEMX11)
+	include(FindPkgConfig)
+	pkg_check_modules(X11_Xfont2 REQUIRED xfont2)
+	pkg_check_modules(X11_Fontenc REQUIRED fontenc)
+	pkg_check_modules(X11_Pixman REQUIRED pixman-1)
 	include_directories(${X11_X11_INCLUDE_PATH} ${X11_Xau_INCLUDE_PATH}
-		${X11_Xdmcp_INCLUDE_PATH} ${X11_Xkbfile_INCLUDE_PATH})
-	string(REGEX REPLACE "X11" "Xfont2" X11_Xfont2_LIB ${X11_X11_LIB})
-	string(REGEX REPLACE "X11" "fontenc" X11_Fontenc_LIB ${X11_X11_LIB})
-	string(REGEX REPLACE "X11" "pixman-1" X11_Pixman_LIB ${X11_X11_LIB})
+		${X11_Xdmcp_INCLUDE_PATH} ${X11_Xkbfile_INCLUDE_PATH}
+		${X11_Xfont2_INCLUDEDIR} ${X11_Pixman_INCLUDEDIR}/pixman-1)
 else()
 	include_directories(${CMAKE_CURRENT_BINARY_DIR}/X_include)
 	set(X11_Xau_LIB Xau)
 	set(X11_Xdmcp_LIB Xdmcp)
-	set(X11_Xfont2_LIB Xfont2)
-	set(X11_Fontenc_LIB fontenc)
-	set(X11_Pixman_LIB pixman)
+	set(X11_Xfont2_LDFLAGS Xfont2)
+	set(X11_Fontenc_LDFLAGS fontenc)
+	set(X11_Pixman_LDFLAGS pixman)
 endif()
 
 if(TVNC_SYSTEMLIBS)
@@ -139,6 +145,9 @@ else()
 endif()
 if(TVNC_GLX)
 	if(TVNC_SYSTEMX11)
+		if(POLICY CMP0072)
+			cmake_policy(SET CMP0072 OLD)
+		endif()
 		include(FindOpenGL)
 		include_directories(${OPENGL_INCLUDE_DIR})
 	else()

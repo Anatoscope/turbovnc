@@ -27,7 +27,7 @@
 
 #include <X11/Xatom.h>
 
-RESTYPE RRProviderType;
+RESTYPE RRProviderType = 0;
 
 /*
  * Initialize provider type error value
@@ -276,7 +276,7 @@ RRInitPrimeSyncProps(ScreenPtr pScreen)
     Atom syncProp = MakeAtom(syncStr, strlen(syncStr), TRUE);
 
     int defaultVal = TRUE;
-    int validVals[2] = {FALSE, TRUE};
+    INT32 validVals[2] = {FALSE, TRUE};
 
     int i;
     for (i = 0; i < pScrPriv->numOutputs; i++) {

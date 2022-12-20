@@ -26,7 +26,7 @@ import java.nio.channels.*;
 import java.nio.channels.spi.SelectorProvider;
 
 import com.turbovnc.rdr.*;
-import com.turbovnc.vncviewer.*;
+import com.turbovnc.rfb.Utils;
 
 public class SocketDescriptor implements FileDescriptor {
 
@@ -68,7 +68,7 @@ public class SocketDescriptor implements FileDescriptor {
   private static SelectorProvider defaultSelectorProvider() {
     // kqueue() selector provider on OS X is not working, fall back to select()
     // for now
-    if (VncViewer.OS.startsWith("mac os x") && VncViewer.JAVA_VERSION < 9)
+    if (Utils.isMac() && Utils.JAVA_VERSION < 9)
       System.setProperty("java.nio.channels.spi.SelectorProvider",
                          "sun.nio.ch.PollSelectorProvider");
     return SelectorProvider.provider();

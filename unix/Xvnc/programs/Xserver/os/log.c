@@ -121,18 +121,11 @@ static int bufferSize = 0, bufferUnused = 0, bufferPos = 0;
 static Bool needBuffer = TRUE;
 
 #ifdef __APPLE__
-#include <AvailabilityMacros.h>
-
 static char __crashreporter_info_buff__[4096] = { 0 };
 
 static const char *__crashreporter_info__ __attribute__ ((__used__)) =
     &__crashreporter_info_buff__[0];
-#if MAC_OS_X_VERSION_MIN_REQUIRED >= 1050
-// This is actually a toolchain requirement, but I'm not sure the correct check,
-// but it should be fine to just only include it for Leopard and later.  This line
-// just tells the linker to never strip this symbol (such as for space optimization)
 asm(".desc ___crashreporter_info__, 0x10");
-#endif
 #endif
 
 /* Prefix strings for log messages. */
@@ -194,6 +187,8 @@ LogFilePrep(const char *fname, const char *backup, const char *idstring)
 {
     char *logFileName = NULL;
 
+    /* the format string below is controlled by the user,
+       this code should never be called with elevated privileges */
     if (asprintf(&logFileName, fname, idstring) == -1)
         FatalError("Cannot allocate space for the log file name\n");
 
@@ -296,7 +291,7 @@ LogInit(const char *fname, const char *backup)
 void
 LogSetDisplay(void)
 {
-    if (saved_log_fname) {
+    if (saved_log_fname && strstr(saved_log_fname, "%s")) {
         char *logFileName;
 
         logFileName = LogFilePrep(saved_log_fname, saved_log_backup, display);

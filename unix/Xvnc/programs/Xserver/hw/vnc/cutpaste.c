@@ -2,25 +2,24 @@
  * cutpaste.c - routines to deal with cut & paste buffers / selection.
  */
 
-/*
- *  Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
- *  Copyright (C) 2014, 2017-2019 D. R. Commander.  All Rights Reserved.
- *  Copyright 2016-2017 Pierre Ossman for Cendio AB
+/* Copyright (C) 2014, 2017-2019, 2022 D. R. Commander.  All Rights Reserved.
+ * Copyright 2016-2017 Pierre Ossman for Cendio AB
+ * Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 /************************************************************
@@ -103,7 +102,7 @@ Bool rfbSyncPrimary = TRUE;
 static Bool inSetXCutText = FALSE;
 static char *clientCutText = 0;
 static int clientCutTextLen = 0;
-static WindowPtr pWin = NULL;
+static WindowPtr pSelectionWin = NULL;
 static Window win = 0;
 static Atom xaPRIMARY, xaCLIPBOARD, xaTARGETS, xaTIMESTAMP, xaSTRING, xaTEXT,
   xaUTF8_STRING;
@@ -255,15 +254,15 @@ static int vncCreateSelectionWindow(void)
   ScreenPtr pScreen;
   int result;
 
-  if (pWin) return Success;
+  if (pSelectionWin) return Success;
 
   pScreen = screenInfo.screens[0];
   win = FakeClientID(0);
-  pWin = CreateWindow(win, pScreen->root, 0, 0, 1, 1, 0, InputOnly, 0, NULL, 0,
-                      serverClient, CopyFromParent, &result);
-  if (!pWin) return result;
+  pSelectionWin = CreateWindow(win, pScreen->root, 0, 0, 1, 1, 0, InputOnly, 0,
+                               NULL, 0, serverClient, CopyFromParent, &result);
+  if (!pSelectionWin) return result;
 
-  if (!AddResource(pWin->drawable.id, RT_WINDOW, pWin))
+  if (!AddResource(pSelectionWin->drawable.id, RT_WINDOW, pSelectionWin))
     return BadAlloc;
 
   return Success;
@@ -279,7 +278,7 @@ void vncHandleSelection(Atom selection, Atom target, Atom property,
   PropertyPtr prop;
   int rc;
 
-  if ((rc = dixLookupProperty(&prop, pWin, property, serverClient,
+  if ((rc = dixLookupProperty(&prop, pSelectionWin, property, serverClient,
                               DixReadAccess)) != Success) {
     LogMessage(X_ERROR, "dixLookupProperty() failed: %d\n", rc);
     return;
@@ -309,7 +308,7 @@ void vncHandleSelection(Atom selection, Atom target, Atom property,
   } else if (target == xaUTF8_STRING) {
     size_t inbytesleft = prop->size, outbytesleft = prop->size;
     char *in = prop->data, *buffer, *out;
-    iconv_t cd;
+    iconv_t cd = (iconv_t)-1;
 
     if (prop->format != 8 || prop->type != xaUTF8_STRING)
       return;
@@ -320,6 +319,8 @@ void vncHandleSelection(Atom selection, Atom target, Atom property,
         iconv(cd, &in, &inbytesleft, &out, &outbytesleft) == (size_t)-1)
       LogMessage(X_ERROR, "UTF-8 to ISO-8859-1 conversion failed: %s\n",
                  strerror(errno));
+    if (cd != (iconv_t)-1)
+      iconv_close(cd);
 
     rfbSendServerCutText(buffer, prop->size - outbytesleft);
     free(buffer);
@@ -398,7 +399,7 @@ static int vncOwnSelection(Atom selection)
 
   pSel->lastTimeChanged = currentTime;
   pSel->window = win;
-  pSel->pWin = pWin;
+  pSel->pWin = pSelectionWin;
   pSel->client = serverClient;
 
   info.selection = pSel;

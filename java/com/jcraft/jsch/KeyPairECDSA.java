@@ -1,7 +1,9 @@
 /* -*-mode:java; c-basic-offset:2; indent-tabs-mode:nil -*- */
 /*
-Copyright (c) 2015-2016 ymnk, JCraft,Inc. All rights reserved.
-Copyright (c) 2018, D. R. Commander. All rights reserved.
+Copyright (c) 2015-2018 ymnk, JCraft,Inc. All rights reserved.
+Copyright (c) 2018 D. R. Commander. All rights reserved.
+Copyright (c) 2020 Jeremy Norris. All rights reserved.
+Copyright (c) 2020 Matthias Wiedemann. All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
 modification, are permitted provided that the following conditions are met:
@@ -30,6 +32,8 @@ EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 package com.jcraft.jsch;
 
+import java.util.Arrays;
+
 public class KeyPairECDSA extends KeyPair{
 
   private static byte[][] oids = {
@@ -56,6 +60,23 @@ public class KeyPairECDSA extends KeyPair{
     this(jsch, null, null, null, null);
   }
 
+  public KeyPairECDSA(JSch jsch , byte[] pubkey){
+    this(jsch, null, null, null, null);
+
+    if(pubkey!=null){
+      byte[] name = new byte[8];
+      System.arraycopy(pubkey, 11, name, 0, 8);
+      if(Util.array_equals(name, Util.str2byte("nistp384"))){
+        key_size=384;
+        this.name=name;
+      }
+      if(Util.array_equals(name, Util.str2byte("nistp521"))){
+        key_size=521;
+        this.name=name;
+      }
+    }
+  }
+
   public KeyPairECDSA(JSch jsch,
                       byte[] name,
                       byte[] r_array,
@@ -68,7 +89,7 @@ public class KeyPairECDSA extends KeyPair{
     this.s_array = s_array;
     this.prv_array = prv_array;
     if(prv_array!=null)
-      key_size = prv_array.length>=64 ? 521 : 
+      key_size = prv_array.length>=64 ? 521 :
                   (prv_array.length>=48 ? 384 : 256);
   }
 
@@ -93,7 +114,7 @@ public class KeyPairECDSA extends KeyPair{
     }
   }
 
-  private static final byte[] begin = 
+  private static final byte[] begin =
     Util.str2byte("-----BEGIN EC PRIVATE KEY-----");
   private static final byte[] end =
     Util.str2byte("-----END EC PRIVATE KEY-----");
@@ -115,7 +136,7 @@ public class KeyPairECDSA extends KeyPair{
     int bar = ((point.length+1)&0x80)==0 ? 3 : 4;
     byte[] foo = new byte[point.length+bar];
     System.arraycopy(point, 0, foo, bar, point.length);
-    foo[0]=0x03;                     // BITSTRING 
+    foo[0]=0x03;                     // BITSTRING
     if(bar==3){
       foo[1]=(byte)(point.length+1);
     }
@@ -173,6 +194,42 @@ public class KeyPairECDSA extends KeyPair{
         return true;
         */
 	return false;
+      }
+
+      // OPENSSH Key v1 Format
+      if (vendor == VENDOR_OPENSSH_V1) {
+
+        final Buffer prvKeyBuffer = new Buffer(plain);
+        int checkInt1 = prvKeyBuffer.getInt(); // uint32 checkint1
+        int checkInt2 = prvKeyBuffer.getInt(); // uint32 checkint2
+        if (checkInt1 != checkInt2) {
+          throw new JSchException("check failed");
+        }
+
+        String keyType = Util.byte2str(prvKeyBuffer.getString()); // string keytype
+
+        name = prvKeyBuffer.getString();
+        if(!Arrays.asList(names).contains(new String(name))){
+          throw new IllegalArgumentException("unknown curve name "+new String(name));
+        }
+
+        final int keyLen = prvKeyBuffer.getInt();
+        final int x04 = prvKeyBuffer.getByte(); // in case of x04 it is uncompressed https://tools.ietf.org/html/rfc5480#page-7
+        final byte[] x = new byte[(keyLen - 1) / 2];
+        final byte[] y = new byte[(keyLen - 1) / 2];
+        prvKeyBuffer.getByte(x);
+        prvKeyBuffer.getByte(y);
+
+
+        prv_array=prvKeyBuffer.getString();
+        publicKeyComment=Util.byte2str(prvKeyBuffer.getString());
+        r_array = x;
+        s_array = y;
+        key_size = x.length>=64 ? 521 :
+                (x.length>=48 ? 384 : 256);
+
+        return true;
+
       }
 
       int index=0;
@@ -245,7 +302,7 @@ public class KeyPairECDSA extends KeyPair{
       s_array = tmp[1];
 
       if(prv_array!=null)
-        key_size = prv_array.length>=64 ? 521 : 
+        key_size = prv_array.length>=64 ? 521 :
                     (prv_array.length>=48 ? 384 : 256);
     }
     catch(Exception e){
@@ -285,8 +342,8 @@ public class KeyPairECDSA extends KeyPair{
   }
 
   public byte[] getSignature(byte[] data){
-    try{      
-      Class c=Class.forName((String)JSch.getConfig("signature.ecdsa"));
+    try{
+      Class c=Class.forName((String)JSch.getConfig("ecdsa-sha2-"+new String(name)));
       SignatureECDSA ecdsa=
         (SignatureECDSA)(c.getDeclaredConstructor().newInstance());
       ecdsa.init();
@@ -306,9 +363,13 @@ public class KeyPairECDSA extends KeyPair{
     return null;
   }
 
+  public byte[] getSignature(byte[] data, String al){
+    return getSignature(data);
+  }
+
   public Signature getVerifier(){
-    try{      
-      Class c=Class.forName((String)JSch.getConfig("signature.ecdsa"));
+    try{
+      Class c=Class.forName((String)JSch.getConfig("ecdsa-sha2-"+new String(name)));
       final SignatureECDSA ecdsa=
         (SignatureECDSA)(c.getDeclaredConstructor().newInstance());
       ecdsa.init();
@@ -320,7 +381,7 @@ public class KeyPairECDSA extends KeyPair{
         byte[][] tmp = fromPoint(buf.getString());
         r_array = tmp[0];
         s_array = tmp[1];
-      } 
+      }
       ecdsa.setPubKey(r_array, s_array);
       return ecdsa;
     }
@@ -328,6 +389,10 @@ public class KeyPairECDSA extends KeyPair{
       //System.err.println("e "+e);
     }
     return null;
+  }
+
+  public Signature getVerifier(String alg){
+    return getVerifier();
   }
 
   static KeyPair fromSSHAgent(JSch jsch, Buffer buf) throws JSchException {

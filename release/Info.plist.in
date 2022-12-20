@@ -23,7 +23,7 @@
 	<key>CFBundleIconFile</key>
 	<string>turbovnc.icns</string>
 	<key>LSMinimumSystemVersion</key>
-	<string>10.7.0</string>
+	<string>@MINSYSVERSION@</string>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
@@ -38,12 +38,12 @@
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 		</dict>
-	</array>
+	</array>@JVM_RUNTIME_KEY@
 	<key>JVMMainClassName</key>
 	<string>com.turbovnc.vncviewer.VncViewer</string>
 	<key>JVMOptions</key>
 	<array>
-		<string>-server</string>
+		<string>-server</string>@EAWT_ADD_MODULES@
 	</array>
 </dict>
 </plist>

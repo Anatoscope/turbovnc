@@ -4,27 +4,26 @@
  * Modified for XFree86 4.x by Alan Hourihane <alanh@fairlite.demon.co.uk>
  */
 
-/*
- *  Copyright (C) 2009-2020 D. R. Commander.  All Rights Reserved.
- *  Copyright (C) 2010 University Corporation for Atmospheric Research.
- *                     All Rights Reserved.
- *  Copyright (C) 2005 Sun Microsystems, Inc.  All Rights Reserved.
- *  Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
+/* Copyright (C) 2009-2022 D. R. Commander.  All Rights Reserved.
+ * Copyright (C) 2010 University Corporation for Atmospheric Research.
+ *                    All Rights Reserved.
+ * Copyright (C) 2005 Sun Microsystems, Inc.  All Rights Reserved.
+ * Copyright (C) 1999 AT&T Laboratories Cambridge.  All Rights Reserved.
  *
- *  This is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
+ * This is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
  *
- *  This software is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
+ * This software is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  *
- *  You should have received a copy of the GNU General Public License
- *  along with this software; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
- *  USA.
+ * You should have received a copy of the GNU General Public License
+ * along with this software; if not, write to the Free Software
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301,
+ * USA.
  */
 
 /*
@@ -69,9 +68,6 @@ from the X Consortium.
 #include <sys/types.h>
 #include <netdb.h>
 #include "servermd.h"
-#ifdef GLXEXT
-#include "glx_extinit.h"
-#endif
 #include "extension.h"
 #include "fb.h"
 #include "dixstruct.h"
@@ -79,6 +75,9 @@ from the X Consortium.
 #include "xserver-properties.h"
 #include "exevents.h"
 #include <X11/Xatom.h>
+#ifdef GLXEXT
+#include "glx_extinit.h"
+#endif
 #include "micmap.h"
 #include "eventstr.h"
 #include "rfb.h"
@@ -105,7 +104,7 @@ from the X Consortium.
 #ifdef GLXEXT
 extern char *dri_driver_path;
 #endif
-#ifdef X_REGISTRY_REQUEST
+#if defined(X_REGISTRY_REQUEST) && !defined(TURBOVNC_STATIC_XORG_PATHS)
 extern char registry_path[PATH_MAX];
 #endif
 
@@ -189,6 +188,7 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     xorg_list_init(&rfbScreens);
     rfbAddScreen(&rfbScreens,
                  rfbNewScreen(0, 0, 0, rfbFB.width, rfbFB.height, 0));
+    xorg_list_init(&rfbAuthFails);
     rfbFB.depth = RFB_DEFAULT_DEPTH;
     rfbFB.blackPixel = RFB_DEFAULT_BLACKPIXEL;
     rfbFB.whitePixel = RFB_DEFAULT_WHITEPIXEL;
@@ -201,19 +201,26 @@ int ddxProcessArgument(int argc, char *argv[], int i)
 
   /***** TurboVNC connection options *****/
 
+  #define REQUIRE_ARG() {  \
+    if (i + 1 >= argc) {  \
+      UseMsg();  \
+      exit(1);  \
+    }  \
+  }
+
   if (strcasecmp(argv[i], "-alwaysshared") == 0) {
     rfbAlwaysShared = TRUE;
     return 1;
   }
 
   if (strcasecmp(argv[i], "-capture") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     captureFile = strdup(argv[i + 1]);
     return 2;
   }
 
   if (strcasecmp(argv[i], "-clsrvverfile") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     if (!rfbParseClSrvVerOpts(argv[i + 1])) {
       rfbLog("ERROR: Unable to load client version file '%s' for CLSRVVER extension\n", argv[i + 1]);
       UseMsg();
@@ -222,47 +229,35 @@ int ddxProcessArgument(int argc, char *argv[], int i)
   }
 
   if (strcasecmp(argv[i], "-congtraceintervalms") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbCongTraceIntervalMs = atoi(argv[i + 1]);
     return 2;
   }
 
   if (strcasecmp(argv[i], "-deferupdate") == 0) {  /* -deferupdate ms */
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbDeferUpdateTime = atoi(argv[i + 1]);
     return 2;
   }
 
   if (strcasecmp(argv[i], "-desktop") == 0) {  /* -desktop desktop-name */
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     desktopName = argv[i + 1];
     return 2;
   }
 
   if (strcasecmp(argv[i], "-disconnect") == 0) {
-    rfbDontDisconnect = FALSE;
+    rfbDisconnect = TRUE;
     return 1;
   }
 
   if (strcasecmp(argv[i], "-dontdisconnect") == 0) {
-    rfbDontDisconnect = TRUE;
+    rfbDisconnect = FALSE;
     return 1;
   }
 
-  if (strcasecmp(argv[i], "-httpd") == 0) {
-    if (i + 1 >= argc) UseMsg();
-    httpDir = argv[i + 1];
-    return 2;
-  }
-
-  if (strcasecmp(argv[i], "-httpport") == 0) {
-    if (i + 1 >= argc) UseMsg();
-    httpPort = atoi(argv[i + 1]);
-    return 2;
-  }
-
   if (strcasecmp(argv[i], "-idletimeout") == 0) {  /* -idletimeout sec */
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbIdleTimeout = atoi(argv[i + 1]);
     return 2;
   }
@@ -341,10 +336,7 @@ int ddxProcessArgument(int argc, char *argv[], int i)
 
   if (strcasecmp(argv[i], "-interface") == 0) {  /* -interface ipaddr */
     struct addrinfo hints, *addr;
-    if (i + 1 >= argc) {
-      UseMsg();
-      return 2;
-    }
+    REQUIRE_ARG();
     if (interface.s_addr != htonl(INADDR_ANY) ||
         memcmp(&interface6, &in6addr_any, sizeof(interface6))) {
       /* Already set (-localhost?) */
@@ -378,17 +370,19 @@ int ddxProcessArgument(int argc, char *argv[], int i)
   }
 
   if (strcasecmp(argv[i], "-maxclipboard") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbMaxClipboard = atoi(argv[i + 1]);
     return 2;
   }
 
   if (strcasecmp(argv[i], "-maxconnections") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbMaxClientConnections = atoi(argv[i + 1]);
     if (rfbMaxClientConnections < 1 ||
-        rfbMaxClientConnections > MAX_MAX_CONNECTIONS)
+        rfbMaxClientConnections > MAX_MAX_CONNECTIONS) {
       UseMsg();
+      exit(1);
+    }
     return 2;
   }
 
@@ -433,20 +427,14 @@ int ddxProcessArgument(int argc, char *argv[], int i)
   }
 
   if (strcasecmp(argv[i], "-rfbport") == 0) {  /* -rfbport port */
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbPort = atoi(argv[i + 1]);
     return 2;
   }
 
   if (strcasecmp(argv[i], "-rfbwait") == 0) {  /* -rfbwait ms */
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbMaxClientWait = atoi(argv[i + 1]);
-    return 2;
-  }
-
-  if (strcasecmp(argv[i], "-udpinputport") == 0) {  /* -udpinputport port */
-    if (i + 1 >= argc) UseMsg();
-    udpPort = atoi(argv[i + 1]);
     return 2;
   }
 
@@ -474,31 +462,31 @@ int ddxProcessArgument(int argc, char *argv[], int i)
   }
 
   if (strcasecmp(argv[i], "-xkblayout") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rmlvo.layout = argv[i + 1];
     return 2;
   }
 
   if (strcasecmp(argv[i], "-xkbmodel") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rmlvo.model = argv[i + 1];
     return 2;
   }
 
   if (strcasecmp(argv[i], "-xkboptions") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rmlvo.options = argv[i + 1];
     return 2;
   }
 
   if (strcasecmp(argv[i], "-xkbrules") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rmlvo.rules = argv[i + 1];
     return 2;
   }
 
   if (strcasecmp(argv[i], "-xkbvariant") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rmlvo.variant = argv[i + 1];
     return 2;
   }
@@ -506,31 +494,33 @@ int ddxProcessArgument(int argc, char *argv[], int i)
   /***** TurboVNC display options *****/
 
   if (strcasecmp(argv[i], "-blackpixel") == 0) {  /* -blackpixel n */
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbFB.blackPixel = atoi(argv[i + 1]);
     return 2;
   }
 
   if (strcasecmp(argv[i], "-depth") == 0) {  /* -depth D */
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbFB.depth = atoi(argv[i + 1]);
     return 2;
   }
 
+#ifndef TURBOVNC_STATIC_XORG_PATHS
   if (strcasecmp(argv[i], "-dridir") == 0) {
 #ifdef GLXEXT
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     dri_driver_path = strdup(argv[i + 1]);
 #endif
     return 2;
   }
+#endif
 
   if (strcasecmp(argv[i], "-geometry") == 0) {
     /* -geometry WxH or W0xH0+X0+Y0[,W1xH1+X1+Y1,...] */
     char *str, *token;
     int index = 0, w, h, x, y;
     int r = INT_MIN, b = INT_MIN;
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     str = argv[i + 1];
     while ((token = strsep(&str, ",")) != NULL) {
       x = y = 0;
@@ -560,7 +550,7 @@ int ddxProcessArgument(int argc, char *argv[], int i)
 
 #ifdef NVCONTROL
   if (strcasecmp(argv[i], "-nvcontrol") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     nvCtrlDisplay = strdup(argv[i + 1]);
     noNVCTRLExtension = FALSE;
     return 2;
@@ -568,11 +558,12 @@ int ddxProcessArgument(int argc, char *argv[], int i)
 #endif
 
   if (strcasecmp(argv[i], "-pixelformat") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     if (sscanf(argv[i + 1], "%3s%1d%1d%1d", primaryOrder,
                &redBits, &greenBits, &blueBits) < 4) {
       ErrorF("Invalid pixel format %s\n", argv[i + 1]);
       UseMsg();
+      exit(1);
     }
 
     if (strcasecmp(primaryOrder, "bgr") == 0) {
@@ -582,13 +573,14 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     } else if (strcasecmp(primaryOrder, "rgb") != 0) {
       ErrorF("Invalid pixel format %s\n", argv[i + 1]);
       UseMsg();
+      exit(1);
     }
 
     return 2;
   }
 
   if (strcasecmp(argv[i], "-whitepixel") == 0) {  /* -whitepixel n */
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbFB.whitePixel = atoi(argv[i + 1]);
     return 2;
   }
@@ -596,32 +588,37 @@ int ddxProcessArgument(int argc, char *argv[], int i)
   /***** TurboVNC encoding options *****/
 
   if (strcasecmp(argv[i], "-alr") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbAutoLosslessRefresh = atof(argv[i + 1]);
-    if (rfbAutoLosslessRefresh <= 0.0) UseMsg();
+    if (rfbAutoLosslessRefresh <= 0.0) {
+      UseMsg();
+      exit(1);
+    }
     return 2;
   }
 
   if (strcasecmp(argv[i], "-alrqual") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbALRQualityLevel = atoi(argv[i + 1]);
-    if (rfbALRQualityLevel < 1 || rfbALRQualityLevel > 100) UseMsg();
+    if (rfbALRQualityLevel < 1 || rfbALRQualityLevel > 100) {
+      UseMsg();
+      exit(1);
+    }
     return 2;
   }
 
   if (strcasecmp(argv[i], "-alrsamp") == 0) {
-    if (i + 1 >= argc) UseMsg();
-    switch (toupper(argv[i + 1][0])) {
-      case 'G': case '0':
-        rfbALRSubsampLevel = TVNC_GRAY;  break;
-      case '1':
-        rfbALRSubsampLevel = TVNC_1X;  break;
-      case '2':
-        rfbALRSubsampLevel = TVNC_2X;  break;
-      case '4':
-        rfbALRSubsampLevel = TVNC_4X;  break;
-      default:
-        UseMsg();
+    int s;
+    REQUIRE_ARG();
+    for (s = 0; s < TVNC_SAMPOPT; s++) {
+      if (toupper(argv[i + 1][0]) == toupper(subsampStr[s][0]) ||
+          (s == TVNC_GRAY && argv[i + 1][0] == '0')) {
+        rfbALRSubsampLevel = s;  break;
+      }
+    }
+    if (s >= TVNC_SAMPOPT) {
+      UseMsg();
+      exit(1);
     }
     return 2;
   }
@@ -662,10 +659,12 @@ int ddxProcessArgument(int argc, char *argv[], int i)
 
 #if !defined(__FreeBSD__) && !defined(__NetBSD__) && !defined(__OpenBSD__) && !defined(__DragonFly__)
   if (strcasecmp(argv[i], "-nthreads") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbNumThreads = atoi(argv[i + 1]);
-    if (rfbNumThreads < 1 || rfbNumThreads > MAX_ENCODING_THREADS)
+    if (rfbNumThreads < 1 || rfbNumThreads > MAX_ENCODING_THREADS) {
       UseMsg();
+      exit(1);
+    }
     return 2;
   }
 #endif
@@ -673,16 +672,22 @@ int ddxProcessArgument(int argc, char *argv[], int i)
   /***** TurboVNC security and authentication options *****/
 
   if (strcasecmp(argv[i], "-maxauthfails") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbAuthMaxFails = atoi(argv[i + 1]);
-    if (rfbAuthMaxFails < 0) UseMsg();
+    if (rfbAuthMaxFails < 0) {
+      UseMsg();
+      exit(1);
+    }
     return 2;
   }
 
   if (strcasecmp(argv[i], "-authfailtimeout") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbAuthFailTimeout = atoi(argv[i + 1]);
-    if (rfbAuthFailTimeout < 1) UseMsg();
+    if (rfbAuthFailTimeout < 1) {
+      UseMsg();
+      exit(1);
+    }
     return 2;
   }
 
@@ -694,26 +699,26 @@ int ddxProcessArgument(int argc, char *argv[], int i)
 #endif
 
   if (strcasecmp(argv[i], "-rfbauth") == 0) {  /* -rfbauth passwd-file */
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbAuthPasswdFile = argv[i + 1];
     return 2;
   }
 
   if (strcasecmp(argv[i], "-securitytypes") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbAuthParseCommandLine(argv[i + 1]);
     return 2;
   }
 
 #if USETLS
   if (strcasecmp(argv[i], "-x509cert") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbAuthX509Cert = argv[i + 1];
     return 2;
   }
 
   if (strcasecmp(argv[i], "-x509key") == 0) {
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     rfbAuthX509Key = argv[i + 1];
     return 2;
   }
@@ -721,13 +726,20 @@ int ddxProcessArgument(int argc, char *argv[], int i)
 
   /***** TurboVNC miscellaneous options *****/
 
+  if (strcasecmp(argv[i], "-giidebug") == 0) {
+    rfbGIIDebug = TRUE;
+    return 1;
+  }
+
+#ifndef TURBOVNC_STATIC_XORG_PATHS
   if (strcasecmp(argv[i], "-registrydir") == 0) {
 #ifdef X_REGISTRY_REQUEST
-    if (i + 1 >= argc) UseMsg();
+    REQUIRE_ARG();
     snprintf(registry_path, PATH_MAX, "%s/protocol.txt", argv[i + 1]);
 #endif
     return 2;
   }
+#endif
 
   if (strcasecmp(argv[i], "-verbose") == 0) {
     LogSetParameter(XLOG_VERBOSITY, X_DEBUG);
@@ -773,18 +785,13 @@ static int numFormats = 6;
 #endif
 
 
-void InitOutput(ScreenInfo *screenInfo, int argc, char **argv)
+void InitOutput(ScreenInfo *pScreenInfo, int argc, char **argv)
 {
   int i;
-#ifdef GLXEXT
-  const ExtensionModule glxExtension =
-    { GlxExtensionInit, "GLX", &noGlxExtension };
-#endif
 
   initOutputCalled = TRUE;
 #ifdef GLXEXT
-  if (serverGeneration == 1)
-    LoadExtensionList(&glxExtension, 1, TRUE);
+  xorgGlxCreateVendor();
 #endif
 
   rfbLog("Desktop name '%s' (%s:%s)\n", desktopName, rfbThisHost, display);
@@ -806,15 +813,13 @@ void InitOutput(ScreenInfo *screenInfo, int argc, char **argv)
 #endif
 
   rfbInitSockets();
-  if (inetdSock == -1)
-    httpInitSockets();
 
   /* Initialize pixmap formats */
 
-  screenInfo->imageByteOrder = IMAGE_BYTE_ORDER;
-  screenInfo->bitmapScanlineUnit = BITMAP_SCANLINE_UNIT;
-  screenInfo->bitmapScanlinePad = BITMAP_SCANLINE_PAD;
-  screenInfo->bitmapBitOrder = BITMAP_BIT_ORDER;
+  pScreenInfo->imageByteOrder = IMAGE_BYTE_ORDER;
+  pScreenInfo->bitmapScanlineUnit = BITMAP_SCANLINE_UNIT;
+  pScreenInfo->bitmapScanlinePad = BITMAP_SCANLINE_PAD;
+  pScreenInfo->bitmapBitOrder = BITMAP_BIT_ORDER;
   if (rfbFB.depth == 30) {
     numFormats++;
 #ifdef RENDER
@@ -826,9 +831,9 @@ void InitOutput(ScreenInfo *screenInfo, int argc, char **argv)
       .scanlinePad = BITMAP_SCANLINE_PAD
     };
   }
-  screenInfo->numPixmapFormats = numFormats;
+  pScreenInfo->numPixmapFormats = numFormats;
   for (i = 0; i < numFormats; i++)
-    screenInfo->formats[i] = formats[i];
+    pScreenInfo->formats[i] = formats[i];
 
   if (!AddCallback(&ClientStateCallback, rfbClientStateChange, NULL)) {
     rfbLog("InitOutput: AddCallback failed\n");
@@ -916,8 +921,6 @@ static Bool rfbScreenInit(ScreenPtr pScreen, int argc, char **argv)
         if (!fbSetupScreen(pScreen, pbits, prfb->width, prfb->height,
                            dpix, dpiy, prfb->paddedWidthInBytes / 4, 32))
           ret = FALSE;
-        fbGetScreenPrivate(pScreen)->win32bpp = 32;
-        fbGetScreenPrivate(pScreen)->pix32bpp = 32;
         if (!fbInitVisuals(&visuals, &depths, &nVisuals, &nDepths, &rootDepth,
                            &defaultVisual, ((unsigned long)1 << 31), 10))
           ret = FALSE;
@@ -1080,7 +1083,7 @@ static Bool rfbScreenInit(ScreenPtr pScreen, int argc, char **argv)
  */
 
 rfbDevInfo virtualTabletTouch =
-  { "TurboVNC virtual tablet touch", 16, 6, Absolute, 0,
+  { "TurboVNC virtual tablet touch", 16, FALSE, 0, 6, Absolute, 0,
     rfbGIIDevTypeTouch, NULL,
     { { 0, AXIS_LABEL_PROP_ABS_X, "0", 0, 2048, 4096, rfbGIIUnitLength,
         0, 1, 26000, 0 },
@@ -1097,7 +1100,7 @@ rfbDevInfo virtualTabletTouch =
   };
 
 rfbDevInfo virtualTabletStylus =
-  { "TurboVNC virtual tablet stylus", 16, 6, Absolute, 0,
+  { "TurboVNC virtual tablet stylus", 16, FALSE, 0, 6, Absolute, 0,
     rfbGIIDevTypeStylus, NULL,
     { { 0, AXIS_LABEL_PROP_ABS_X, "0", 0, 15748, 31496, rfbGIIUnitLength,
         0, 1, 200000, 0 },
@@ -1114,7 +1117,7 @@ rfbDevInfo virtualTabletStylus =
   };
 
 rfbDevInfo virtualTabletEraser =
-  { "TurboVNC virtual tablet eraser", 16, 6, Absolute, 0,
+  { "TurboVNC virtual tablet eraser", 16, FALSE, 0, 6, Absolute, 0,
     rfbGIIDevTypeEraser, NULL,
     { { 0, AXIS_LABEL_PROP_ABS_X, "0", 0, 15748, 31496, rfbGIIUnitLength,
         0, 1, 200000, 0 },
@@ -1131,7 +1134,7 @@ rfbDevInfo virtualTabletEraser =
   };
 
 rfbDevInfo virtualTabletPad =
-  { "TurboVNC virtual tablet pad", 16, 6, Absolute, 0,
+  { "TurboVNC virtual tablet pad", 16, FALSE, 0, 6, Absolute, 0,
     rfbGIIDevTypePad, NULL,
     { { 0, AXIS_LABEL_PROP_ABS_X, "0", 0, 0, 0, rfbGIIUnitLength,
         0, 1, 0, 0 },
@@ -1193,6 +1196,22 @@ Bool AddExtInputDevice(rfbDevInfo *dev)
   Atom btn_labels[MAX_BUTTONS], axes_labels[MAX_VALUATORS];
   BYTE map[MAX_BUTTONS + 1];
   DeviceIntPtr devtmp;
+  int numValuators = dev->numValuators;
+
+  if (numValuators > 2) {
+    rfbGIIValuator *idVal = &dev->valuators[dev->numValuators - 2];
+    rfbGIIValuator *typeVal = &dev->valuators[dev->numValuators - 1];
+
+    if (!strcmp((char *)idVal->longName, "__TURBOVNC FAKE TOUCH ID__") &&
+        !strcmp((char *)idVal->shortName, "TFTI") &&
+        idVal->rangeMin == 0 && idVal->rangeMax == INT_MAX &&
+        !strcmp((char *)typeVal->longName, "__TURBOVNC FAKE TOUCH TYPE__") &&
+        !strcmp((char *)typeVal->shortName, "TFTT") &&
+        typeVal->rangeMin == 0 && typeVal->rangeMax == 5) {
+      numValuators -= 2;
+      dev->multitouch = TRUE;
+    }
+  }
 
   for (devtmp = inputInfo.devices; devtmp; devtmp = devtmp->next) {
     if (!strcmp(devtmp->name, dev->name)) {
@@ -1259,16 +1278,18 @@ Bool AddExtInputDevice(rfbDevInfo *dev)
     btn_labels[i] = MakeAtom(name, strlen(name), TRUE);
   }
 
-  for (i = 0; i < dev->numValuators; i++) {
+  for (i = 0; i < numValuators; i++) {
     char *name = (char *)dev->valuators[i].longName;
     axes_labels[i] = MakeAtom(name, strlen(name), TRUE);
   }
   InitPointerDeviceStruct((DevicePtr)dev->pDev, map, dev->numButtons,
                           btn_labels, (PtrCtrlProcPtr)NoopDDA,
-                          GetMotionHistorySize(), dev->numValuators,
-                          axes_labels);
+                          GetMotionHistorySize(), numValuators, axes_labels);
+  if (dev->multitouch)
+    InitTouchClassDeviceStruct(dev->pDev, dev->numTouches, XIDirectTouch,
+                               numValuators);
   InitPointerAccelerationScheme(dev->pDev, PtrAccelNoOp);
-  for (i = 0; i < dev->numValuators; i++) {
+  for (i = 0; i < numValuators; i++) {
     int res = dev->valuators[i].siDiv;
     InitValuatorAxisStruct(dev->pDev, i, axes_labels[i],
                            dev->valuators[i].rangeMin,
@@ -1591,7 +1612,7 @@ char *rfbAllocateFramebufferMemory(rfbFBInfoPtr prfb)
 
   prfb->sizeInBytes = (prfb->paddedWidthInBytes * prfb->height);
 
-  prfb->pfbMemory = (char *)malloc(prfb->sizeInBytes);
+  prfb->pfbMemory = rfbAlloc0(prfb->sizeInBytes);
 
   return prfb->pfbMemory;
 }
@@ -1707,8 +1728,6 @@ void ddxUseMsg(void)
   ErrorF("-disconnect            disconnect existing viewers when a new non-shared\n"
          "                       connection comes in, rather than refusing the new\n"
          "                       connection\n");
-  ErrorF("-httpd dir             serve files from the specified directory using HTTP\n");
-  ErrorF("-httpport port         port for HTTP server\n");
   ErrorF("-idletimeout S         exit if S seconds elapse with no VNC viewer connections\n");
   ErrorF("-inactsignal signal    signal to send to parent after timeout of no input (default: TERM)\n");
   ErrorF("-inacttimeout S        send signal to parent after S seconds of no input\n");
@@ -1739,7 +1758,6 @@ void ddxUseMsg(void)
   ErrorF("-rfbwait time          max time in ms to wait for a send/receive operation\n");
   ErrorF("                       to/from a connected viewer to complete [default: %d]\n",
          DEFAULT_MAX_CLIENT_WAIT);
-  ErrorF("-udpinputport port     UDP port for keyboard/pointer data\n");
 
   ErrorF("\nTurboVNC input options\n");
   ErrorF("======================\n");
@@ -1764,7 +1782,9 @@ void ddxUseMsg(void)
   ErrorF("\nTurboVNC display options\n");
   ErrorF("========================\n");
   ErrorF("-depth D               set framebuffer depth\n");
+#ifndef TURBOVNC_STATIC_XORG_PATHS
   ErrorF("-dridir dir            specify directory containing the swrast Mesa driver\n");
+#endif
   ErrorF("-geometry WxH          set framebuffer width & height (single-screen)\n");
   ErrorF("-geometry W0xH0+X0+Y0[,W1xH1+X1+Y1,...,WnxHn+Xn+Yn]\n");
   ErrorF("                       set multi-screen geometry (see man page)\n");
@@ -1804,12 +1824,13 @@ void ddxUseMsg(void)
   ErrorF("\nTurboVNC security and authentication options\n");
   ErrorF("============================================\n");
   ErrorF("-maxauthfails N        allow N consecutive VNC/OTP auth failures (0 = no limit)\n");
-  ErrorF("                       before connections are temporarily blocked [default: %d]\n",
+  ErrorF("                       from a client's IP address before connections from that\n");
+  ErrorF("                       address are temporarily blocked [default: %d]\n",
          DEFAULT_AUTH_MAX_FAILS);
   ErrorF("-authfailtimeout S     block connections initially for S seconds (doubling with\n");
-  ErrorF("                       each subsequent consecutive VNC/OTP auth failure) after\n");
-  ErrorF("                       the max number of consecutive VNC/OTP auth failures has\n");
-  ErrorF("                       been exceeded [default: %d]\n",
+  ErrorF("                       each subsequent consecutive VNC/OTP auth failure) from\n");
+  ErrorF("                       the IP address of a client that exceeds the max number\n");
+  ErrorF("                       of consecutive VNC/OTP auth failures [default: %d]\n",
          DEFAULT_AUTH_FAIL_TIMEOUT);
 #ifdef XVNC_AuthPAM
   ErrorF("-pamsession            create a new PAM session for each viewer that\n");
@@ -1827,10 +1848,11 @@ void ddxUseMsg(void)
 
   ErrorF("\nTurboVNC miscellaneous options\n");
   ErrorF("==============================\n");
+#ifndef TURBOVNC_STATIC_XORG_PATHS
   ErrorF("-registrydir dir       specify directory containing protocol.txt\n");
+#endif
   ErrorF("-verbose               print all X.org errors, warnings, and messages\n");
   ErrorF("-version               report Xvnc version on stderr\n\n");
-  exit(1);
 }
 
 

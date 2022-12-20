@@ -44,7 +44,7 @@ message(STATUS "Linker flags = ${EFFECTIVE_LD_FLAGS}")
 # VIEWER BUILD
 ###############################################################################
 
-if(TVNC_BUILDNATIVE)
+if(TVNC_BUILDHELPER)
 	add_subdirectory(vncviewer)
 endif()
 
@@ -54,6 +54,13 @@ endif()
 ###############################################################################
 
 if(TVNC_BUILDSERVER)
+
+set(DEFAULT_TVNC_BUILDWEBSERVER 1)
+option(TVNC_BUILDWEBSERVER "Build web server for noVNC"
+	${DEFAULT_TVNC_BUILDWEBSERVER})
+boolean_number(TVNC_BUILDWEBSERVER)
+boolean_number(TVNC_BUILDWEBSERVER PARENT_SCOPE)
+report_option(TVNC_BUILDWEBSERVER "Web server for noVNC")
 
 include_directories(include)
 
@@ -67,6 +74,15 @@ option(TVNC_SYSTEMLIBS
 boolean_number(TVNC_SYSTEMLIBS)
 report_option(TVNC_SYSTEMLIBS "System zlib/bzip2/FreeType")
 
+option(TVNC_STATIC_XORG_PATHS
+	"Force vncserver and Xvnc to use the XKB base directory, XKB binary directory, X.org DRI driver path, X.org font path, and X.org registry path specified in the XKB_BASE_DIRECTORY, XKB_BIN_DIRECTORY, XORG_DRI_DRIVER_PATH, XORG_FONT_PATH, and XORG_REGISTRY_PATH CMake variables rather than detecting the appropriate paths at run time"
+	OFF)
+boolean_number(TVNC_STATIC_XORG_PATHS)
+report_option(TVNC_STATIC_XORG_PATHS "Static X.org paths")
+if(TVNC_STATIC_XORG_PATHS)
+	add_definitions(-DTURBOVNC_STATIC_XORG_PATHS)
+endif()
+
 if(NOT TVNC_SYSTEMLIBS)
 	add_subdirectory(${CMAKE_SOURCE_DIR}/common ${CMAKE_BINARY_DIR}/common)
 endif()
@@ -74,6 +90,7 @@ add_subdirectory(libvncauth)
 if(TVNC_NVCONTROL)
 	add_subdirectory(libXNVCtrl)
 endif()
+add_subdirectory(tvncconfig)
 add_subdirectory(vncconnect)
 add_subdirectory(vncpasswd)
 add_subdirectory(Xvnc)
@@ -88,9 +105,32 @@ endif()
 configure_file(vncserver.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vncserver @ONLY)
 execute_process(COMMAND chmod +x vncserver
 	WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
-
 install(PROGRAMS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vncserver
 	DESTINATION ${CMAKE_INSTALL_BINDIR})
+if(TVNC_BUILDWEBSERVER)
+	if(CMAKE_VERSION VERSION_GREATER 3.12 OR
+		CMAKE_VERSION VERSION_EQUAL 3.12)
+		find_package(Python 3.0 REQUIRED)
+		if(CMAKE_SYSTEM_NAME MATCHES "(OpenBSD|FreeBSD|NetBSD|DragonFly)")
+			set(PYTHON_EXECUTABLE ${Python_EXECUTABLE})
+		else()
+			string(REGEX REPLACE "\.[0-9]+$" "" PYTHON_EXECUTABLE
+				${Python_EXECUTABLE})
+			set(PYTHON_EXECUTABLE ${PYTHON_EXECUTABLE} PARENT_SCOPE)
+		endif()
+		message(STATUS "PYTHON_EXECUTABLE = ${PYTHON_EXECUTABLE}")
+		set(PYTHON_VERSION ${Python_VERSION} PARENT_SCOPE)
+	else()
+		find_package(PythonInterp 2.6 REQUIRED)
+		set(PYTHON_VERSION ${PYTHON_VERSION_STRING} PARENT_SCOPE)
+	endif()
+	configure_file(webserver.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/webserver
+		@ONLY)
+	execute_process(COMMAND chmod +x webserver
+		WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+	install(PROGRAMS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/webserver
+		DESTINATION ${CMAKE_INSTALL_BINDIR})
+endif()
 configure_file(vncserver.man.in vncserver.man @ONLY)
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/vncserver.man
 	DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 RENAME vncserver.1)
@@ -99,6 +139,12 @@ install(FILES ${CMAKE_CURRENT_BINARY_DIR}/turbovncserver.conf
 	DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR})
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/turbovncserver-security.conf
 	DESTINATION ${CMAKE_INSTALL_FULL_SYSCONFDIR})
+file(COPY ${CMAKE_CURRENT_SOURCE_DIR}/xstartup.turbovnc
+	DESTINATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+execute_process(COMMAND chmod +x xstartup.turbovnc
+	WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+install(PROGRAMS ${CMAKE_CURRENT_SOURCE_DIR}/xstartup.turbovnc
+	DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	configure_file(vncserver.init.in vncserver.init @ONLY)

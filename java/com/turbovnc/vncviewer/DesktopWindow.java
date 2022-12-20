@@ -1,9 +1,9 @@
-/* Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
- * Copyright (C) 2006 Constantin Kaplinsky.  All Rights Reserved.
- * Copyright (C) 2009 Paul Donohue.  All Rights Reserved.
- * Copyright (C) 2010, 2012-2013, 2015-2018, 2020 D. R. Commander.
-                                                  All Rights Reserved.
+/* Copyright (C) 2010, 2012-2013, 2015-2018, 2020-2022 D. R. Commander.
+ *                                                     All Rights Reserved.
  * Copyright (C) 2011-2013 Brian P. Hinz
+ * Copyright (C) 2009 Paul Donohue.  All Rights Reserved.
+ * Copyright (C) 2006 Constantin Kaplinsky.  All Rights Reserved.
+ * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,13 +35,15 @@ import java.awt.image.*;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.Clipboard;
-import java.io.BufferedReader;
+import java.io.*;
 import java.lang.reflect.*;
 import java.nio.*;
 import java.text.AttributedCharacterIterator;
 import java.text.AttributedString;
+import javax.imageio.ImageIO;
 import javax.swing.*;
 
+import com.turbovnc.rdr.*;
 import com.turbovnc.rfb.*;
 import com.turbovnc.rfb.Cursor;
 import com.turbovnc.rfb.Point;
@@ -49,15 +51,12 @@ import com.turbovnc.rfb.Point;
 class DesktopWindow extends JPanel implements Runnable, MouseListener,
   MouseMotionListener, MouseWheelListener, KeyListener, InputMethodRequests {
 
-  static final double getTime() {
-    return (double)System.nanoTime() / 1.0e9;
-  }
-
   // RFB thread
   DesktopWindow(int width, int height, PixelFormat serverPF, CConn cc_) {
     cc = cc_;
     setSize(width, height);
-    swingDB = VncViewer.getBooleanProperty("turbovnc.swingdb", false);
+    setBackground(Color.BLACK);
+    swingDB = Utils.getBooleanProperty("turbovnc.swingdb", false);
     setOpaque(!swingDB);
     GraphicsEnvironment ge =
       GraphicsEnvironment.getLocalGraphicsEnvironment();
@@ -98,6 +97,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
     });
     setFocusTraversalKeysEnabled(false);
     setFocusable(true);
+    enableInputMethods(false);
   }
 
   // RFB thread
@@ -119,7 +119,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   // RFB thread
   public void setCursor(int w, int h, Point hotspot,
                         int[] data, byte[] mask) {
-    if (!cc.opts.cursorShape || VncViewer.localCursor.getValue())
+    if (!cc.opts.cursorShape || Params.localCursor.getValue())
       return;
 
     hideLocalCursor();
@@ -230,7 +230,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   // RFB thread: Update the actual window with the changed parts of the
   // framebuffer.
   public void updateWindow() {
-    double tBlitStart = getTime();
+    double tBlitStart = Utils.getTime();
     Rect r = damage;
     cc.blitPixels += r.width() * r.height();
     if (!r.isEmpty()) {
@@ -254,7 +254,13 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
         // because we're taking care of that ourselves.  This improves
         // performance on a lot of systems and allows the viewer to achieve
         // optimal performance under X11 without requiring MIT-SHM pixmaps.
-        if (!swingDB)
+        Window activeWindow =
+          javax.swing.FocusManager.getCurrentManager().getActiveWindow();
+        if (!swingDB &&
+            (activeWindow == null || activeWindow instanceof Viewport ||
+             (activeWindow instanceof JDialog &&
+              ((JDialog)activeWindow).getTitle().equals(
+                "TurboVNC profiling information"))))
           RepaintManager.currentManager(this).setDoubleBufferingEnabled(false);
         if (cc.viewer.benchFile != null)
           paintImmediately(x, y, width, height);
@@ -269,7 +275,13 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
           if (cc.viewport.dy > 0)
             y += cc.viewport.dy;
         }
-        if (!swingDB)
+        Window activeWindow =
+          javax.swing.FocusManager.getCurrentManager().getActiveWindow();
+        if (!swingDB &&
+            (activeWindow == null || activeWindow instanceof Viewport ||
+             (activeWindow instanceof JDialog &&
+              ((JDialog)activeWindow).getTitle().equals(
+                "TurboVNC profiling information"))))
           RepaintManager.currentManager(this).setDoubleBufferingEnabled(false);
         if (cc.viewer.benchFile != null)
           paintImmediately(x, y, r.width(), r.height());
@@ -278,7 +290,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
       }
       damage.clear();
     }
-    cc.tBlit += getTime() - tBlitStart;
+    cc.tBlit += Utils.getTime() - tBlitStart;
     cc.blits += 1;
   }
 
@@ -402,9 +414,29 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
       super.paintComponent(g);
     if (cc.viewport != null && (cc.viewport.dx > 0 || cc.viewport.dy > 0))
       g2.translate(cc.viewport.dx, cc.viewport.dy);
+    Object scalingAlg = RenderingHints.VALUE_INTERPOLATION_BILINEAR;
+    double displayScalingFactor = g2.getTransform().getScaleX();
+    // If the remote desktop image will not be scaled, then the scaling
+    // algorithm will only be used to support high DPI scaling on Windows.  In
+    // that case, we emulate the behavior of Windows by default, using nearest-
+    // neighbor interpolation with integral display scaling factors and
+    // bilinear interpolation with fractional display scaling factors.
+    if (Utils.isWindows() && (displayScalingFactor % 1.0) == 0.0 &&
+        cc.cp.width == scaledWidth && cc.cp.height == scaledHeight)
+      scalingAlg = RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR;
+    String alg = System.getProperty("turbovnc.scalingalg");
+    if (alg != null) {
+      if (alg.equalsIgnoreCase("bicubic"))
+        scalingAlg = RenderingHints.VALUE_INTERPOLATION_BICUBIC;
+      else if (alg.equalsIgnoreCase("bilinear"))
+        scalingAlg = RenderingHints.VALUE_INTERPOLATION_BILINEAR;
+      else if (alg.equalsIgnoreCase("nearestneighbor"))
+        scalingAlg = RenderingHints.VALUE_INTERPOLATION_NEAREST_NEIGHBOR;
+    }
+    if (Utils.isWindows() && displayScalingFactor != 1.0)
+      g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, scalingAlg);
     if (cc.cp.width != scaledWidth || cc.cp.height != scaledHeight) {
-      g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION,
-                          RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+      g2.setRenderingHint(RenderingHints.KEY_INTERPOLATION, scalingAlg);
       g2.drawImage(im.getImage(), 0, 0, scaledWidth, scaledHeight, null);
     } else {
       Rectangle r = g.getClipBounds();
@@ -418,11 +450,9 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
 
   // EDT
   public synchronized void checkClipboard() {
-    SecurityManager sm = System.getSecurityManager();
     try {
-      if (sm != null) sm.checkPermission(new AWTPermission("accessClipboard"));
       Clipboard cb = null;
-      if (VncViewer.getBooleanProperty("turbovnc.primary", true))
+      if (Utils.getBooleanProperty("turbovnc.primary", true))
         cb = Toolkit.getDefaultToolkit().getSystemSelection();
       if (cb == null)
         cb = Toolkit.getDefaultToolkit().getSystemClipboard();
@@ -433,7 +463,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
         BufferedReader br =
           new BufferedReader(DataFlavor.stringFlavor.getReaderForText(t));
         CharBuffer cbuf =
-          CharBuffer.allocate(VncViewer.maxClipboard.getValue());
+          CharBuffer.allocate(Params.maxClipboard.getValue());
         br.read(cbuf);
         ((Buffer)cbuf).flip();
         String newContents = cbuf.toString();
@@ -455,7 +485,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
     int x = (cc.viewport == null) ? 0 : cc.viewport.dx;
     int y = (cc.viewport == null) ? 0 : cc.viewport.dy;
     if (!cc.opts.viewOnly &&
-        (!VncViewer.osEID() ||
+        (!Utils.osEID() ||
          !cc.viewport.processExtInputEventHelper(cc.viewport.motionType)) &&
         e.getX() >= x &&
         e.getY() >= y &&
@@ -487,8 +517,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
     int x = (cc.viewport == null) ? 0 : cc.viewport.dx;
     int y = (cc.viewport == null) ? 0 : cc.viewport.dy;
     if (!cc.opts.viewOnly &&
-        (!VncViewer.osEID() ||
-         !cc.viewport.processExtInputEventHelper(type)) &&
+        (!Utils.osEID() || !cc.viewport.processExtInputEventHelper(type)) &&
         (e.getID() == MouseEvent.MOUSE_RELEASED ||
          (e.getX() >= x &&
           e.getY() >= y &&
@@ -502,12 +531,12 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
     mouseCB(e, cc.viewport.buttonReleaseType);
   }
   public void mousePressed(MouseEvent e) {
-    if (VncViewer.OS.startsWith("mac os x")) {
+    if (Utils.isMac()) {
       try {
         Class appClass;
         Object obj;
 
-        if (VncViewer.JAVA_VERSION >= 9) {
+        if (Utils.JAVA_VERSION >= 9) {
           appClass = Desktop.class;
           obj = Desktop.getDesktop();
         } else {
@@ -535,7 +564,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   // EDT: Mouse wheel callback function
   private void mouseWheelCB(MouseWheelEvent e) {
     if (!cc.opts.viewOnly &&
-        (!VncViewer.osEID() ||
+        (!Utils.osEID() ||
          !cc.viewport.processExtInputEventHelper(cc.viewport.motionType)))
       cc.writeWheelEvent(e);
   }
@@ -555,7 +584,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
 
   // EDT: Handle the key pressed event.
   public void keyPressed(KeyEvent e) {
-    if (e.getKeyCode() == cc.opts.menuKeyCode) {
+    if (e.getKeyCode() == cc.opts.menuKeyCode && e.getModifiersEx() == 0) {
       int sx = (scaleWidthRatio == 1.00) ?
         lastX : (int)Math.floor(lastX * scaleWidthRatio);
       int sy = (scaleHeightRatio == 1.00) ?
@@ -569,7 +598,8 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
     int ctrlAltShiftMask = InputEvent.SHIFT_DOWN_MASK |
                            InputEvent.CTRL_DOWN_MASK |
                            InputEvent.ALT_DOWN_MASK;
-    if ((e.getModifiersEx() & ctrlAltShiftMask) == ctrlAltShiftMask) {
+    if ((e.getModifiersEx() & ctrlAltShiftMask) == ctrlAltShiftMask &&
+        (!Utils.isWindows() || !e.isAltGraphDown())) {
       switch (e.getKeyCode()) {
         case KeyEvent.VK_F:
           cc.toggleFullScreen();
@@ -585,6 +615,9 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
           return;
         case KeyEvent.VK_L:
           cc.losslessRefresh();
+          return;
+        case KeyEvent.VK_M:
+          cc.screenshot();
           return;
         case KeyEvent.VK_N:
           VncViewer.newViewer(cc.viewer);
@@ -605,9 +638,44 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
         case KeyEvent.VK_T:
           cc.toggleToolbar();
           return;
+        case KeyEvent.VK_V:
+          cc.toggleViewOnly();
+          return;
+        case KeyEvent.VK_X:
+          VncViewer.tileWindows();
+          return;
         case KeyEvent.VK_Z:
           cc.sizeWindow();
           return;
+        case KeyEvent.VK_9:
+        case KeyEvent.VK_NUMPAD9:
+        case KeyEvent.VK_ADD:
+          if (cc.opts.desktopSize.mode != Options.SIZE_AUTO &&
+              cc.opts.scalingFactor != Options.SCALE_AUTO &&
+              cc.opts.scalingFactor != Options.SCALE_FIXEDRATIO) {
+            cc.zoomIn();
+            return;
+          }
+          break;
+        case KeyEvent.VK_8:
+        case KeyEvent.VK_NUMPAD8:
+        case KeyEvent.VK_SUBTRACT:
+          if (cc.opts.desktopSize.mode != Options.SIZE_AUTO &&
+              cc.opts.scalingFactor != Options.SCALE_AUTO &&
+              cc.opts.scalingFactor != Options.SCALE_FIXEDRATIO) {
+            cc.zoomOut();
+            return;
+          }
+          break;
+        case KeyEvent.VK_0:
+        case KeyEvent.VK_NUMPAD0:
+          if (cc.opts.desktopSize.mode != Options.SIZE_AUTO &&
+              cc.opts.scalingFactor != Options.SCALE_AUTO &&
+              cc.opts.scalingFactor != Options.SCALE_FIXEDRATIO) {
+            cc.zoom100();
+            return;
+          }
+          break;
         case KeyEvent.VK_LEFT:
         case KeyEvent.VK_RIGHT:
         case KeyEvent.VK_UP:
@@ -616,14 +684,18 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
         case KeyEvent.VK_PAGE_DOWN:
         case KeyEvent.VK_HOME:
         case KeyEvent.VK_END:
-          return;
+          if (cc.viewport != null &&
+              (cc.viewport.sp.getHorizontalScrollBar().isVisible() ||
+               cc.viewport.sp.getVerticalScrollBar().isVisible()) &&
+              !VncViewer.isKeyboardGrabbed(cc.viewport))
+            return;
       }
     }
     if ((e.getModifiersEx() & InputEvent.META_DOWN_MASK) ==
         InputEvent.META_DOWN_MASK) {
       switch (e.getKeyCode()) {
         case KeyEvent.VK_P:
-          if (VncViewer.JAVA_VERSION >= 9 && VncViewer.JAVA_VERSION <= 11)
+          if (Utils.JAVA_VERSION >= 9 && Utils.JAVA_VERSION <= 11)
             e.consume();
           return;
         case KeyEvent.VK_COMMA:
@@ -635,10 +707,19 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
         case KeyEvent.VK_I:
         case KeyEvent.VK_R:
         case KeyEvent.VK_L:
+        case KeyEvent.VK_M:
         case KeyEvent.VK_F:
         case KeyEvent.VK_Z:
+        case KeyEvent.VK_X:
         case KeyEvent.VK_T:
           return;
+        case KeyEvent.VK_9:
+        case KeyEvent.VK_8:
+        case KeyEvent.VK_0:
+          if (cc.opts.desktopSize.mode != Options.SIZE_AUTO &&
+              cc.opts.scalingFactor != Options.SCALE_AUTO &&
+              cc.opts.scalingFactor != Options.SCALE_FIXEDRATIO)
+            return;
       }
     }
     if ((e.getModifiersEx() & InputEvent.ALT_DOWN_MASK) ==
@@ -651,6 +732,29 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
       cc.writeKeyEvent(e);
   }
 
+  // EDT: Save screenshot
+  public void screenshot(File file) {
+    int index = file.getName().lastIndexOf('.');
+    String formatName =
+      (index > 0 ? file.getName().substring(index + 1) : "");
+    BufferedImage fbImage = (BufferedImage)im.getImage();
+    int width = fbImage.getWidth(), height = fbImage.getHeight();
+    BufferedImage rgbImage =
+      new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+    rgbImage.createGraphics().drawImage(fbImage, 0, 0, width, height, null);
+    try {
+      if (!ImageIO.write(rgbImage, formatName, file)) {
+        WarningException we = new WarningException(
+          "Could not save remote desktop image:\nImage format not supported");
+        cc.viewer.reportException(we);
+      }
+    } catch (IOException e) {
+      WarningException we = new WarningException(
+        "Could not save remote desktop image:\n" + e.toString());
+      cc.viewer.reportException(we);
+    }
+  }
+
   /////////////////////////////////////////////////////////////////////////////
   // The following methods are called from both the EDT and the RFB thread.
 
@@ -658,7 +762,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   // are called.
 
   private synchronized void hideLocalCursor() {
-    if (VncViewer.localCursor.getValue())
+    if (Params.localCursor.getValue())
       return;
     if (!cc.opts.cursorShape)
       setCursor(noCursor);
@@ -671,7 +775,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   }
 
   private synchronized void showLocalCursor() {
-    if (VncViewer.localCursor.getValue())
+    if (Params.localCursor.getValue())
       return;
     if (cursorAvailable && !cursorVisible) {
       if (!im.getPF().equal(cursor.getPF()) ||
@@ -780,7 +884,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
 
   @Override
   public InputMethodRequests getInputMethodRequests() {
-    if (VncViewer.OS.startsWith("mac os x"))
+    if (Utils.isMac())
       return this;
     return null;
   }

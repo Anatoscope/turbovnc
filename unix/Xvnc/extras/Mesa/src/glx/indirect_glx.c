@@ -34,7 +34,7 @@
 
 #include "glapi.h"
 #include "glxclient.h"
-
+#include "indirect.h"
 #include "util/debug.h"
 
 #ifndef GLX_USE_APPLEGL
@@ -62,13 +62,13 @@ indirect_destroy_context(struct glx_context *gc)
 }
 
 static Bool
-SendMakeCurrentRequest(Display * dpy, CARD8 opcode,
-                       GLXContextID gc_id, GLXContextTag gc_tag,
-                       GLXDrawable draw, GLXDrawable read,
-                       GLXContextTag *out_tag)
+SendMakeCurrentRequest(Display * dpy, GLXContextID gc_id,
+                       GLXContextTag gc_tag, GLXDrawable draw,
+                       GLXDrawable read, GLXContextTag *out_tag)
 {
    xGLXMakeCurrentReply reply;
    Bool ret;
+   int opcode = __glXSetupForCommand(dpy);
 
    LockDisplay(dpy);
 
@@ -136,7 +136,6 @@ indirect_bind_context(struct glx_context *gc, struct glx_context *old,
 {
    GLXContextTag tag;
    Display *dpy = gc->psc->dpy;
-   int opcode = __glXSetupForCommand(dpy);
    Bool sent;
 
    if (old != &dummyContext && !old->isDirect && old->psc->dpy == dpy) {
@@ -146,12 +145,30 @@ indirect_bind_context(struct glx_context *gc, struct glx_context *old,
       tag = 0;
    }
 
-   sent = SendMakeCurrentRequest(dpy, opcode, gc->xid, tag, draw, read,
+   sent = SendMakeCurrentRequest(dpy, gc->xid, tag, draw, read,
 				 &gc->currentContextTag);
 
-   if (!IndirectAPI)
-      IndirectAPI = __glXNewIndirectAPI();
-   _glapi_set_dispatch(IndirectAPI);
+   if (sent) {
+      if (!IndirectAPI)
+         IndirectAPI = __glXNewIndirectAPI();
+      _glapi_set_dispatch(IndirectAPI);
+
+      /* The indirect vertex array state must to be initialised after we
+       * have setup the context, as it needs to query server attributes.
+       *
+       * At the point this is called gc->currentDpy is not initialized
+       * nor is the thread's current context actually set. Hence the
+       * cleverness before the GetString calls.
+       */
+      __GLXattribute *state = gc->client_state_private;
+      if (state && state->array_state == NULL) {
+         gc->currentDpy = gc->psc->dpy;
+         __glXSetCurrentContext(gc);
+         __indirect_glGetString(GL_EXTENSIONS);
+         __indirect_glGetString(GL_VERSION);
+         __glXInitVertexArrayState(gc);
+      }
+   }
 
    return !sent;
 }
@@ -160,7 +177,6 @@ static void
 indirect_unbind_context(struct glx_context *gc, struct glx_context *new)
 {
    Display *dpy = gc->psc->dpy;
-   int opcode = __glXSetupForCommand(dpy);
 
    if (gc == new)
       return;
@@ -170,8 +186,8 @@ indirect_unbind_context(struct glx_context *gc, struct glx_context *new)
     * to send a request to the dpy to unbind the previous context.
     */
    if (!new || new->isDirect || new->psc->dpy != dpy) {
-      SendMakeCurrentRequest(dpy, opcode, None,
-			     gc->currentContextTag, None, None, NULL);
+      SendMakeCurrentRequest(dpy, None, gc->currentContextTag, None, None,
+                             NULL);
       gc->currentContextTag = 0;
    }
 }
@@ -401,10 +417,6 @@ indirect_create_context(struct glx_screen *psc,
 
    gc->attributes.stackPointer = &gc->attributes.stack[0];
 
-   /*
-    ** PERFORMANCE NOTE: A mode dependent fill image can speed things up.
-    */
-   gc->fillImage = __glFillImage;
    gc->pc = gc->buf;
    gc->bufEnd = gc->buf + bufSize;
    gc->isDirect = GL_FALSE;

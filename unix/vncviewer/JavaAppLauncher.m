@@ -1,6 +1,6 @@
 /*
  * Copyright 2012, Oracle and/or its affiliates. All rights reserved.
- * Copyright 2013, 2017-2019, D. R. Commander. All rights reserved.
+ * Copyright 2013, 2017-2019, 2022 D. R. Commander. All rights reserved.
  *
  * DO NOT ALTER OR REMOVE COPYRIGHT NOTICES OR THIS FILE HEADER.
  *
@@ -28,6 +28,10 @@
 #import <Cocoa/Cocoa.h>
 #include <dlfcn.h>
 #include <jni.h>
+
+#if !defined(MAC_OS_X_VERSION_10_12) || MAC_OS_X_VERSION_MAX_ALLOWED < MAC_OS_X_VERSION_10_12
+#define NSAlertStyleCritical NSCriticalAlertStyle
+#endif
 
 #define JAVA_LAUNCH_ERROR "JavaLaunchError"
 
@@ -73,7 +77,7 @@ int main(int argc, char *argv[]) {
     result = 0;
   } @catch (NSException *exception) {
     NSAlert *alert = [[NSAlert alloc] init];
-    [alert setAlertStyle:NSCriticalAlertStyle];
+    [alert setAlertStyle:NSAlertStyleCritical];
     [alert setMessageText:[exception reason]];
     [alert runModal];
 
@@ -97,34 +101,40 @@ int launch(char *commandName) {
 
   // Locate the JLI_Launch() function
   const char *libjliPath = NULL;
-  NSString *env =
-    [[[NSProcessInfo processInfo]environment]objectForKey:@"JAVA_HOME"];
-  if (env != nil && [env length] > 0) {
+  NSString *runtime = [infoDictionary objectForKey:@JVM_RUNTIME_KEY];
+  if (runtime != nil) {
     void *tmpLib = NULL;
+    NSString *runtimePath = [[[NSBundle mainBundle] builtInPlugInsPath]
+                             stringByAppendingPathComponent:runtime];
 
-    libjliPath =
-      [[env stringByAppendingPathComponent:@"jre/lib/jli/libjli.dylib"]
-       fileSystemRepresentation];
-    if ((tmpLib = dlopen(libjliPath, RTLD_LAZY)) == nil) {
-      libjliPath =
-        [[env stringByAppendingPathComponent:@"lib/jli/libjli.dylib"]
-         fileSystemRepresentation];
-      if ((tmpLib = dlopen(libjliPath, RTLD_LAZY)) == nil)
-        libjliPath =
-          [[env stringByAppendingPathComponent:@"lib/libjli.dylib"]
-           fileSystemRepresentation];
-    }
+    libjliPath = [[runtimePath stringByAppendingPathComponent:@"Contents/Home/lib/jli/libjli.dylib"]
+                  fileSystemRepresentation];
+    if ((tmpLib = dlopen(libjliPath, RTLD_LAZY)) == nil)
+      libjliPath = [[runtimePath stringByAppendingPathComponent:@"Contents/Home/lib/libjli.dylib"]
+                    fileSystemRepresentation];
     if (tmpLib) dlclose(tmpLib);
   } else {
     FILE *file = NULL;
     char path[1024] = "\0";
-    NSString *runtime = [infoDictionary objectForKey:@JVM_RUNTIME_KEY];
+    NSString *env =
+      [[[NSProcessInfo processInfo]environment]objectForKey:@"JAVA_HOME"];
 
-    if (runtime != nil) {
-      NSString *runtimePath = [[[NSBundle mainBundle] builtInPlugInsPath]
-                               stringByAppendingPathComponent:runtime];
-      libjliPath = [[runtimePath stringByAppendingPathComponent:@"Contents/Home/jre/lib/jli/libjli.dylib"]
-                    fileSystemRepresentation];
+    if (env != nil && [env length] > 0) {
+      void *tmpLib = NULL;
+
+      libjliPath =
+        [[env stringByAppendingPathComponent:@"jre/lib/jli/libjli.dylib"]
+         fileSystemRepresentation];
+      if ((tmpLib = dlopen(libjliPath, RTLD_LAZY)) == nil) {
+        libjliPath =
+          [[env stringByAppendingPathComponent:@"lib/jli/libjli.dylib"]
+           fileSystemRepresentation];
+        if ((tmpLib = dlopen(libjliPath, RTLD_LAZY)) == nil)
+          libjliPath =
+            [[env stringByAppendingPathComponent:@"lib/libjli.dylib"]
+             fileSystemRepresentation];
+      }
+      if (tmpLib) dlclose(tmpLib);
     } else if ((file = popen("/usr/libexec/java_home", "r")) != NULL &&
                fgets(path, 1024, file) != NULL && strlen(path) > 0) {
       void *tmpLib = NULL;

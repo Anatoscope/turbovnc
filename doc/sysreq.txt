@@ -1,14 +1,15 @@
 * System Requirements
 
-** Linux/x86 and Other x86 Un*x Operating Systems
+** Linux and Other Un*x Operating Systems
 
-|| || Host (x86) || Host (x86-64) || Client ||
+|| || Host || Client (Linux/x86-64, Linux/AArch64) \
+	|| Client (x86 or non-Linux) ||
 | Recommended CPU \
 	| {list type=ul: \
-			{item:For optimal performance, the CPU should support SSE2 \
+			{item:(x86 only) For optimal performance, the CPU should support SSE2 \
 				extensions.} \
 			{item:Dual processors or dual cores recommended}} \
-	| Dual processors or dual cores recommended \
+	| {:} \
 	| For optimal performance, the CPU should support SSE2 extensions. \
 	|
 | O/S \
@@ -17,40 +18,34 @@
 		[[http://www.oracle.com/us/products/servers-storage/solaris][Solaris]], \
 		but currently-supported versions of \
 		[[http://www.redhat.com/products/enterprise-linux/][Red Hat Enterprise Linux]] \
-		(and its work-alikes, including [[http://www.centos.org][CentOS]], \
-		[[http://www.oracle.com/us/technologies/linux][Oracle Linux]], and \
-		[[https://www.scientificlinux.org][Scientific Linux]]), \
-		[[http://www.ubuntu.com][Ubuntu]] LTS, and [[http://www.suse.com][SuSE]] \
-		Linux Enterprise tend to receive the most attention from the TurboVNC \
-		community. \
+		and its derivatives, [[http://www.ubuntu.com][Ubuntu]] LTS, and \
+		[[http://www.suse.com][SuSE]] Linux Enterprise tend to receive the most \
+		attention from the TurboVNC community. \
+	| < \
 	| < \
 	| < \
 	|
 | Other \
-	| {:} | {:} \
+	| SSH server (if using the \
+		[[#TurboVNC_Session_Manager][TurboVNC Session Manager]]) \
+	| For optimal performance, the X server should be configured to export True \
+		Color (24-bit or 32-bit) visuals. \
 	| {list type=ul: \
 			{item:For optimal performance, the X server should be configured to export \
 				True Color (24-bit or 32-bit) visuals.} \
-			{item:[[http://www.java.com][Oracle Java]] or OpenJDK \
-				(Oracle Java 8 or IcedTea-Web is required if using \
-				[[#JWS][Java Web Start]].)}} \
+			{item:[[http://www.java.com][Oracle Java]] or OpenJDK}} \
 	|
 #OPT: hiCol=first
 
-** Mac/x86
+** Mac
 
 || || Client ||
-| Recommended CPU \
-	| Any 64-bit Intel-based Mac \
+| Required CPU \
+	| 64-bit Intel or Apple silicon \
 	|
 | O/S \
-	| OS X/macOS 10.7 "Lion" or later \
-	|
-| Other Software \
-	| [[http://www.java.com][Oracle Java]] 8u40 or later, or \
-		[[https://jdk.java.net][OpenJDK]] 8 or later (Oracle Java 8 or \
-		[[https://icedtea.classpath.org/wiki/IcedTea-Web][IcedTea-Web]] is \
-		required if using [[#JWS][Java Web Start]].) \
+	| macOS 10.12 "Sierra" or later (Intel); macOS 11 "Big Sur" or later \
+		(Apple silicon) \
 	|
 #OPT: hiCol=first
 
@@ -61,21 +56,10 @@
 	| For optimal performance, the CPU should support SSE2 extensions. \
 	|
 | O/S \
-	| Windows 2000 SP1 or later \
+	| Windows 7 or later \
 	|
 | Other \
-	| {list type=ul: \
-			{item:For optimal performance, the client display should have a 24-bit \
-				or 32-bit (True Color) color depth.} \
-			{item:SSH client ([[https://www.msys2.org][MSYS2]] or \
-				[[http://cygwin.com][Cygwin]] implementation preferred, since those \
-				implementations work with the \
-				[[#Secure_TurboVNC_Usage][''-via'' and ''-tunnel'' options]] in the \
-				native Windows TurboVNC Viewer, but other SSH implementations will \
-				work without the ''-via'' and ''-tunnel'' options.  {file: ssh.exe} \
-				should be in the ''PATH''.)} \
-			{item:[[http://www.java.com][Oracle Java]] 8 or \
-				[[https://icedtea.classpath.org/wiki/IcedTea-Web][IcedTea-Web]] is \
-				required if using [[#JWS][Java Web Start]].}} \
+	| For optimal performance, the client display should have a 24-bit or \
+		32-bit (True Color) color depth. \
 	|
 #OPT: hiCol=first
