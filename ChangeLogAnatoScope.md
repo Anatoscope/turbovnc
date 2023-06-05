@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.7.4
+=====
+
+Docker image, pipeline for pushing to alpha.
+
 3.0.2-anatoscope-1.7.3
 =====
 
