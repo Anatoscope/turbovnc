@@ -50,18 +50,8 @@ build-upload:
       [ -n "$FULL_VERSION" -a -n "$TURBOVNC_ANATOSCOPE_VERSION" ]
       # Repackage with the tar.xz compression.
       repack_tmpdir="$(mktemp -d)"
-      cp "$PKG_FILE_NAME" "$repack_tmpdir"
-      (
-        cd "$repack_tmpdir"
-        ar x "$PKG_FILE_NAME"
-        if [ -e control.tar.zst ]; then
-          rm "$PKG_FILE_NAME"
-          zstd -d < control.tar.zst | xz > control.tar.xz
-          zstd -d < data.tar.zst | xz > data.tar.xz
-          ar mc "$PKG_FILE_NAME" debian-binary control.tar.xz data.tar.xz
-        fi
-      )
-      cp "$repack_tmpdir"/"$PKG_FILE_NAME" "$PKG_FILE_NAME"
+      dpkg-deb -R "$PKG_FILE_NAME" "$repack_tmpdir"
+      dpkg-deb -Zxz -b "$repack_tmpdir" "$PKG_FILE_NAME"
       # Upload to GitLab as a generic package.
       http_response_file=$(mktemp)
       http_status="$(curl --silent --write-out "%{http_code}" --output "$http_response_file" --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$PKG_FILE_NAME" "$DESTINATION$TURBOVNC_ANATOSCOPE_VERSION/")"
