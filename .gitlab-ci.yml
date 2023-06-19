@@ -64,7 +64,7 @@ build-upload:
 
 docker-image:
   stage: release
-  image: docker
+  image: registry.gitlab.com/anatoscope/interne/system/anatodocker/ci:6.40
   services:
     - docker:dind                   # necessary for docker run
   rules:
