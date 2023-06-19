@@ -15,7 +15,7 @@ variables:
 # Version showed in package registry: turbovnc_anatoscope_version
 build-upload:
   stage: build-upload
-  image: registry.gitlab.com/anatoscope/interne/system/anatodocker/ci:6.40
+  image: registry.gitlab.com/anatoscope/interne/system/anatodocker/ci:latest
   rules:
     - if: '$CI_COMMIT_TAG'
   cache:
@@ -48,6 +48,20 @@ build-upload:
       FULL_VERSION="$(echo "$PKG_FILE_NAME" | sed -nre "s/turbovnc_(.*)_[^_]+\\.deb/\\1/p")"
       TURBOVNC_ANATOSCOPE_VERSION="$(echo "$PKG_FILE_NAME" | sed -nre "s/turbovnc_.*anatoscope-([^_]+)_[^_]+\\.deb/\\1/p")"
       [ -n "$FULL_VERSION" -a -n "$TURBOVNC_ANATOSCOPE_VERSION" ]
+      # Repackage with the tar.xz compression.
+      repack_tmpdir="$(mktemp -d)"
+      cp "$PKG_FILE_NAME" "$repack_tmpdir"
+      (
+        cd "$repack_tmpdir"
+        ar x "$PKG_FILE_NAME"
+        if [ -e control.tar.zst ]; then
+          rm "$PKG_FILE_NAME"
+          zstd -d < control.tar.zst | xz > control.tar.xz
+          zstd -d < data.tar.zst | xz > data.tar.xz
+          ar mc "$PKG_FILE_NAME" debian-binary control.tar.xz data.tar.xz
+        fi
+      )
+      cp "$repack_tmpdir"/"$PKG_FILE_NAME" "$PKG_FILE_NAME"
       # Upload to GitLab as a generic package.
       http_response_file=$(mktemp)
       http_status="$(curl --silent --write-out "%{http_code}" --output "$http_response_file" --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$PKG_FILE_NAME" "$DESTINATION$TURBOVNC_ANATOSCOPE_VERSION/")"
