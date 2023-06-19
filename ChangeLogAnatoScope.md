@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.7.5
+=====
+
+Use the old tar.xz dpkg package compression.
+
 3.0.2-anatoscope-1.7.4
 =====
 
