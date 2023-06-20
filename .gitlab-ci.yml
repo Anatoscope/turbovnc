@@ -48,6 +48,10 @@ build-upload:
       FULL_VERSION="$(echo "$PKG_FILE_NAME" | sed -nre "s/turbovnc_(.*)_[^_]+\\.deb/\\1/p")"
       TURBOVNC_ANATOSCOPE_VERSION="$(echo "$PKG_FILE_NAME" | sed -nre "s/turbovnc_.*anatoscope-([^_]+)_[^_]+\\.deb/\\1/p")"
       [ -n "$FULL_VERSION" -a -n "$TURBOVNC_ANATOSCOPE_VERSION" ]
+      # Repackage with the tar.xz compression.
+      repack_tmpdir="$(mktemp -d)"
+      dpkg-deb -R "$PKG_FILE_NAME" "$repack_tmpdir"
+      dpkg-deb -Zxz -b "$repack_tmpdir" "$PKG_FILE_NAME"
       # Upload to GitLab as a generic package.
       http_response_file=$(mktemp)
       http_status="$(curl --silent --write-out "%{http_code}" --output "$http_response_file" --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$PKG_FILE_NAME" "$DESTINATION$TURBOVNC_ANATOSCOPE_VERSION/")"
