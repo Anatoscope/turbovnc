@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.7.6
+=====
+
+Docker image from scratch.
+
 3.0.2-anatoscope-1.7.5
 =====
 
