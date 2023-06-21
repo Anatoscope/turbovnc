@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.7.6
+=====
+
+Use ubuntu:22.04 as base image
+
 3.0.2-anatoscope-1.7.5
 =====
 
