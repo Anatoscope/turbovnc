@@ -9,13 +9,14 @@ variables:
   VIRTUALGL_VERSION: "3.0.2"
   DESTINATION: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/$CI_PROJECT_NAME/"
   WEBAPP_CICD_PIPELINE_REF: "master"
+  BUILD_IMAGE: "ubuntu:22.04"
 
 # Resulting file example: turbovnc_2.2.6-anatoscope-1.0.0_amd64.deb
 # Format: turbovnc_<turbovnc_version>-anatoscope-<turbovnc_anatoscope_version>_amd64.deb
 # Version showed in package registry: turbovnc_anatoscope_version
 build-upload:
   stage: build-upload
-  image: ubuntu:22.04
+  image: $BUILD_IMAGE
   rules:
     - if: '$CI_COMMIT_TAG'
   cache:
@@ -73,6 +74,8 @@ docker-image:
     - docker:dind                   # necessary for docker run
   rules:
     - if: $CI_COMMIT_TAG
+  variables:
+    DOCKER_BUILDKIT: "1"
   before_script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
   script:
@@ -82,11 +85,11 @@ docker-image:
         "$DESTINATION/$TURBOVNC_ANATOSCOPE_VERSION/$PKG_FILE_NAME" \
         "$CI_API_V4_URL/projects/35257008/packages/generic/libjpeg/${LIBJPEG_VERSION}/libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb" \
         "$CI_API_V4_URL/projects/35257008/packages/generic/virtualgl/${VIRTUALGL_VERSION}/virtualgl_${VIRTUALGL_VERSION}_amd64.deb"
-      docker build --tag $CI_REGISTRY_IMAGE:libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION} .
+      docker build --build-arg BUILDKIT_SYNTAX=docker/dockerfile:1.3.1 --build-arg="BUILD_IMAGE=$BUILD_IMAGE" --tag $CI_REGISTRY_IMAGE:libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION} .
       docker push $CI_REGISTRY_IMAGE:libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION}
   after_script:
     # Use "--force" to prevent the command from failing if the image doesn't exist
-    - docker rmi --force $CI_REGISTRY_IMAGE:libjpeg-${LIBJPEG_VERSION}-turbovnc-$FULL_VERSION-virtualgl-${VIRTUALGL_VERSION}
+    - docker rmi --force $CI_REGISTRY_IMAGE:libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION}
 
 release:
   stage: release
