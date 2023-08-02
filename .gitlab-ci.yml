@@ -9,7 +9,7 @@ variables:
   VIRTUALGL_VERSION: "3.0.2"
   DESTINATION: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/$CI_PROJECT_NAME/"
   WEBAPP_CICD_PIPELINE_REF: "master"
-  BUILD_IMAGE: "ubuntu:22.04"
+  BUILD_IMAGE: "ubuntu:20.04"
 
 # Resulting file example: turbovnc_2.2.6-anatoscope-1.0.0_amd64.deb
 # Format: turbovnc_<turbovnc_version>-anatoscope-<turbovnc_anatoscope_version>_amd64.deb
