@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.8.0
+=====
+
+Go back to ubuntu-20.04 to be more compatible.
+
 3.0.2-anatoscope-1.7.7
 =====
 
