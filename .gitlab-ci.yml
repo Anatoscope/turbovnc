@@ -128,11 +128,6 @@ release:
         --form "variables[custom_tag]=libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION}" \
         "$CI_API_V4_URL/projects/$WEBAPP_CICD_PROJECT_ID/trigger/pipeline"
 
-orthopedics-alpha:
-  extends: .alpha
-  variables:
-    WEBAPP_CICD_PROJECT_ID: 35161498
-
 circle-alpha:
   extends: .alpha
   variables:
