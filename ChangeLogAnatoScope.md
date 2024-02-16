@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.9.0
+=====
+
+Fix WebSocket subprotocol priority between binary and base64 always getting base64.
+
 3.0.2-anatoscope-1.8.0
 =====
 
