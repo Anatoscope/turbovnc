@@ -1,0 +1,10 @@
+FROM ubuntu:22.04
+
+COPY turbovnc_*.deb libjpeg-turbo-official_*.deb virtualgl_*.deb /
+
+RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends /*.deb && \
+    rm -rf /var/lib/apt/lists/* && \
+    rm -f *.deb
+
+ENTRYPOINT ["/opt/TurboVNC/bin/Xvnc"]
