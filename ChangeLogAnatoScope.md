@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.10.0
+=====
+
+Add a "self-sufficient" Turbovnc docker image based on Ubuntu
+
 3.0.2-anatoscope-1.9.0
 =====
 
