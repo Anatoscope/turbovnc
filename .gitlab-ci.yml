@@ -25,7 +25,7 @@ build-upload:
       - .ccache
   script:
     - |
-      EXPECTED_FULL_VERSION="$(sed -nre 's/^set\(VERSION ([0-9]\.[0-9]\.[0-9]-anatoscope-[0-9]\.[0-9]\.[0-9].*)\)$/\1/p' CMakeLists.txt)"
+      EXPECTED_FULL_VERSION="$(sed -nre 's/^set\(VERSION ([0-9]+\.[0-9]+\.[0-9]+-anatoscope-[0-9]+\.[0-9]+\.[0-9]+.*)\)$/\1/p' CMakeLists.txt)"
       if [ "$CI_COMMIT_TAG" != "$EXPECTED_FULL_VERSION" ]; then
           echo "[ERROR] Tag '$CI_COMMIT_TAG' doesn't correspond to the TurboVNC-Anatoscope version '$EXPECTED_FULL_VERSION' in CMakeLists.txt" >&2
           exit 1
@@ -67,7 +67,7 @@ build-upload:
     reports:
       dotenv: build-upload.env
 
-docker-image:
+docker-images:
   stage: release
   image: docker
   services:
@@ -85,11 +85,16 @@ docker-image:
         "$DESTINATION/$TURBOVNC_ANATOSCOPE_VERSION/$PKG_FILE_NAME" \
         "$CI_API_V4_URL/projects/35257008/packages/generic/libjpeg/${LIBJPEG_VERSION}/libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb" \
         "$CI_API_V4_URL/projects/35257008/packages/generic/virtualgl/${VIRTUALGL_VERSION}/virtualgl_${VIRTUALGL_VERSION}_amd64.deb"
-      docker build --build-arg BUILDKIT_SYNTAX=docker/dockerfile:1.3.1 --build-arg="BUILD_IMAGE=$BUILD_IMAGE" --tag $CI_REGISTRY_IMAGE:libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION} .
-      docker push $CI_REGISTRY_IMAGE:libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION}
+      versions=libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION}
+      docker build --build-arg BUILDKIT_SYNTAX=docker/dockerfile:1.3.1 --build-arg="BUILD_IMAGE=$BUILD_IMAGE" --tag $CI_REGISTRY_IMAGE:${versions} .
+      docker build --build-arg BUILDKIT_SYNTAX=docker/dockerfile:1.3.1 --tag $CI_REGISTRY_IMAGE:${versions}-ubuntu . -f Dockerfile-ubuntu
+      docker push $CI_REGISTRY_IMAGE:${versions}
+      docker push $CI_REGISTRY_IMAGE:${versions}-ubuntu
   after_script:
     # Use "--force" to prevent the command from failing if the image doesn't exist
-    - docker rmi --force $CI_REGISTRY_IMAGE:libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION}
+    - versions=libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION}
+    - docker rmi --force $CI_REGISTRY_IMAGE:${versions}
+    - docker rmi --force $CI_REGISTRY_IMAGE:${versions}-ubuntu
 
 release:
   stage: release
@@ -132,3 +137,26 @@ circle-alpha:
   extends: .alpha
   variables:
     WEBAPP_CICD_PROJECT_ID: 37235366
+
+circle-orchestrator:
+  stage: deploy
+  image: docker
+  services:
+    - docker:dind
+  variables:
+    GIT_STRATEGY: none
+    ORCHESTRATOR_ARTIFACT_REGISTRY: europe-west1-docker.pkg.dev/circle-orchestrator-343847/orchestrator
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: manual
+    - when: never
+  script:
+    - test -n "$FULL_VERSION" -a -n "$TURBOVNC_ANATOSCOPE_VERSION"
+    - echo "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin
+    - base64 -d "$GOOGLE_ARTIFACT_REGISTRY_KEY_FILE" | docker login -u _json_key --password-stdin "$ORCHESTRATOR_ARTIFACT_REGISTRY"
+    - tag=libjpeg-${LIBJPEG_VERSION}-turbovnc-${FULL_VERSION%%-*}-turbovnc_anatoscope-$TURBOVNC_ANATOSCOPE_VERSION-virtualgl-${VIRTUALGL_VERSION}-ubuntu
+    - docker pull $CI_REGISTRY_IMAGE:$tag
+    - docker tag $CI_REGISTRY_IMAGE:$tag $ORCHESTRATOR_ARTIFACT_REGISTRY/turbovnc:$tag
+    - docker rmi $CI_REGISTRY_IMAGE:$tag
+    - docker push $ORCHESTRATOR_ARTIFACT_REGISTRY/turbovnc:$tag
+    - docker rmi $ORCHESTRATOR_ARTIFACT_REGISTRY/turbovnc:$tag
