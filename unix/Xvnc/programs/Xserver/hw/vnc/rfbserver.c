@@ -598,6 +598,18 @@ rfbClientPtr rfbReverseConnection(char *host, int port, int id)
 }
 
 
+static int rfbClientCount()
+{
+  rfbClientPtr cl, nextCl;
+  int count = 0;
+
+  for (cl = rfbClientHead; cl; cl = nextCl) {
+    count++;
+    nextCl = cl->next;
+  }
+  return count;
+}
+
 /*
  * rfbNewClient is called when a new connection has been made by whatever
  * means.
@@ -772,6 +784,8 @@ static rfbClientPtr rfbNewClient(int sock)
 
   cl->warnedClientVersionUnknown = FALSE;
 
+  rfbLog("DEBUG: new client connection on socket %d\n", cl->sock);
+  rfbLog("DEBUG: clients connected: %d\n", rfbClientCount());
   return cl;
 }
 
@@ -805,11 +819,12 @@ void rfbClientConnectionGone(rfbClientPtr cl)
   rfbPAMEnd(cl);
 #endif
   if (cl->login != NULL) {
-    rfbLog("Client %s (%s) gone\n", cl->login, cl->host);
+    rfbLog("Client %s (%s, socket %d) gone\n", cl->login, cl->host, cl->sock);
     free(cl->login);
   } else {
-    rfbLog("Client %s gone\n", cl->host);
+    rfbLog("Client %s (socket %d) gone\n", cl->host, cl->sock);
   }
+  rfbLog("DEBUG: clients connected: %d\n", rfbClientCount());
   free(cl->host);
 
   ShutdownTightThreads();
@@ -829,8 +844,10 @@ void rfbClientConnectionGone(rfbClientPtr cl)
       deflateEnd(&cl->zsStruct[i]);
   }
 
-  if (pointerDragClient == cl)
+  if (pointerDragClient == cl) {
+    rfbLog("DEBUG: Releasing pointer lock for client on socket %d\n", pointerDragClient->sock);
     pointerDragClient = NULL;
+  }
 
   if (pointerOwner == cl)
     pointerOwner = NULL;
@@ -1595,13 +1612,23 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 
       READ(((char *)&msg) + 1, sz_rfbPointerEventMsg - 1)
 
-      if (pointerDragClient && (pointerDragClient != cl))
+      if (pointerDragClient && (pointerDragClient != cl)){
+        // rfbLog("DEBUG: Ignoring pointer event for client on socket %d\n", cl->sock);
         return;
+      }
 
-      if (msg.pe.buttonMask == 0)
+      if (msg.pe.buttonMask == 0) {
+        if (pointerDragClient != NULL) {
+          rfbLog("DEBUG: Releasing pointer lock for client on socket %d\n", pointerDragClient->sock);
+        }
         pointerDragClient = NULL;
-      else
+      }
+      else {
+        if (pointerDragClient != cl) {
+          rfbLog("DEBUG: Acquiring pointer lock for client on socket %d\n", cl->sock);
+        }
         pointerDragClient = cl;
+      }
 
       if (!rfbViewOnly && !cl->viewOnly) {
         cl->cursorX = (int)Swap16IfLE(msg.pe.x);
