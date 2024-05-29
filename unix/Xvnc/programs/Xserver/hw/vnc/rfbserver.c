@@ -646,7 +646,7 @@ static rfbClientPtr rfbNewClient(int sock)
   cl->sock = sock;
   getpeername(sock, &addr.u.sa, &addrlen);
   cl->host = strdup(sockaddr_string(&addr, addrStr, INET6_ADDRSTRLEN));
-  sprintf(client_id, "%s:%d", cl->host, addr.u.sin.sin_port);
+  sprintf(client_id, "%s:%d", cl->host, ntohs(addr.u.sin.sin_port));
   cl->client_id = strdup(client_id);
 
   /* Dispatch client input to rfbProcessClientProtocolVersion(). */
