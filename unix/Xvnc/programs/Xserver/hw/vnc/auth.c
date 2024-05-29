@@ -1428,12 +1428,12 @@ static Bool CheckResponse(rfbClientPtr cl, int numPasswords,
   memset(passwdViewOnly, 0, MAXPWLEN + 1);
 
   if (memcmp(encryptedChallenge1, response, CHALLENGESIZE) == 0) {
-    rfbLog("Full-control authentication enabled for %s\n", cl->host);
+    rfbLog("Full-control authentication enabled for client %s\n", cl->client_id);
     ok = TRUE;
     cl->viewOnly = FALSE;
 
   } else if (memcmp(encryptedChallenge2, response, CHALLENGESIZE) == 0) {
-    rfbLog("View-only authentication enabled for %s\n", cl->host);
+    rfbLog("View-only authentication enabled for client %s\n", cl->client_id);
     ok = TRUE;
     cl->viewOnly = TRUE;
   }
@@ -1522,7 +1522,7 @@ void rfbVncAuthProcessResponse(rfbClientPtr cl)
       for (otherCl = rfbClientHead; otherCl; otherCl = otherCl->next) {
         if ((otherCl != cl) && (otherCl->state == RFB_NORMAL)) {
           rfbLog("-dontdisconnect: Not shared & existing client\n");
-          rfbLog("  refusing new client %s\n", cl->host);
+          rfbLog("  refusing new client %s\n", cl->client_id);
           rfbClientAuthFailed(cl, "Authentication failed.  The server is already in use.");
           return;
         }
@@ -1531,7 +1531,7 @@ void rfbVncAuthProcessResponse(rfbClientPtr cl)
     rfbClientAuthSucceeded(cl, rfbAuthVNC);
   } else {
     rfbLog("rfbVncAuthProcessResponse: authentication failed from %s\n",
-           cl->host);
+           cl->client_id);
     if (rfbAuthConsiderBlocking(cl->host))
       rfbClientAuthFailed(cl, "Authentication failed.  Client temporarily blocked");
     else

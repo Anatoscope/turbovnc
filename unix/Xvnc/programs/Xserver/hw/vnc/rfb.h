@@ -274,6 +274,7 @@ typedef struct rfbClientRec {
 
   int sock;
   char *host;
+  char *client_id;
   char *login;
 
   int protocol_minor_ver;       /* RFB protocol minor version in use */

@@ -153,7 +153,7 @@ Bool rfbPAMAuthenticate(rfbClientPtr cl, const char *svc, const char *user,
         rfbLog("PAMAuthenticate: pam_open_session: %s\n",
                pam_strerror(pamHandle, authStatus));
       } else {
-        rfbLog("Opened PAM session for client %s\n", cl->host);
+        rfbLog("Opened PAM session for client %s\n", cl->client_id);
       }
     }
   }
@@ -212,7 +212,7 @@ void rfbPAMEnd(rfbClientPtr cl)
     if ((r = pam_end(cl->pamHandle, PAM_SUCCESS)) != PAM_SUCCESS)
       rfbLog("PAMEnd: pam_end: %s\n", pam_strerror(cl->pamHandle, r));
 
-    rfbLog("Closed PAM session for client %s\n", cl->host);
+    rfbLog("Closed PAM session for client %s\n", cl->client_id);
     cl->pamHandle = 0;
   }
 }

@@ -213,8 +213,9 @@ static void rfbSockNotify(int fd, int ready, void *data)
       return;
     }
 
-    rfbLog("Got connection from client %s\n",
-           sockaddr_string(&addr, addrStr, INET6_ADDRSTRLEN));
+    rfbLog("Got connection from client %s:%d\n",
+           sockaddr_string(&addr, addrStr, INET6_ADDRSTRLEN),
+           addr.u.sin.sin_port);
 
     SetNotifyFd(sock, rfbSockNotify, X_NOTIFY_READ, NULL);
 
