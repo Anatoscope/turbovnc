@@ -787,7 +787,7 @@ static rfbClientPtr rfbNewClient(int sock)
 
   cl->warnedClientVersionUnknown = FALSE;
 
-  rfbLog("DEBUG: new client connection on socket %d\n", cl->sock);
+  rfbLog("DEBUG: new client connection from %s\n", cl->client_id);
   rfbLog("DEBUG: clients connected: %d\n", rfbClientCount());
   return cl;
 }
@@ -1617,7 +1617,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       READ(((char *)&msg) + 1, sz_rfbPointerEventMsg - 1)
 
       if (pointerDragClient && (pointerDragClient != cl)){
-        // rfbLog("DEBUG: Ignoring pointer event for client on socket %d\n", cl->sock);
+        // rfbLog("DEBUG: Ignoring pointer event  for client %s\n", cl->client_id);
         return;
       }
 
