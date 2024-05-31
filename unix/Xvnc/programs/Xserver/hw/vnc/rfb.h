@@ -85,6 +85,8 @@
 
 #define DEFAULT_DEFER_UPDATE_TIME 40
 
+#define DEFAULT_POINTER_LOCK_TIMEOUT_MS 5000
+
 /* Maximum number of threads to use for multithreaded encoding, regardless of
    the CPU count */
 #define MAX_ENCODING_THREADS 8
@@ -924,6 +926,7 @@ extern CARD32 rfbInactWarnTimeout;
 extern Bool rfbDflInactVisWarn;
 extern void InactTimerSet(void);
 extern void InactTimerCancel(void);
+extern void PointerLockTimerFree(void);
 extern Bool InterframeOn(rfbClientPtr cl);
 extern void InterframeOff(rfbClientPtr);
 extern BOOL rfbProfile;
