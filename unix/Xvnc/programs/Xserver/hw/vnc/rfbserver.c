@@ -1617,8 +1617,14 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       READ(((char *)&msg) + 1, sz_rfbPointerEventMsg - 1)
 
       if (pointerDragClient && (pointerDragClient != cl)){
-        // rfbLog("DEBUG: Ignoring pointer event  for client %s\n", cl->client_id);
-        return;
+
+        if (msg.pe.buttonMask == 5) {
+          rfbLog("DEBUG: Stealing pointer lock from client %s for client %s\n", pointerDragClient->client_id, cl->client_id);
+          pointerDragClient = cl;
+        } else {
+          // rfbLog("DEBUG: Ignoring pointer event  for client %s\n", cl->client_id);
+          return;
+        }
       }
 
       if (msg.pe.buttonMask == 0) {
