@@ -57,6 +57,7 @@ rfbClientPtr rfbClientHead = NULL;
 /* The client that is currently dragging the pointer
    This serves as a mutex for RFB pointer events. */
 rfbClientPtr pointerDragClient = NULL;
+int pointerLockTimeout = DEFAULT_POINTER_LOCK_TIMEOUT;
 /* The client that last moved the pointer
    Other clients will automatically receive cursor updates via the traditional
    mechanism of drawing the cursor into the framebuffer (AKA "server-side
@@ -155,6 +156,32 @@ static void WriteCapture(int captureFD, char *buf, int len)
     rfbLogPerror("WriteCapture: Could not write to capture file");
 }
 
+/*
+ * TTL for pointer lock during drag
+ */
+static OsTimerPtr pointerLockTimer;
+
+static CARD32 PointerLockTimerCallback(OsTimerPtr timer, CARD32 time, void *arg)
+{
+  rfbLog("DEBUG: TTL expired, releasing pointer lock for client %s\n", pointerDragClient->client_id);
+  pointerDragClient = NULL;
+  return 0;
+}
+
+void PointerLockTimerArm(void)
+{
+  pointerLockTimer = TimerSet(pointerLockTimer, 0, pointerLockTimeout, PointerLockTimerCallback, NULL);
+}
+
+void PointerLockTimerCancel(void)
+{
+  TimerCancel(pointerLockTimer);
+}
+
+void PointerLockTimerFree(void)
+{
+  TimerFree(pointerLockTimer);
+}
 
 /*
  * Idle timeout
@@ -726,6 +753,14 @@ static rfbClientPtr rfbNewClient(int sock)
     if (combine > 0 && combine <= 65000) rfbCombineRect = combine;
   }
 
+  if ((env = getenv("TVNC_POINTER_LOCK_TIMEOUT")) != NULL && strlen(env) >= 1) {
+    int temp = atoi(env);
+    if (temp >= 0 )
+      pointerLockTimeout = temp;
+    else
+      rfbLog("WARNING: Invalid value of TVNC_POINTER_LOCK_TIMEOUT (%s) ignored\n", env);
+  }
+
   cl->visEventMask = rfbDflInactVisWarn ? INACT_WARN_VIS_EVENT_MASK : 0;
 
   cl->firstUpdate = TRUE;
@@ -851,6 +886,7 @@ void rfbClientConnectionGone(rfbClientPtr cl)
   if (pointerDragClient == cl) {
     rfbLog("DEBUG: Releasing pointer lock for client %s\n", pointerDragClient->client_id);
     pointerDragClient = NULL;
+    PointerLockTimerCancel();
   }
 
   if (pointerOwner == cl)
@@ -1630,14 +1666,16 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       if (msg.pe.buttonMask == 0) {
         if (pointerDragClient != NULL) {
           rfbLog("DEBUG: Releasing pointer lock for client %s\n", pointerDragClient->client_id);
+          pointerDragClient = NULL;
+          PointerLockTimerCancel();
         }
-        pointerDragClient = NULL;
       }
       else {
         if (pointerDragClient != cl) {
           rfbLog("DEBUG: Acquiring pointer lock for client %s\n", cl->client_id);
+          pointerDragClient = cl;
         }
-        pointerDragClient = cl;
+        PointerLockTimerArm();
       }
 
       if (!rfbViewOnly && !cl->viewOnly) {
