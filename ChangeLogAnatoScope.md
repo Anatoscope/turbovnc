@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.11.0
+=====
+
+Add a timeout to the pointer event lock held by a client during pointer drags, to mitigate deadlocks sometimes caused by network issues.
+
 3.0.2-anatoscope-1.10.0
 =====
 

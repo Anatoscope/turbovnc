@@ -57,6 +57,7 @@ rfbClientPtr rfbClientHead = NULL;
 /* The client that is currently dragging the pointer
    This serves as a mutex for RFB pointer events. */
 rfbClientPtr pointerDragClient = NULL;
+int pointerLockTimeoutInMs = DEFAULT_POINTER_LOCK_TIMEOUT_MS;
 /* The client that last moved the pointer
    Other clients will automatically receive cursor updates via the traditional
    mechanism of drawing the cursor into the framebuffer (AKA "server-side
@@ -155,6 +156,33 @@ static void WriteCapture(int captureFD, char *buf, int len)
     rfbLogPerror("WriteCapture: Could not write to capture file");
 }
 
+/*
+ * Timeout for pointer lock during drag
+ */
+static OsTimerPtr pointerLockTimer;
+
+static CARD32 PointerLockTimerCallback(OsTimerPtr timer, CARD32 time, void *arg)
+{
+  rfbLog("Timeout expired, releasing pointer lock for client %s\n", pointerDragClient->host);
+  pointerDragClient = NULL;
+  return 0;
+}
+
+void PointerLockTimerStart(void)
+{
+  if (pointerLockTimeoutInMs)
+    pointerLockTimer = TimerSet(pointerLockTimer, 0, pointerLockTimeoutInMs, PointerLockTimerCallback, NULL);
+}
+
+void PointerLockTimerCancel(void)
+{
+  TimerCancel(pointerLockTimer);
+}
+
+void PointerLockTimerFree(void)
+{
+  TimerFree(pointerLockTimer);
+}
 
 /*
  * Idle timeout
@@ -711,6 +739,14 @@ static rfbClientPtr rfbNewClient(int sock)
     if (combine > 0 && combine <= 65000) rfbCombineRect = combine;
   }
 
+  if ((env = getenv("TVNC_POINTER_LOCK_TIMEOUT")) != NULL && strlen(env) >= 1) {
+    int temp = atoi(env);
+    if (temp >= 0 )
+      pointerLockTimeoutInMs = temp;
+    else
+      rfbLog("WARNING: Invalid value of TVNC_POINTER_LOCK_TIMEOUT (%s) ignored\n", env);
+  }
+
   cl->visEventMask = rfbDflInactVisWarn ? INACT_WARN_VIS_EVENT_MASK : 0;
 
   cl->firstUpdate = TRUE;
@@ -810,6 +846,13 @@ void rfbClientConnectionGone(rfbClientPtr cl)
   } else {
     rfbLog("Client %s gone\n", cl->host);
   }
+
+  if (pointerDragClient == cl) {
+    rfbLog("Releasing pointer lock for client %s\n", pointerDragClient->host);
+    pointerDragClient = NULL;
+    PointerLockTimerCancel();
+  }
+
   free(cl->host);
 
   ShutdownTightThreads();
@@ -828,9 +871,6 @@ void rfbClientConnectionGone(rfbClientPtr cl)
     if (cl->zsActive[i])
       deflateEnd(&cl->zsStruct[i]);
   }
-
-  if (pointerDragClient == cl)
-    pointerDragClient = NULL;
 
   if (pointerOwner == cl)
     pointerOwner = NULL;
@@ -1598,10 +1638,16 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       if (pointerDragClient && (pointerDragClient != cl))
         return;
 
-      if (msg.pe.buttonMask == 0)
-        pointerDragClient = NULL;
-      else
+      if (msg.pe.buttonMask == 0) {
+        if (pointerDragClient != NULL) {
+          pointerDragClient = NULL;
+          PointerLockTimerCancel();
+        }
+      }
+      else {
         pointerDragClient = cl;
+        PointerLockTimerStart();
+      }
 
       if (!rfbViewOnly && !cl->viewOnly) {
         cl->cursorX = (int)Swap16IfLE(msg.pe.x);
