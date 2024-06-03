@@ -274,6 +274,7 @@ typedef struct _wsCtx wsCtx;
 
 typedef struct rfbClientRec {
 
+  int client_id;
   int sock;
   char *host;
   char *login;

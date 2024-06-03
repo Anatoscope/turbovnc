@@ -193,7 +193,7 @@ void rfbTranslateNone(char *table, rfbPixelFormat *in, rfbPixelFormat *out,
 
 Bool rfbSetTranslateFunction(rfbClientPtr cl)
 {
-  rfbLog("Pixel format for client %s:\n", cl->host);
+  rfbLog("Pixel format for client %d:\n", cl->client_id);
   PrintPixelFormat(&cl->format);
 
   /*
