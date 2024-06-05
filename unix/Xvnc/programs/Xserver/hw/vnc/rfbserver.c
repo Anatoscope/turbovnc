@@ -627,6 +627,17 @@ rfbClientPtr rfbReverseConnection(char *host, int port, int id)
 }
 
 
+static int rfbClientCount()
+{
+  rfbClientPtr cl;
+  int count = 0;
+
+  for (cl = rfbClientHead; cl; cl = cl->next) {
+    count++;
+  }
+  return count;
+}
+
 /*
  * rfbNewClient is called when a new connection has been made by whatever
  * means.
@@ -812,6 +823,7 @@ static rfbClientPtr rfbNewClient(int sock)
   cl->warnedClientVersionUnknown = FALSE;
 
   rfbLog("New client is client %d\n", cl->client_id);
+  rfbLog("Number of clients connected: %d\n", rfbClientCount());
   return cl;
 }
 
@@ -850,6 +862,7 @@ void rfbClientConnectionGone(rfbClientPtr cl)
   } else {
     rfbLog("Client %d gone\n", cl->client_id);
   }
+  rfbLog("Number of clients connected: %d\n", rfbClientCount());
 
   if (pointerDragClient == cl) {
     rfbLog("Releasing pointer lock for client %d\n", pointerDragClient->client_id);
