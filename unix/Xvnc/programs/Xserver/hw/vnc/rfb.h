@@ -85,7 +85,7 @@
 
 #define DEFAULT_DEFER_UPDATE_TIME 40
 
-#define DEFAULT_POINTER_LOCK_TIMEOUT_MS 5000
+#define DEFAULT_POINTER_LOCK_TIMEOUT_MS 0
 
 /* Maximum number of threads to use for multithreaded encoding, regardless of
    the CPU count */
