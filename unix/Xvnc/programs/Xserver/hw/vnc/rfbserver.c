@@ -1644,11 +1644,15 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
 
       if (msg.pe.buttonMask == 0) {
         if (pointerDragClient != NULL) {
+          rfbLog("Releasing pointer lock for client %d\n", pointerDragClient->client_id);
           pointerDragClient = NULL;
           PointerLockTimerCancel();
         }
       }
       else {
+        if (pointerDragClient != cl) {
+          rfbLog("Acquiring pointer lock for client %d\n", cl->client_id);
+        }
         pointerDragClient = cl;
         PointerLockTimerStart();
       }
