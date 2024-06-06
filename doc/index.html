@@ -2762,6 +2762,41 @@ about how Hextile and ZRLE work.</p>
     </dd>
 </dl>
 
+
+
+<div class="table">
+<table class="standard">
+  <tr class="standard">
+    <td class="high standard">Environment Variable</td>
+    <td class="standard"><code>TVNC_POINTER_LOCK_TIMEOUT = <em>{n}</em></code></td>
+  </tr>
+  <tr class="standard">
+    <td class="high standard">Summary</td>
+    <td class="standard">Timeout in ms for the pointer events lock, held by a client during a drag</td>
+  </tr>
+  <tr class="standard">
+    <td class="high standard">Default Value</td>
+    <td class="standard">5000</td>
+  </tr>
+</table>
+</div>
+
+
+<dl class="Description">
+    <dt class="Description-1 Description">Description</dt>
+    <dd class="Description-1 Description">
+        In TurboVNC, there is a locking mechanism for pointer events, where
+        a client "owns" pointer events while it drags the pointer, to avoid
+        interference from other clients during collaborative sessions.
+
+        To mitigate deadlocks that may happen because of network issues (or
+        ill-behaved clients, maybe), there is a timeout on the lock, which will
+        be released after a short while with no pointer events from the client
+        holding the lock.
+    </dd>
+</dl>
+
+
 <div class="table">
 <table class="standard">
   <tr class="standard">
