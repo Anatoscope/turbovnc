@@ -1088,7 +1088,7 @@ static void rfbProcessClientInitMessage(rfbClientPtr cl)
       for (otherCl = rfbClientHead; otherCl; otherCl = otherCl->next) {
         if ((otherCl != cl) && (otherCl->state == RFB_NORMAL)) {
           rfbLog("-dontdisconnect: Not shared & existing client\n");
-          rfbLog("  refusing new client %s\n", cl->client_id);
+          rfbLog("  refusing new client %d\n", cl->client_id);
           rfbCloseClient(cl);
           return;
         }
@@ -1097,7 +1097,7 @@ static void rfbProcessClientInitMessage(rfbClientPtr cl)
       for (otherCl = rfbClientHead; otherCl; otherCl = nextCl) {
         nextCl = otherCl->next;
         if ((otherCl != cl) && (otherCl->state == RFB_NORMAL)) {
-          rfbLog("Not shared - closing connection to client %s\n",
+          rfbLog("Not shared - closing connection to client %d\n",
                  otherCl->client_id);
           rfbCloseClient(otherCl);
         }
@@ -1464,7 +1464,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
             }
             break;
           case rfbEncodingClientServerVer:
-            rfbLog("Sending server version to client %s\n", cl->client_id);
+            rfbLog("Sending server version to client %d\n", cl->client_id);
             rfbSendServerVer(cl);
             gotEncodingClientServerVerExt = TRUE;
             break;
@@ -1658,7 +1658,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
           rfbLog("Stealing pointer lock from client %d for client %d\n", pointerDragClient->client_id, cl->client_id);
           pointerDragClient = cl;
         } else {
-          // rfbLog("DEBUG: Ignoring pointer event  for client %s\n", cl->client_id);
+          // rfbLog("DEBUG: Ignoring pointer event  for client %d\n", cl->client_id);
           return;
         }
       }

@@ -1522,7 +1522,7 @@ void rfbVncAuthProcessResponse(rfbClientPtr cl)
       for (otherCl = rfbClientHead; otherCl; otherCl = otherCl->next) {
         if ((otherCl != cl) && (otherCl->state == RFB_NORMAL)) {
           rfbLog("-dontdisconnect: Not shared & existing client\n");
-          rfbLog("  refusing new client %s\n", cl->client_id);
+          rfbLog("  refusing new client %d\n", cl->client_id);
           rfbClientAuthFailed(cl, "Authentication failed.  The server is already in use.");
           return;
         }
@@ -1530,7 +1530,7 @@ void rfbVncAuthProcessResponse(rfbClientPtr cl)
     }
     rfbClientAuthSucceeded(cl, rfbAuthVNC);
   } else {
-    rfbLog("rfbVncAuthProcessResponse: authentication failed from %s\n",
+    rfbLog("rfbVncAuthProcessResponse: authentication failed from %d\n",
            cl->client_id);
     if (rfbAuthConsiderBlocking(cl->host))
       rfbClientAuthFailed(cl, "Authentication failed.  Client temporarily blocked");
