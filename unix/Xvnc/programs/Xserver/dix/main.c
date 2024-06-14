@@ -118,6 +118,9 @@ Equipment Corporation.
 #include "dpmsproc.h"
 #endif
 
+void InactTimerCancel(void);
+void PointerLockTimerFree(void);
+
 extern void Dispatch(void);
 
 CallbackListPtr RootWindowFinalizeCallback = NULL;
