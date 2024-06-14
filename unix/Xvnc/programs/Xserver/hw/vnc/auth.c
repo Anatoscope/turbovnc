@@ -292,6 +292,15 @@ typedef struct {
  * line.
  */
 static SecTypeData secTypes[] = {
+  /*
+   * The goal is to have secTypeTight with authCapVncAuth.
+   * The "Fix security type handling" https://github.com/novnc/noVNC/pull/1677
+   * made the order important. Earlier the secTypeTight was taken
+   * from "unixlogin" and the authCapVncAuth was taken from "vnc".
+   */
+  { "vnctight",  TRUE,    TRUE,      -1,         TRUE,
+    &secTypeTight,    &authCapVncAuth,   rfbSecTypeVncAuth },
+
 #if USETLS
 /*  name         enabled  permitted  preference  requiredData */
   { "tlsnone",   FALSE,   TRUE,      -1,         FALSE,
@@ -377,7 +386,8 @@ Bool rfbOptRfbAuth(void)
   SecTypeData *s;
 
   for (s = secTypes; s->name != NULL; s++) {
-    if (!strcmp(&s->name[strlen(s->name) - 3], "vnc") && s->enabled)
+    if ((!strcmp(s->name, "vnctight") ||
+         !strcmp(s->name, "vnc")) && s->enabled)
       return TRUE;
   }
 
