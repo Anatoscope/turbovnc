@@ -1,3 +1,9 @@
+3.0.2-anatoscope-1.12.0
+=====
+
+Tight security with VNC auth as preferred method to make extensions work again after the "Fix security type handling" https://github.com/novnc/noVNC/pull/1677
+Fix forward declaration build errors.
+
 3.0.2-anatoscope-1.11.0
 =====
 
