@@ -440,6 +440,8 @@ typedef struct _rfbInteractionCapsMsg {
 
 /* AnatoScope extension to send server version and receive client version */
 #define rfbClientVer 105
+/* AnatoScope extension to change default Xorg background color */
+#define rfbChangeBackgroundColor 106
 
 #define rfbFileListRequest 130
 #define rfbFileDownloadRequest 131
@@ -1469,6 +1471,17 @@ typedef struct _rfbClientVerMsg {
 
 #define sz_rfbClientVerMsg 8
 
+/*-----------------------------------------------------------------------------
+ * ChangeBackgroundColor - AnatoScope extension to change default Xorg background color
+ */
+
+typedef struct _rfbChangeBackgroundColorMsg {
+    CARD8 type;
+    CARD8 red;
+    CARD8 green;
+    CARD8 blue;
+} rfbChangeBackgroundColorMsg;
+#define sz_rfbChangeBackgroundColorMsg 4
 
 /*-----------------------------------------------------------------------------
  * FileListRequest
@@ -1824,6 +1837,7 @@ typedef union _rfbClientToServerMsg {
     rfbKeyEventMsg ke;
     rfbPointerEventMsg pe;
     rfbClientCutTextMsg cct;
+    rfbChangeBackgroundColorMsg cbc;
     rfbFileListRequestMsg flr;
     rfbFileDownloadRequestMsg fdr;
     rfbFileUploadRequestMsg fupr;
