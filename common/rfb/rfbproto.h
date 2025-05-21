@@ -636,7 +636,7 @@ typedef struct _rfbInteractionCapsMsg {
 #define sig_rfbEncodingWarnEventAllOff   "WRNEVENT"
 #define sig_rfbEncodingVisEventAllOff    "VISEVENT"
 #define sig_rfbEncodingClientServerVer   "CLSRVVER"
-
+#define sig_rfbChangeBackgroundColor     "CHGBKCOL"
 
 /*****************************************************************************
  *
