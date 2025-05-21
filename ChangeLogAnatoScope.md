@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.13.0
+====
+
+Add a rfb extension to allow client to change default Xorg background color.
+
 3.0.2-anatoscope-1.12.0
 =====
 
