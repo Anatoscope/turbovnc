@@ -1156,7 +1156,7 @@ static void rfbProcessClientVer(rfbClientPtr cl, const char *str)
 /* Update these constants on changing capability lists below! */
 #define N_SMSG_CAPS  0
 #define N_CMSG_CAPS  0
-#define N_ENC_CAPS  21
+#define N_ENC_CAPS  22
 
 void rfbSendInteractionCaps(rfbClientPtr cl)
 {
@@ -1224,8 +1224,10 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   SetCapInfo(&enc_list[i++],  rfbGIIServer,              rfbGIIVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingWarnEventAllOff,rfbTurboVncVendor);
   SetCapInfo(&enc_list[i++],  rfbEncodingVisEventAllOff, rfbTurboVncVendor);
-  if (rfbSrvVerStr)
-    SetCapInfo(&enc_list[i++],  rfbEncodingClientServerVer, rfbTurboVncVendor);
+  if (rfbSrvVerStr) {
+    SetCapInfo(&enc_list[i++], rfbEncodingClientServerVer, rfbTurboVncVendor);
+  }
+  SetCapInfo(&enc_list[i++], rfbChangeBackgroundColor, rfbTurboVncVendor);
   if (i != nEncCaps) {
     rfbLog("rfbSendInteractionCaps: assertion failed, i != nEncCaps\n");
     rfbCloseClient(cl);
