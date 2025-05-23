@@ -364,7 +364,7 @@ dixChangeWindowProperty(ClientPtr pClient, WindowPtr pWin, Atom property,
 
 #ifdef TURBOVNC
     if (pWin->parent == NullWindow) {
-        extern void rfbRootPropertyChange();
+        extern void rfbRootPropertyChange(PropertyPtr pProp);
         rfbRootPropertyChange(pProp);
     }
 #endif
