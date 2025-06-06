@@ -1774,8 +1774,11 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       unsigned int pixel = hexColorToPixelInColorMap(
           msg.cbc.red, msg.cbc.green, msg.cbc.blue, pScreen);
 
-      // change backround pixel and update background with this value.
+      // Change backround pixel.
       ChangeWindowAttributes(pScreen->root, CWBackPixel, &pixel, serverClient);
+      // Update background & refresh clients.
+      rfbClearToBackground(pScreen->root, 0, 0, pScreen->width, pScreen->height, FALSE);
+
       return;
     }
 
