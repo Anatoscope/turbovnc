@@ -1765,6 +1765,11 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       return;
     }
     case rfbChangeBackgroundColor: {
+      if (cl->viewOnly) {
+        rfbLog("WARNING: Received a request to change background color with a "
+               "viewOnly client. Ignoring it.");
+        return;
+      }
       READ(((char *)&msg) + 1, sz_rfbChangeBackgroundColorMsg - 1);
 
       rfbLog("Received a request to change background color to r:%u g:%u b:%u\n",
