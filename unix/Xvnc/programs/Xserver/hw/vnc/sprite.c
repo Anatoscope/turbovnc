@@ -1121,25 +1121,3 @@ rfbSpriteRestoreCursorAllDev(ScreenPtr pScreen)
         }
     }
 }
-
-unsigned int hexColorToPixelInColorMap(const CARD8 red, const CARD8 green,
-                                        const CARD8 blue, ScreenPtr pScreen) {
-
-  rfbSpriteScreenPtr pScreenPriv = GetSpriteScreen(pScreen);
-  xColorItem *sourceColor = &pScreenPriv->colors[SOURCE_COLOR];
-
-  unsigned long resultingPixel = 0; // a default black color
-
-  pScreenPriv->pColormap = pScreenPriv->pInstalledMap;
-  // input color values are between 0 - 255 but sourceColor are between 0 -
-  // USHRT_MAX
-  sourceColor->red = red * USHRT_MAX / 255;
-  sourceColor->green = green * USHRT_MAX / 255;
-  sourceColor->blue = blue * USHRT_MAX / 255;
-
-  FakeAllocColor(pScreenPriv->pColormap, sourceColor);
-  resultingPixel = sourceColor->pixel;
-  FakeFreeColor(pScreenPriv->pColormap, sourceColor->pixel);
-
-  return (unsigned int)resultingPixel;
-}
