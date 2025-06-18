@@ -32,7 +32,6 @@
  */
 
 #ifdef HAVE_DIX_CONFIG_H
-#include "dix.h"
 #include <dix-config.h>
 #endif
 
@@ -1157,7 +1156,7 @@ static void rfbProcessClientVer(rfbClientPtr cl, const char *str)
 /* Update these constants on changing capability lists below! */
 #define N_SMSG_CAPS  0
 #define N_CMSG_CAPS  0
-#define N_ENC_CAPS  22
+#define N_ENC_CAPS  21
 
 void rfbSendInteractionCaps(rfbClientPtr cl)
 {
@@ -1228,7 +1227,6 @@ void rfbSendInteractionCaps(rfbClientPtr cl)
   if (rfbSrvVerStr) {
     SetCapInfo(&enc_list[i++], rfbEncodingClientServerVer, rfbTurboVncVendor);
   }
-  SetCapInfo(&enc_list[i++], rfbChangeBackgroundColor, rfbTurboVncVendor);
   if (i != nEncCaps) {
     rfbLog("rfbSendInteractionCaps: assertion failed, i != nEncCaps\n");
     rfbCloseClient(cl);
@@ -1796,20 +1794,6 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
       rfbProcessClientVer(cl, str);
 
       free(str);
-      return;
-    }
-    case rfbChangeBackgroundColor: {
-      READ(((char *)&msg) + 1, sz_rfbChangeBackgroundColorMsg - 1);
-
-      rfbLog("Received a request to change background color to r:%u g:%u b:%u\n",
-             msg.cbc.red, msg.cbc.green, msg.cbc.blue);
-
-      ScreenPtr pScreen = screenInfo.screens[0];
-      unsigned int pixel = hexColorToPixelInColorMap(
-          msg.cbc.red, msg.cbc.green, msg.cbc.blue, pScreen);
-
-      // change backround pixel and update background with this value.
-      ChangeWindowAttributes(pScreen->root, CWBackPixel, &pixel, serverClient);
       return;
     }
 

@@ -64,6 +64,3 @@ extern Bool rfbDCRestoreUnderCursor(DeviceIntPtr pDev, ScreenPtr pScreen,
                                     int x, int y, int w, int h);
 extern Bool rfbDCDeviceInitialize(DeviceIntPtr pDev, ScreenPtr pScreen);
 extern void rfbDCDeviceCleanup(DeviceIntPtr pDev, ScreenPtr pScreen);
-
-unsigned int hexColorToPixelInColorMap(const CARD8 red, const CARD8 green,
-                                        const CARD8 blue, ScreenPtr pScreen);

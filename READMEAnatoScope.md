@@ -17,7 +17,6 @@ Main features:
   * `MAXDELAY`: an alternative to `JPEGQLVL` for *automatic* image quality adaptation
   * `VISEVENT`: to allow a client to control inactivity popup
   * `WRNEVENT`: to send warnings to a client
-  * `CHGBKCOL`: to change Xorg default background color
 * custom parameters to the interframe comparisons (cf `-interframeeps` /  `-interframeallowconv`)
 * tracing of the network round-trip time (cf `-congtraceintervalms`)
 
