@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.14.0
+====
+
+Remove all related code associated to `CHGBKCOL` extension
+
 3.0.2-anatoscope-1.13.0
 ====
 
