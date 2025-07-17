@@ -1,3 +1,8 @@
+3.0.2-anatoscope-1.14.1
+====
+
+Upload to the multi-region orchestrator artifact registry https://gitlab.com/anatoscope/circle/dev/orchestrator/gestion/-/issues/167
+
 3.0.2-anatoscope-1.14.0
 ====
 
