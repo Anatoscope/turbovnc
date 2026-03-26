@@ -41,6 +41,7 @@ else()
 endif()
 
 install(TARGETS turbovnchelper DESTINATION ${CMAKE_INSTALL_JAVADIR})
+strip_debug_info(turbovnchelper)
 
 else() # APPLE AND TVNC_BUILDVIEWER
 
@@ -52,6 +53,7 @@ add_executable(checkshmpixmaps
 target_link_libraries(checkshmpixmaps ${X11_LIBRARIES})
 
 install(TARGETS checkshmpixmaps DESTINATION ${CMAKE_INSTALL_BINDIR})
+strip_debug_info(checkshmpixmaps)
 
 configure_file(vncviewer.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vncviewer @ONLY)
 execute_process(COMMAND chmod +x vncviewer
@@ -79,6 +81,7 @@ target_link_libraries(turbovnchelper ${X11_LIBRARIES} ${X11_Xi_LIB} ${LIBDL}
 	${TJPEG_LIBRARY})
 
 install(TARGETS turbovnchelper DESTINATION ${CMAKE_INSTALL_JAVADIR})
+strip_debug_info(turbovnchelper)
 
 install(FILES ${CMAKE_SOURCE_DIR}/java/com/turbovnc/vncviewer/turbovnc-128.png
 	DESTINATION ${CMAKE_INSTALL_FULL_DATADIR}/icons/hicolor/128x128/apps
