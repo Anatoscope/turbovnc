@@ -194,6 +194,7 @@ else()
 endif()
 
 install(TARGETS Xvnc DESTINATION ${CMAKE_INSTALL_BINDIR})
+strip_debug_info(Xvnc)
 install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/man/Xserver.man
 	DESTINATION ${CMAKE_INSTALL_MANDIR}/man1 RENAME Xserver.1)
 configure_file(Xvnc.man.in Xvnc.man @ONLY)

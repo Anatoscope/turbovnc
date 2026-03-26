@@ -38,6 +38,8 @@ macro(report_option var desc)
 	endif()
 endmacro()
 
+include(cmakescripts/AppWithDebInfo.cmake)
+
 set(DEFAULT_TVNC_BUILDHELPER 1)
 if(WIN32)
 	set(TVNC_BUILDHELPERDESC "Build the TurboVNC Helper library for the Windows TurboVNC Viewer (to enable accelerated JPEG decompression, keyboard grabbing, and Pageant support)")
