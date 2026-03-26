@@ -7,7 +7,7 @@ stages:
 variables:
   LIBJPEG_VERSION: "2.1.4"
   VIRTUALGL_VERSION: "3.0.2"
-  DESTINATION: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/$CI_PROJECT_NAME/"
+  DESTINATION: "$CI_API_V4_URL/projects/$CI_PROJECT_ID/packages/generic/$CI_PROJECT_NAME"
   WEBAPP_CICD_PIPELINE_REF: "master"
   BUILD_IMAGE: "ubuntu:20.04"
 
@@ -32,8 +32,8 @@ build-upload:
       fi
       # Build deps.
       DEBIAN_FRONTEND=noninteractive apt-get update
-      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends default-jdk libpam-dev ccache cmake make gcc g++ libx11-dev python3 libxinerama-dev libxrandr-dev libxcursor-dev libxi-dev curl pkg-config libxfont-dev libpixman-1-dev libglx-dev libgl-dev libdrm-dev libssl-dev libxkbfile-dev libgbm-dev mesa-common-dev libxshmfence-dev
-      [ -r "libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb" ] || curl -fsSL -O https://sourceforge.net/projects/libjpeg-turbo/files/${LIBJPEG_VERSION}/libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends default-jdk libpam-dev ccache cmake make gcc g++ libx11-dev python3 libxinerama-dev libxrandr-dev libxcursor-dev libxi-dev curl wget pkg-config libxfont-dev libpixman-1-dev libglx-dev libgl-dev libdrm-dev libssl-dev libxkbfile-dev libgbm-dev mesa-common-dev libxshmfence-dev
+      [ -r "libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb" ] || wget --header "JOB-TOKEN: $CI_JOB_TOKEN" "$CI_API_V4_URL/projects/35257008/packages/generic/libjpeg/${LIBJPEG_VERSION}/libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb"
       dpkg -i libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
       # Build deb package.
       src_dir=$PWD
@@ -41,8 +41,10 @@ build-upload:
       mkdir -p "$CCACHE_DIR"
       ccache -M 100M
       build_dir=$(mktemp -d)
+      export CCACHE_BASEDIR="$build_dir"
+      export CCACHE_NOHASHDIR=1 # Expecting no sources in the build dir.
       cd "$build_dir"
-      cmake -DCMAKE_C{,XX}_COMPILER_LAUNCHER=ccache -DTVNC_BUILDVIEWER=OFF "$src_dir"
+      cmake -DCMAKE_C{,XX}_COMPILER_LAUNCHER=ccache -DTVNC_BUILDVIEWER=OFF -DCMAKE_BUILD_TYPE=AppWithDebInfo "$src_dir"
       make -j4 deb
       # Extract version number.
       PKG_FILE_NAME="$(ls turbovnc_*.deb | head -n1)"
@@ -53,9 +55,18 @@ build-upload:
       repack_tmpdir="$(mktemp -d)"
       dpkg-deb -R "$PKG_FILE_NAME" "$repack_tmpdir"
       dpkg-deb -Zxz -b "$repack_tmpdir" "$PKG_FILE_NAME"
+      # Create a debug archive.
+      DBG_FILE_NAME=turbovnc-dbg_$EXPECTED_FULL_VERSION.tar.gz
+      find . -type f -name '*.debug' -print0 | tar -czf $DBG_FILE_NAME --null -T -
       # Upload to GitLab as a generic package.
       http_response_file=$(mktemp)
-      http_status="$(curl --silent --write-out "%{http_code}" --output "$http_response_file" --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$PKG_FILE_NAME" "$DESTINATION$TURBOVNC_ANATOSCOPE_VERSION/")"
+      http_status="$(curl --silent --write-out "%{http_code}" --output "$http_response_file" --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$PKG_FILE_NAME" "$DESTINATION/$TURBOVNC_ANATOSCOPE_VERSION/")"
+      cat $http_response_file
+      echo $http_status
+      [[ "$http_status" =~ 2[[:digit:]]{2} ]]
+      # Upload debug info to GitLab as a generic package.
+      http_response_file=$(mktemp)
+      http_status="$(curl --silent --write-out "%{http_code}" --output "$http_response_file" --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$DBG_FILE_NAME" "$DESTINATION-dbg/$TURBOVNC_ANATOSCOPE_VERSION/")"
       cat $http_response_file
       echo $http_status
       [[ "$http_status" =~ 2[[:digit:]]{2} ]]

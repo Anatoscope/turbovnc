@@ -43,6 +43,7 @@ else()
 endif()
 
 install(TARGETS turbovnchelper DESTINATION ${CMAKE_INSTALL_FULL_JAVADIR})
+strip_debug_info(turbovnchelper)
 
 else() # APPLE
 
@@ -72,6 +73,7 @@ target_link_libraries(turbovnchelper ${X11_LIBRARIES} ${X11_Xi_LIB} ${LIBDL}
 	${TJPEG_LIBRARY})
 
 install(TARGETS turbovnchelper DESTINATION ${CMAKE_INSTALL_FULL_JAVADIR})
+strip_debug_info(turbovnchelper)
 
 install(FILES ${CMAKE_SOURCE_DIR}/java/com/turbovnc/vncviewer/turbovnc-128.png
 	DESTINATION ${CMAKE_INSTALL_FULL_DATADIR}/icons/hicolor/128x128/apps

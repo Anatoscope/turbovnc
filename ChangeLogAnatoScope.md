@@ -1,3 +1,8 @@
+3.2.2-anatoscope-1.14.2
+====
+
+Build debug info, use local repo for JPEG https://gitlab.com/anatoscope/circle/dev/orchestrator/gestion/-/work_items/867
+
 3.0.2-anatoscope-1.14.1
 ====
 

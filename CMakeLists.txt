@@ -6,8 +6,8 @@ cmake_minimum_required(VERSION 3.16...3.28)
 
 project(TurboVNC NONE)
 string(TOLOWER ${CMAKE_PROJECT_NAME} CMAKE_PROJECT_NAME_LC)
-set(VERSION 3.2.2-anatoscope-1.14.1)
-set(DOCVERSION 3.2.2-anatoscope-1.14.1)
+set(VERSION 3.2.2-anatoscope-1.14.2)
+set(DOCVERSION 3.2.2-anatoscope-1.14.2)
 set(COPYRIGHT_YEAR "1999-2026")
 set(COPYRIGHT "The VirtualGL Project and many others (see README.md)")
 set(URLTEXT "Visit http://www.TurboVNC.org for more information on TurboVNC")
@@ -27,6 +27,8 @@ macro(report_option var desc)
 		message(STATUS "${desc} disabled (${var} = ${${var}})")
 	endif()
 endmacro()
+
+include(cmakescripts/AppWithDebInfo.cmake)
 
 set(DEFAULT_TVNC_BUILDVIEWER 1)
 option(TVNC_BUILDVIEWER "Build TurboVNC Viewer"
