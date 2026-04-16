@@ -32,7 +32,7 @@ build-upload:
       fi
       # Build deps.
       apt-get update
-      apt-get install -y --no-install-recommends default-jdk libpam-dev ccache cmake make gcc g++ libx11-dev python3 libxinerama-dev libxrandr-dev libxcursor-dev libxi-dev curl
+      apt-get install -y --no-install-recommends default-jdk libpam-dev ccache cmake make gcc g++ libx11-dev python3 libxinerama-dev libxrandr-dev libxcursor-dev libxi-dev curl pkg-config libxfont-dev libpixman-1-dev libglx-dev libgl-dev libdrm-dev libssl-dev libxkbfile-dev libgbm-dev mesa-common-dev libxshmfence-dev
       [ -r "libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb" ] || curl -fsSL -O https://sourceforge.net/projects/libjpeg-turbo/files/${LIBJPEG_VERSION}/libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
       dpkg -i libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
       # Build deb package.
