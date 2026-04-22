@@ -31,8 +31,8 @@ build-upload:
           exit 1
       fi
       # Build deps.
-      apt-get update
-      apt-get install -y --no-install-recommends default-jdk libpam-dev ccache cmake make gcc g++ libx11-dev python3 libxinerama-dev libxrandr-dev libxcursor-dev libxi-dev curl pkg-config libxfont-dev libpixman-1-dev libglx-dev libgl-dev libdrm-dev libssl-dev libxkbfile-dev libgbm-dev mesa-common-dev libxshmfence-dev
+      DEBIAN_FRONTEND=noninteractive apt-get update
+      DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends default-jdk libpam-dev ccache cmake make gcc g++ libx11-dev python3 libxinerama-dev libxrandr-dev libxcursor-dev libxi-dev curl pkg-config libxfont-dev libpixman-1-dev libglx-dev libgl-dev libdrm-dev libssl-dev libxkbfile-dev libgbm-dev mesa-common-dev libxshmfence-dev
       [ -r "libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb" ] || curl -fsSL -O https://sourceforge.net/projects/libjpeg-turbo/files/${LIBJPEG_VERSION}/libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
       dpkg -i libjpeg-turbo-official_${LIBJPEG_VERSION}_amd64.deb
       # Build deb package.
@@ -42,7 +42,7 @@ build-upload:
       ccache -M 100M
       build_dir=$(mktemp -d)
       cd "$build_dir"
-      cmake -DCMAKE_C{,XX}_COMPILER_LAUNCHER=ccache "$src_dir"
+      cmake -DCMAKE_C{,XX}_COMPILER_LAUNCHER=ccache -DTVNC_BUILDVIEWER=OFF "$src_dir"
       make -j4 deb
       # Extract version number.
       PKG_FILE_NAME="$(ls turbovnc_*.deb | head -n1)"
