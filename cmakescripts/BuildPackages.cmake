@@ -23,8 +23,7 @@ set(PKGID "com.virtualgl.${PKGNAME_LC}" CACHE STRING
 # Linux RPM and DEB
 ###############################################################################
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND
-	(TVNC_BUILDHELPER OR TVNC_BUILDSERVER))
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 
 set(RPMARCH ${CMAKE_SYSTEM_PROCESSOR})
 if(CPU_TYPE STREQUAL "x86_64")
@@ -56,14 +55,16 @@ if(TVNC_BUILDSERVER)
 	if(TVNC_USEPAM)
 		set(DEBDEPENDS "libpam0g, ${DEBDEPENDS}")
 	endif()
-	set(DEBDEPENDS "${DEBDEPENDS}, xauth, x11-xkb-utils, xkb-data")
-	if(TVNC_BUILDWEBSERVER)
-		if(PYTHON_VERSION VERSION_GREATER 3.0 OR PYTHON_VERSION VERSION_EQUAL 3.0)
-			set(DEBDEPENDS "${DEBDEPENDS}, python3")
-		else()
-			set(DEBDEPENDS "${DEBDEPENDS}, python (>= 2.6)")
-		endif()
+	set(DEBDEPENDS "${DEBDEPENDS}, dbus-x11, xauth, x11-xkb-utils, xkb-data, libxfont2, libpixman-1-0, libgl1")
+	if(TVNC_DRI3)
+		set(DEBDEPENDS "${DEBDEPENDS}, libgbm1")
 	endif()
+	if(TVNC_BUILDWEBSERVER)
+		set(DEBDEPENDS "${DEBDEPENDS}, python3")
+	endif()
+endif()
+if(TVNC_BUILDVIEWER)
+	set(DEBDEPENDS "${DEBDEPENDS}, libxi6")
 endif()
 
 configure_file(release/makerpm.in pkgscripts/makerpm)
@@ -93,18 +94,12 @@ endif() # Linux
 
 if(WIN32)
 
+set(INST_NAME ${CMAKE_PROJECT_NAME}-${VERSION})
 if(BITS EQUAL 64)
-	set(INST_NAME ${CMAKE_PROJECT_NAME}-${VERSION}-x64)
 	set(INST_DEFS -DWIN64)
-else()
-	set(INST_NAME ${CMAKE_PROJECT_NAME}-${VERSION}-x86)
 endif()
 
-set(INST_DEPENDS java)
-if(TVNC_BUILDHELPER)
-	set(INST_DEFS ${INST_DEFS} "-DTURBOVNCHELPER")
-	set(INST_DEPENDS ${INST_DEPENDS} turbovnchelper)
-endif()
+set(INST_DEPENDS java turbovnchelper)
 if(TVNC_INCLUDEJRE)
 	set(INST_DEFS ${INST_DEFS} "-DINCLUDEJRE")
 	set(INST_DEPENDS ${INST_DEPENDS} jrebuild)
@@ -132,7 +127,7 @@ endif() # WIN32
 # Mac DMG
 ###############################################################################
 
-if(APPLE AND TVNC_BUILDVIEWER AND TVNC_BUILDHELPER)
+if(APPLE AND TVNC_BUILDVIEWER)
 
 set(MACOS_APP_CERT_NAME "" CACHE STRING
 	"Name of the Developer ID Application certificate (in the macOS keychain) that should be used to sign the TurboVNC Viewer app & DMG.  Leave this blank to generate an unsigned app/DMG.")

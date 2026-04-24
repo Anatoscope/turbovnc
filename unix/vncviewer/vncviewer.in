@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-BINDIR=`dirname $0`
+BINDIR=$(dirname "$(realpath "$0")")
 if [ -d $BINDIR/../java/jre ]; then
 	JAVA=$BINDIR/../java/jre/bin/java
 else
@@ -29,32 +29,11 @@ if [ -f "$_TMP/libjawt.so" ]; then
 fi
 
 if [ "$JAWT_PATH" = "" ]; then
-	# This may be required for IBM Java
-	_TMP=`$JAVA -XshowSettings:properties -version 2>&1 | grep java.home | sed s/.*=\ //g`
-	if [ -f "$_TMP/lib/$ARCH/libjawt.so" ]; then
-		JAWT_PATH=$_TMP/lib/$ARCH
-	fi
-fi
-
-if [ "$JAWT_PATH" = "" ]; then
-	# Maybe we're using Java 6 or earlier.  Try some common paths.
-	for dir in /usr/lib64/jvm/jre /usr/lib/jvm/jre /usr/lib/jvm/java-6-openjdk/jre /usr/java/default/jre /usr/java/latest/jre; do
-		if [ -f $dir/lib/$ARCH/libjawt.so ]; then
-			JAWT_PATH=$dir/lib/$ARCH
-			break
-		fi
-	done
-fi
-
-if [ "$JAWT_PATH" = "" ]; then
 	echo WARNING: Could not find libjawt.so.  Some features may not work properly.
 else
 	echo libjawt.so path: $JAWT_PATH
 	LD_LIBRARY_PATH=$JAWT_PATH:$LD_LIBRARY_PATH
 	export LD_LIBRARY_PATH
 fi
-if [ "@BITS@" = "32" ]; then
-	exec $JAVA -server -d@BITS@ -Djava.library.path=$TVNC_JAVADIR -jar $TVNC_JAVADIR/VncViewer.jar ${1+"$@"}
-else
-	exec $JAVA -server -Djava.library.path=$TVNC_JAVADIR -jar $TVNC_JAVADIR/VncViewer.jar ${1+"$@"}
-fi
+exec $JAVA -server --enable-native-access=VncViewer \
+	-Djava.library.path=$TVNC_JAVADIR -jar $TVNC_JAVADIR/VncViewer.jar ${1+"$@"}

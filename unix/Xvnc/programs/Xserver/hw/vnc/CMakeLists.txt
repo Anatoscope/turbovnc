@@ -24,30 +24,23 @@ if(TVNC_NVCONTROL)
 	include_directories(${CMAKE_SOURCE_DIR}/unix/libXNVCtrl ${X11_INCLUDE_DIR})
 endif()
 
+set(DRI3SRC "")
+if(TVNC_DRI3)
+	set(DRI3SRC dri3.c)
+	include_directories(../../dri3 ../../miext/sync)
+endif()
+
 set(TVNC_USETLS_DESC
 	"Implement server-side TLS encryption using the specified library [Options: OpenSSL (default), None]")
 set(TVNC_USETLS "OpenSSL" CACHE STRING ${TVNC_USETLS_DESC})
 set_property(CACHE TVNC_USETLS PROPERTY STRINGS OpenSSL None)
 string(TOLOWER "${TVNC_USETLS}" TVNC_USETLS)
 
-if(APPLE OR CMAKE_SYSTEM_NAME MATCHES "(OpenBSD|FreeBSD|NetBSD|DragonFly)")
-	find_path(ICONV_INCLUDE_DIR iconv.h)
-	set_property(SOURCE cutpaste.c APPEND_STRING PROPERTY COMPILE_FLAGS
-		" -I${ICONV_INCLUDE_DIR}")
-endif()
-
 if(TVNC_USETLS STREQUAL "openssl")
-	include(FindOpenSSL)
-	if(NOT OPENSSL_FOUND)
-		message(STATUS "OpenSSL not found.  Disabling TLS encryption")
-		set(TVNC_USETLS "None" CACHE STRING ${TVNC_USETLS_DESC} FORCE)
-	else()
-		set(RFBSSLSRC rfbssl_openssl.c)
-		message(STATUS "Enabling TLS encryption using OpenSSL")
-		add_definitions(-DUSETLS)
-		set_property(SOURCE ${RFBSSLSRC} APPEND_STRING PROPERTY COMPILE_FLAGS
-			" -I${OPENSSL_INCLUDE_DIR}")
-	endif()
+	message(STATUS "Enabling TLS encryption using OpenSSL")
+	find_package(OpenSSL REQUIRED)
+	set(RFBSSLSRC rfbssl_openssl.c)
+	add_definitions(-DUSETLS)
 	set(DEFAULT_TVNC_DLOPENSSL 1)
 	option(TVNC_DLOPENSSL "Load OpenSSL using dlopen()/dlsym() instead of linking directly with it"
 		${DEFAULT_TVNC_DLOPENSSL})
@@ -75,6 +68,7 @@ add_library(vnc STATIC
 	dispcur.c
 	disppopup.c
 	draw.c
+	${DRI3SRC}
 	flowcontrol.c
 	hextile.c
 	init.c
@@ -82,6 +76,8 @@ add_library(vnc STATIC
 	kbdptr.c
 	paintinactwarn.c
 	popupsprite.c
+	qnum_to_xorgevdev.c
+	qnum_to_xorgkbd.c
 	randr.c
 	rfbplainjson.c
 	rfbscreen.c
@@ -104,6 +100,9 @@ add_library(vnc STATIC
 	${NVCTRLSRC}
 	${RFBSSLSRC})
 
+if(TVNC_DRI3)
+	target_link_libraries(vnc PkgConfig::DRM)
+endif()
 if(TVNC_USETLS STREQUAL "openssl" AND NOT TVNC_DLOPENSSL)
-	target_link_libraries(vnc ${OPENSSL_LIBRARIES})
+	target_link_libraries(vnc OpenSSL::SSL)
 endif()

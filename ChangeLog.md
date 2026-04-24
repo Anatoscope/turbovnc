@@ -1,3 +1,594 @@
+3.2.2 ESR
+=========
+
+### Significant changes relative to 3.2.1
+
+1. The `vncserver` script now checks whether the Xvnc process associated with a
+TurboVNC session is running before including the session in the session list.
+This prevents an issue whereby, if the Xvnc process was killed without using
+the `vncserver` script (such as by rebooting the host without shutting down the
+session) and a local session or another X proxy reused the orphaned session's
+display number, then the TurboVNC Session Manager listed the orphaned session
+but could not connect to it.
+
+2. Fixed an issue in the TurboVNC Server whereby the zlib stream of a
+server-to-client UTF-8 clipboard transfer was sometimes truncated if
+Compression Level 0 was used, causing the VNC viewer to abort.
+
+3. For compatibility with OpenSSH, the TurboVNC Viewer's built-in SSH client
+now disables multi-hop/multi-level SSH tunneling if a case-insensitive argument
+of `none` is specified for the `ProxyJump` OpenSSH config file keyword.  This
+is useful in conjunction with wildcard `Host` entries.
+
+4. The TurboVNC Viewer's built-in SSH client now prints an SSH debugging
+message, rather than throwing a fatal error, if it cannot parse an entry in the
+SSH known hosts file.  This mimics the behavior of OpenSSH.
+
+5. The TurboVNC Server now includes various security fixes (CVE-2025-26594,
+CVE-2025-26595, CVE-2025-26596, CVE-2025-26597, CVE-2025-26598, CVE-2025-26599,
+CVE-2025-26600, CVE-2025-26601, CVE-2025-49175, CVE-2025-49176, CVE-2025-49178,
+CVE-2025-49179, CVE-2025-49180, CVE-2025-62229, CVE-2025-62230, and
+CVE-2025-62231) from the xorg-server 21.1.x code base.
+
+6. The simple web server for noVNC (part of the TurboVNC Server) now supports
+Python 3.12 and later when using TLS encryption.
+
+
+3.2.1
+=====
+
+### Significant changes relative to 3.2:
+
+1. Fixed an issue in the TurboVNC Viewer whereby the "Default Window
+Size/Position" feature did not work properly in full-screen mode if
+`TVNC_SINGLESCREEN`/`turbovnc.singlescreen` was enabled.
+
+2. When using server-side key mapping, the Windows TurboVNC Viewer now works
+around an issue whereby the operating system does not send a key release event
+to applications if one of the Shift keys is released while the other Shift key
+remains pressed.  2.2.4[1] worked around this issue when using client-side key
+mapping, but due to an oversight, the server-side key mapping feature
+introduced in 3.1 beta1[4] did not include the same workaround.
+
+3. The default X startup script (`xstartup.turbovnc`) now assigns the same
+priority to session desktop files located in **/usr/share/wayland-sessions**
+and **/usr/share/xsessions**.  This prevents an issue on Fedora 40 and later
+whereby, if GNOME and Xfce or MATE were installed but the (now optional)
+`gnome-session-xsession` package was not installed, TurboVNC used Xfce or MATE
+as the default window manager rather than GNOME.
+
+
+3.2
+===
+
+### Significant changes relative to 3.2 beta1:
+
+1. Fixed a regression introduced by 3.0.3[7] that, under rare circumstances if
+automatic desktop resizing was enabled, caused the viewer to deadlock while
+resizing its window in response to a remote desktop size change.
+
+2. Fixed an issue whereby the TurboVNC Viewer threw an
+IllegalComponentStateException if "Remote desktop size" was changed to "Auto"
+in the TurboVNC Viewer Options dialog while the viewer was actively receiving
+framebuffer updates from a VNC server.
+
+3. Fixed an issue whereby the "Reset all options to defaults" button in the
+TurboVNC Viewer Options dialog did not take into account the values specified
+in **~/.vnc/default.turbovnc**.
+
+4. The TurboVNC Viewer now works around an issue with recent versions of GNOME
+that caused erratic automatic desktop resizing behavior.
+
+5. The default X startup script (`xstartup.turbovnc`) now looks in both
+**/usr/share/xsessions** and **/usr/share/wayland-sessions** for a session
+desktop file corresponding to the specified window manager.  This works around
+an issue whereby the GNOME Classic window manager could not be used with the
+TurboVNC Server on Fedora 40 and later.
+
+6. The default X startup script (`xstartup.turbovnc`) now attempts to launch
+MATE or Xfce (in that order) if no window manager is specified and a GNOME
+session desktop file cannot be found.  This fixes a regression introduced by
+3.2 beta1[4] whereby the default X startup script no longer launched the
+default window manager on Ubuntu MATE or Xubuntu if no window manager was
+specified.
+
+7. The "Clear the list of saved connections" button in the "Global" tab of the
+TurboVNC Viewer Options dialog now clears only the connection history.  A
+separate button has been added for clearing saved per-host options.
+
+
+3.2 beta1
+=========
+
+### Significant changes relative to 3.1.4:
+
+1. The TurboVNC Server now incorporates zlib-ng, which accelerates zlib
+encoding significantly on x86, Arm, and PowerPC CPUs.  Relative to TurboVNC
+3.1.x, this improves the encoding performance of the Lossless Tight + Zlib
+encoding method, and of non-JPEG (low-color-depth) subrectangles encoded with
+one of the Tight + JPEG encoding methods, by approximately 10-15% on reasonably
+modern x86-64 CPUs and 25-30% on reasonably modern AArch64 CPUs.
+
+2. Since all supported TurboVNC host platforms now contain new enough libraries
+to build xorg-server 1.20.x, the TurboVNC Server is now dynamically linked
+against the system-supplied versions of these libraries rather than statically
+linked against in-tree versions.  The `TVNC_SYSTEMLIBS` and `TVNC_SYSTEMX11`
+CMake variables have been removed, and the build system now behaves as if those
+variables are always on.  A new CMake variable (`TVNC_ZLIBNG`) can be used on
+x86 platforms to disable the in-tree SIMD-accelerated zlib-ng implementation
+and build against the system-supplied zlib implementation.
+
+3. The TurboVNC Server now supports the DRI3 X extension when using open source
+GPU drivers.  This enables GPU acceleration in a TurboVNC session without
+VirtualGL, although the performance will be better with VirtualGL.  Refer to
+the description of the `-drinode` option in the Xvnc man page for more details.
+
+4. The default X startup script (`xstartup.turbovnc`) now throws an error,
+rather than trying to execute **xinitrc** or twm, if a session desktop file for
+the default window manager cannot be found.
+
+5. Configuration of the TurboVNC Viewer has been improved in the following
+ways:
+
+     - Advanced parameters (those that are rarely needed by end users) are now
+listed on a separate usage screen, which can be displayed by passing `-??` to
+`/opt/TurboVNC/bin/vncviewer` or `c:\Program Files\TurboVNC\vncviewer.bat`.
+     - TurboVNC-specific Java system properties can now be specified in
+**~/.vnc/default.turbovnc**.
+     - The `turbovnc.ciphersuites` Java system property has been deprecated and
+replaced with a new advanced parameter (`CipherSuites`.)
+     - The `TVNC_PROFILE` environment variable has been deprecated and replaced
+with a new advanced parameter (`Profile`.)
+     - The `TVNC_SERVERARGS` environment variable and the `turbovnc.serverargs`
+Java system property have been deprecated and replaced with a new advanced
+parameter (`ServerArgs`.)
+     - The `TVNC_SERVERDIR` environment variable and the `turbovnc.serverdir`
+Java system property have been deprecated and replaced with a new advanced
+parameter (`ServerDir`.)
+     - The `VNC_VIA_CMD` and `VNC_TUNNEL_CMD` environment variables and the
+`turbovnc.via` and `turbovnc.tunnel` Java system properties have been
+deprecated and replaced with a new advanced parameter (`ExtSSHTemplate`.)
+
+6. The TurboVNC Server no longer enables the "Tight Encoding Without Zlib" RFB
+extension unless the VNC viewer advertises support for it.  This prevents a
+fatal error that occurred in TightVNC-compatible VNC viewers (other than the
+TurboVNC Viewer) when attempting to select Compression Level 0 without JPEG
+while connected to a TurboVNC session.
+
+7. The TurboVNC Viewer's built-in SSH client has been rebased on v0.2.23 of the
+JSch fork, which includes the following notable security, compatibility, and
+performance improvements:
+
+     - Curve25519 key exchange (KEX) methods are now supported.
+     - Diffie-Hellman Group 14 through 18 KEX methods are now supported.
+     - The Ed25519 signature scheme is now supported.
+     - Encrypt-then-MAC (EtM) Message Authentication Code (MAC) algorithms are
+now supported.
+     - Galois/Counter Mode (GCM) ciphers are now supported.
+     - The `hmac-sha2-512` MAC algorithm (Hash-based Message Authentication
+Code with the SHA-512 hash algorithm) is now supported.
+     - Version 3 of the PuTTY Private Key (PPK) format is now supported.
+     - RFC 8308 extension negotiation and the `server-sig-algs` extension are
+now supported.
+     - The OpenSSH strict key exchange extension is now supported (which
+addresses CVE-2023-48795.)
+     - Insecure signature schemes, KEX methods, and ciphers are now disabled by
+default, including:
+          - 3DES ciphers
+          - CBC (Cipher Block Chaining) ciphers
+          - Diffie-Hellman Group 1 KEX methods
+          - The DSS (Digital Signature Standard) signature scheme
+          - Signature schemes and KEX methods that use the SHA-1 hash algorithm
+
+        The `Ciphers`, `HostKeyAlgorithms`, `KexAlgorithms`, and
+`PubkeyAcceptedAlgorithms` OpenSSH configuration keywords or the `jsch.cipher`,
+`jsch.server_host_key`, `jsch.kex`, and `jsch.client_pubkey` Java system
+properties can be used to re-enable insecure algorithms when connecting to
+legacy systems.
+
+8. The TurboVNC Viewer's `SSHUser` parameter has been removed.  SSH usernames
+should now be specified by prefixing the VNC host or the gateway host with the
+username followed by @.  This fixes an issue whereby separate SSH usernames
+could not be specified for the `Server` and `Via` parameters.
+
+9. For compatibility with OpenSSH, the TurboVNC Viewer now accepts `-F`, `-i`,
+and `-p` as command-line aliases for (respectively) the `SSHConfig`,
+`SSHKeyFile`, and `SSHPort` parameters.
+
+10. The TurboVNC Viewer's built-in SSH client now supports jump hosts, i.e.
+multi-hop/multi-level SSH tunneling.  If the `Jump` parameter or the
+`ProxyJump` OpenSSH config file keyword is specified, the viewer now creates an
+intermediate SSH tunnel to the jump host and uses that tunnel to create the
+final SSH tunnel to the VNC host.  This eliminates the need to open RFB ports
+in the VNC host's firewall, it ensures that the RFB connection is encrypted on
+the server-area network, and it allows the TurboVNC Session Manager to be used
+with TurboVNC hosts that are behind an SSH gateway.  The OpenSSH config file
+can be used to specify more than two levels of SSH tunneling.
+
+    Similarly, when using an external SSH client, the default SSH command-line
+template for TCP connections with the `Jump` parameter now takes advantage of
+OpenSSH's ProxyJump feature.
+
+    For compatibility with OpenSSH, the TurboVNC Viewer accepts `-J` as a
+command-line alias for the `Jump` parameter.
+
+    The `Via` parameter has been retained for backward compatibility, but since
+it is now essentially a less secure and usable variant of the `Jump` parameter,
+it has been moved to the advanced usage screen and is no longer exposed in the
+TurboVNC Viewer Options dialog.
+
+11. The TurboVNC Viewer now supports bump scrolling in full-screen mode, which
+addresses a feature regression relative to the native Windows TurboVNC Viewer
+in TurboVNC 2.2.x.  A new parameter (`BumpScroll`) can be used to disable bump
+scrolling and use scrollbars instead.
+
+12. The Mac TurboVNC Viewer now hides the menu bar and dock in full-screen mode
+if bump scrolling is enabled.  Setting the `turbovnc.fshidedock` system
+property to `0` or `1` causes the viewer to always show or always hide the menu
+bar and dock in full-screen mode, irrespective of bump scrolling.
+
+13. The TurboVNC Server and Viewer now implement the Extended Mouse Buttons
+RFB extension, which allows forward and back mouse button events to be
+transmitted to the VNC server.
+
+14. The TurboVNC Viewer toolbar icons have been updated with more modern icons
+derived from UltraVNC v1.2.4.
+
+15. The TurboVNC Viewer's `CompatibleGUI` parameter is now configurable using
+a new check box ("TurboVNC server") under the "Encoding" tab of the TurboVNC
+Viewer Options dialog.  This facilitates using the standard 0-9 compression
+level scale with specific VNC hosts.
+
+
+3.1.4
+=====
+
+### Significant changes relative to 3.1.3:
+
+1. Fixed an issue whereby the TurboVNC Viewer threw a NullPointerException if
+a user clicked the "Connect" button in the New TurboVNC Connection dialog after
+entering an SSH username with a blank VNC host into the "VNC server" field.
+
+2. To better emulate the behavior of OpenSSH, the TurboVNC Viewer's built-in
+SSH client now allows the value of the `SSHPort` parameter, if specified on the
+command line or in a connection info file, to override any SSH ports specified
+in the OpenSSH config file.
+
+3. The TurboVNC Server now includes various security fixes (CVE-2023-5367,
+CVE-2023-6377, CVE-2023-6478, CVE-2023-6816, CVE-2024-0229, CVE-2024-0408,
+CVE-2024-9632, CVE-2024-21885, CVE-2024-21886, CVE-2024-31080, CVE-2024-31081,
+and CVE-2024-31083) from the xorg-server 21.1.x code base.
+
+4. Worked around an issue whereby recent versions of GNOME failed to launch in
+a TurboVNC session if the initial resolution of any of the screens in the
+session matched one of the default X RandR modes.
+
+5. Fixed an issue in the Mac TurboVNC Viewer whereby the viewer window did not
+display a vertical scrollbar, and the horizontal scrollbar was incorrectly
+sized, if multi-screen spanning was enabled, the scaled remote desktop was
+larger than the viewer window, and "Displays have separate Spaces" was enabled
+in the system settings.
+
+6. The Windows TurboVNC Viewer now sends Alt-F4 keystrokes to the VNC server
+if keyboard grabbing is enabled.
+
+7. Fixed a regression introduced by 3.1.2[2] that caused the Mac and Windows
+TurboVNC Viewers to incorrectly interpret Shift + vertical scroll wheel events
+as horizontal scroll wheel events.
+
+8. Fixed an issue whereby the TurboVNC Viewer's built-in SSH client threw a
+NullPointerException if a cipher algorithm supported by the SSH server but not
+by the SSH client was specified using the `Ciphers` OpenSSH config file
+keyword.
+
+9. Fixed an issue in the TurboVNC Viewer's built-in SSH client whereby the SSH
+connection timeout specified using the `ConnectTimeout` OpenSSH config file
+keyword was interpreted as milliseconds rather than seconds.  This caused the
+SSH connection to fail if the timeout was too low.
+
+10. Fixed a regression introduced by 3.1 beta1[3] whereby the value of the
+TurboVNC Viewer's `Subsampling` parameter, if specified using the `Samp` alias,
+did not override per-host options that were previously saved by the TurboVNC
+Viewer Options dialog.
+
+
+3.1.3
+=====
+
+### Significant changes relative to 3.1.2:
+
+1. Added a new Xvnc command-line option (`-noserverkeymap`) that can be used to
+disable the server-side key mapping feature introduced in 3.1 beta1[4].
+
+2. Added a new Xvnc command-line option (`-syslog`) that can be used to
+redirect all TurboVNC Server and X.org errors, warnings, and messages to the
+system log.
+
+3. Fixed a regression introduced by 2.2 beta1[7] that prevented the TurboVNC
+Server from being used as an inetd service.
+
+4. The "Tight Encoding Without Zlib" RFB extension, which was used unofficially
+by the Lossless Tight encoding method since TurboVNC v0.5, has been officially
+registered with IANA as an RFB pseudo-encoding.  The TurboVNC Viewer now
+advertises support for the pseudo-encoding.  (The next major release of the
+TurboVNC Server will forego using the extension unless the VNC viewer
+advertises support for it.)
+
+5. Fixed an issue in the TurboVNC Viewer's built-in SSH client whereby the
+`ssh-rsa` and `rsa-sha2-512` signature schemes could not be used unless they
+were specified as the first argument for the `HostKeyAlgorithms` OpenSSH config
+file keyword or the server did not support `rsa-sha2-256`.
+
+6. Fixed an error ("ZlibInStream: inflate failed") that occurred in the
+TurboVNC Viewer when it attempted to receive a clipboard update from QEMU's VNC
+server.
+
+7. Fixed a denial-of-service (DoS) vulnerability in the TurboVNC Server,
+introduced by 3.0 beta1[20], that triggered an infinite loop in the server's
+automatic WebSocket detection code if an ill-behaved client sent 3 or fewer
+bytes of data immediately after connecting.  Certain versions of Apache
+Guacamole were known to trigger this issue sporadically.
+
+8. The TurboVNC Viewer now works around an issue that prevented keyboard
+grabbing from working when running the viewer in a GNOME/Wayland session.
+
+
+3.1.2
+=====
+
+### Significant changes relative to 3.1.1:
+
+1. The TurboVNC Server now assigns an ordinal ID to every VNC viewer when the
+viewer connects, and when possible, log entries related to a specific viewer
+are prefixed by the viewer's ID.  The TurboVNC Server now also logs the total
+number of simultaneously connected viewers.
+
+2. The TurboVNC Viewer now sends horizontal scroll wheel events to the VNC
+server.  (These events can be generated with horizontal scroll gestures on a
+trackpad or, with certain mice, by side-clicking the scroll wheel.)
+
+3. By default, the TurboVNC Server now limits the amount of time that it will
+wait for a new pointer event from a connected viewer that is dragging the mouse
+(and thus has exclusive control over the pointer.)  This prevents other viewers
+connected to the same session from being locked out of pointer control
+indefinitely if a viewer's network connection drops while it is dragging the
+mouse.  A new Xvnc command-line option (`-pointerlocktimeout`) can be used to
+specify the time limit.
+
+4. The RPM and DEB packages generated by the TurboVNC build/packaging system
+now include a polkit rules file that prevents various authentication dialogs
+("Authentication is required to create a color managed device", "Authentication
+is required to access the PC/SC daemon", "Authentication is required to refresh
+the system repositories") from popping up when using the GNOME window manager
+with the TurboVNC Server on Ubuntu 23.10 and later (if the `polkitd-pkla`
+package is not installed) and on RHEL 7 and Fedora 19 and later (if the
+`polkit-pkla-compat` package is not installed.)
+
+5. The default X startup script (`xstartup.turbovnc`) now throws an error,
+rather than trying to execute **xinitrc** or twm, if a window manager is
+specified and the session desktop file for the window manager cannot be found.
+
+6. Added a new parameter (`ExtSSHCommand`) to the TurboVNC Viewer that can be
+used to specify the external SSH client command.  In `Via`/`Tunnel` SSH
+command-line templates, including the default ones, `%S` is now replaced with
+the value of this new parameter.
+
+7. Fixed a regression introduced by 3.0 beta1[24] that caused the TurboVNC
+Server to leak memory when the RFB flow control extensions were used.
+
+8. Fixed several issues in the TurboVNC Viewer that prevented IPv6 addresses
+from being used as VNC hostnames.
+
+
+3.1.1
+=====
+
+### Significant changes relative to 3.1:
+
+1. By default, each instance of the Linux TurboVNC Server now listens on the
+abstract Unix domain socket, in addition to the pathname Unix domain socket
+(under **/tmp/.X11-unix**), associated with its X display number.  This
+prevents recent versions of GDM, when configured with `WaylandEnable=false`,
+from attempting to use Display :1 for the local session if a TurboVNC session
+is already using Display :1.  The previous behavior can be restored by passing
+`-nolisten local` to `vncserver` or adding `-nolisten local` to the
+`$serverArgs` variable in **turbovncserver.conf**.
+
+2. The `vncserver` script now checks whether the abstract Unix domain socket
+associated with an X display number is in use before assuming that the display
+number is available.
+
+3. Fixed an issue in the Windows TurboVNC Viewer whereby an F10 key press,
+followed by an F10 key release, caused the keyboard focus to be redirected to
+the system menu, and subsequent keystrokes were consumed by the system menu
+until F10, left Alt, or Esc was pressed to dismiss the menu.
+
+4. Fixed an issue whereby GTK applications (including the GNOME window manager)
+running in a TurboVNC session attempted to display to a local Wayland session
+if one was active.
+
+
+3.1
+===
+
+### Significant changes relative to 3.1 beta2:
+
+1. Improved the TurboVNC Viewer's handling of SSH usernames in the following
+ways:
+
+     - Fixed a regression introduced in 3.1 beta1[3] whereby the SSH username
+was ignored if it was specified in the `Server` parameter or if it was
+specified in the TurboVNC Viewer Options dialog without also specifying the
+gateway host.
+     - Fixed an issue whereby the SSH username was not saved and restored if it
+was specified in the TurboVNC Viewer Options dialog without also specifying the
+gateway host.
+     - Fixed an issue whereby the SSH username was ignored if it was specified
+in the `Server` or `Via` parameter in **~/.vnc/default.turbovnc**.
+     - Added a new parameter (`SSHUser`) that can optionally be used to specify
+the SSH username.  This parameter is set automatically from an SSH username
+specified in the `Server` or `Via` parameter, or it can be set manually.
+     - To better emulate the behavior of OpenSSH, the TurboVNC Viewer's
+built-in SSH client now allows an SSH username specified on the command line or
+in a connection info file to override an SSH username specified in the OpenSSH
+config file.
+     - The `LocalUsernameLC` parameter now affects the SSH username if the SSH
+username is unspecified.
+
+2. The TurboVNC Server now includes various security fixes (CVE-2022-2319,
+CVE-2022-2320, CVE-2022-4283, CVE-2022-46340, CVE-2022-46341, CVE-2022-46342,
+CVE-2022-46343, CVE-2022-46344, CVE-2023-0494, and CVE-2023-1393) from the
+xorg-server 21.1.x code base.
+
+3. The TurboVNC Viewer no longer requires that the VNC server support the QEMU
+LED State or VMware LED State RFB extension in order to use the QEMU Extended
+Key Event RFB extension.  This fixes various key mapping issues when using the
+TurboVNC Viewer with wayvnc.  However, it should be noted that, if the QEMU
+Extended Key Event extension is used without one of the LED State extensions,
+the lock key state on the client will lose synchronization with the lock key
+state on the remote desktop if a lock key is pressed outside of the TurboVNC
+Viewer window.
+
+
+3.1 beta2
+=========
+
+### Significant changes relative to 3.1 beta1:
+
+1. Fixed an issue in the Windows TurboVNC Viewer that prevented certain UTF-8
+characters in the clipboard from being transferred properly.
+
+
+3.1 beta1
+=========
+
+### Significant changes relative to 3.0.3:
+
+1. The TurboVNC Server and Viewer now support UTF-8 clipboard transfers.
+
+2. The "Global" tab in the TurboVNC Viewer Options dialog now has a button that
+can be used to reset all options to their default values.
+
+3. The TurboVNC Viewer now maintains a different set of options for each unique
+TurboVNC host.
+
+4. The TurboVNC Server and Viewer now implement the QEMU Extended Key Event,
+QEMU LED State, and VMware LED State RFB extensions, which allow raw keyboard
+scancodes to be transmitted to the VNC server instead of X11 keysyms.
+Effectively, this means that the mapping of keycodes into keysyms is performed
+on the host rather than the client, which eliminates various system-specific
+and locale-specific key mapping issues (including issues with dead keys on
+international keyboards.)  This feature also fixes lock key synchronization
+issues when using the TurboVNC Viewer with VMware's VNC server.
+
+5. If the `NoReconnect` parameter is unset (which it is by default), the
+TurboVNC Viewer will now offer to reconnect if the initial connection or
+authentication fails.
+
+6. The TurboVNC Server can now listen on a Unix domain socket, rather than a
+TCP port, for connections from VNC viewers.  This is useful in conjunction with
+SSH tunneling, and it also allows the Unix domain socket permissions to act as
+an authentication mechanism for a TurboVNC session.  Two new Xvnc arguments,
+`-rfbunixpath` and `-rfbunixmode`, can be used to specify the Unix domain
+socket path and, optionally, the permissions.  A new `vncserver` argument,
+`-uds`, causes the script to automatically choose an appropriate Unix domain
+socket path under the TurboVNC user directory.  See the `Xvnc` and `vncserver`
+man pages for more details.
+
+7. The TurboVNC Viewer can now connect to a VNC server that is listening on a
+Unix domain socket.  This is accomplished by specifying `{host}::{uds_path}` as
+the VNC server, where `{host}` is the hostname or IP address of the VNC host
+and `{uds_path}` is the path to the Unix domain socket on the host.  If
+`{host}` is not `localhost`, then SSH tunneling with an external SSH client is
+implied.  Refer to the TurboVNC Viewer's usage screen (specifically, the
+documentation of the `Server` parameter) and the TurboVNC User's Guide for more
+details.
+
+8. The TurboVNC Viewer now asks for confirmation before overwriting an existing
+screenshot file.
+
+9. The TurboVNC Viewer now supports a new TurboVNC-specific connection info
+file format.  TurboVNC connection info files have an extension of .turbovnc,
+and each line of these files contains a TurboVNC Viewer parameter name and
+value separated by an equals sign (`=`).
+
+10. The default values of all TurboVNC Viewer parameters can now be modified by
+specifying the values in **~/.vnc/default.turbovnc** using the connection info
+file syntax described above.
+
+
+3.0.3
+=====
+
+### Significant changes relative to 3.0.2:
+
+1. Fixed an issue in the Windows TurboVNC Viewer whereby a left Alt key press,
+followed by a left Alt key release, caused the keyboard focus to be redirected
+to the system menu, and subsequent keystrokes were consumed by the system menu
+until left Alt or Esc was pressed to dismiss the menu.
+
+2. Fixed an issue whereby Rosetta was required in order to install the
+TurboVNC package for Macs with Apple silicon CPUs.
+
+3. Fixed a regression introduced by 2.2 beta1[7] that prevented the idle
+timeout feature in the TurboVNC Server from working properly.
+
+4. The Mac TurboVNC Viewer app now informs macOS that it supports HiDPI
+monitors.  This improves the sharpness of the remote desktop and TurboVNC
+Viewer GUI when using a Retina display.
+
+5. Fixed a regression introduced by 3.0 beta1[24] that caused the TurboVNC
+Server to become unresponsive if the network connection dropped and a VNC
+viewer disconnected before the network connection was restored.
+
+6. The `vncserver` script no longer passes `-rfbwait 120000` to Xvnc.
+Effectively, that hard-coded the TurboVNC Server's send/receive timeout to 120
+seconds, which doesn't make sense for most modern systems and networks.  (The
+default value if `-rfbwait` is not passed to Xvnc is 20 seconds, which makes
+more sense.)  The previous behavior can be restored by adding `-rfbwait 120000`
+to the `$serverArgs` variable in **turbovncserver.conf**.
+
+7. Fixed an issue in the TurboVNC Viewer that sometimes caused the Java process
+to crash when closing the viewer window, particularly if multiple connections
+were open.
+
+8. Fixed a regression introduced by 3.0.1[3] whereby the TurboVNC Viewer's
+built-in SSH client tried the `ssh-rsa`, `rsa-sha2-256`, and `rsa-sha2-512`
+signature schemes in sequence for every RSA private key stored in the SSH
+agent, even if the SSH server did not support one or more of those signature
+schemes.  This caused the SSH client to prematurely exceed the SSH server's
+maximum number of authentication attempts.
+
+9. Fixed an issue in the TurboVNC Viewer's built-in SSH client whereby SSH
+private keys specified using the `SSHKey` and `SSHKeyFile` parameters or the
+`IdentityFile` OpenSSH config file keyword were added to the SSH agent's
+persistent keychain.  The SSH client now maintains its own temporary keychain
+rather than modifying the agent's keychain.
+
+10. To better emulate the behavior of OpenSSH, the TurboVNC Viewer's built-in
+SSH client has been improved in the following ways:
+
+     - If the SSH agent already has a copy of an SSH private key that was
+specified using the `SSHKey` or `SSHKeyFile` parameter or the `IdentityFile`
+OpenSSH config file keyword, then the SSH client now promotes the agent's copy
+of the key to the head of the SSH client's keychain rather than adding a
+duplicate key to the end of the keychain.  If the SSH agent does not have a
+copy of the specified SSH private key, then the SSH client now adds the new key
+to the head of its keychain if a valid passphrase for the key was specified or
+to the end of its keychain if a valid passphrase for the key was not specified.
+     - The TurboVNC Viewer now treats **~/.ssh/id_ecdsa** as a default private
+key.  Each of the default private keys **~/.ssh/id_rsa**, **~/.ssh/id_dsa**,
+and **~/.ssh/id_ecdsa**, in that order, will be added to the SSH client's
+keychain using the rules described above if the file exists and the `SSHKey`
+and `SSHKeyFile` parameters are not specified.
+     - `+`, `^`, and `-` can now be used at the beginning of the
+`PubkeyAcceptedAlgorithms` OpenSSH config file keyword to specify a set of
+algorithms that should be appended to, prepended to, or removed from the
+default list.
+     - Fixed a regression introduced by 2.2.1[5] that caused the
+`PreferredAuthentications` OpenSSH config file keyword to be ignored.
+
+
 3.0.2
 =====
 
@@ -135,8 +726,8 @@ when attempting to use TLS encryption with the TurboVNC Server (built with
 `TVNC_DLOPENSSL=1`, which is the default) running on a TurboVNC host with
 OpenSSL 3.
 
-9. The TurboVNC Server is now based on xorg-xserver 1.20.14, which fixes
-several minor X server bugs.
+9. The TurboVNC Server is now based on xorg-server 1.20.14, which fixes several
+minor X server bugs.
 
 
 3.0 beta1
@@ -270,7 +861,7 @@ attention from the TurboVNC developers and user community, there is no
 compelling reason to use the GnuTLS wrapper anymore.  The 2.2.x version of the
 TurboVNC Server will continue to support GnuTLS on a break/fix basis.
 
-17. The TurboVNC Server is now based on xorg-xserver 1.20.13, which fixes
+17. The TurboVNC Server is now based on xorg-server 1.20.13, which fixes
 several minor X server bugs.
 
 18. The TurboVNC Server's built-in unaccelerated GLX/OpenGL implementation no
@@ -639,7 +1230,7 @@ set based on the client's physical screen layout.
 6. The Windows TurboVNC Viewer should now build properly with Visual Studio
 2015.
 
-7. The TurboVNC Server is now based on xorg-xserver 1.19.7, which fixes several
+7. The TurboVNC Server is now based on xorg-server 1.19.7, which fixes several
 minor X server bugs.
 
 8. The TurboVNC Server now supports the X Record Extension.  This extension can
@@ -874,7 +1465,7 @@ dialog), {key} was unintentionally transmitted to the VNC server.
 
 3. Fixed a segfault in the TurboVNC Server that occurred when attempting to
 disable the Composite extension.  This was a regression caused by a bug in the
-xorg-xserver 1.19.6 code.
+xorg-server 1.19.6 code.
 
 4. The default `xstartup.turbovnc` script that the TurboVNC Server creates now
 works around an issue whereby the desktop contents would not be displayed when
@@ -1007,7 +1598,7 @@ system property to `1`.
 (`xrandr`) or through the window manager's display configuration applet, to
 modify the server's screen layout.
 
-7. The TurboVNC Server is now based on xorg-xserver 1.19.6, which improves
+7. The TurboVNC Server is now based on xorg-server 1.19.6, which improves
 compatibility with newer window managers.
 
 8. By default, the TurboVNC Server will no longer listen on a TCP socket for
@@ -1885,12 +2476,11 @@ TurboVNC Viewer GUI.  Also, a new command-line option/parameter
 (`CompatibleGUI`) can now be used to force the GUI to expose all 10 compression
 levels (useful when connecting to non-TurboVNC servers.)
 
-10. The Interframe Comparison Engine (ICE) now compares large framebuffer
-update rectangles on a block-by-block basis, which prevents the entire
-rectangle from being sent if only a small portion of it has changed.  The
-default block size is 256x256 but can be changed using the `TVNC_ICEBLOCKSIZE`
-environment variable (for instance, `TVNC_ICEBLOCKSIZE=128` would use 128x128
-blocks.)
+10. The interframe comparison feature now compares large framebuffer update
+rectangles on a block-by-block basis, which prevents the entire rectangle from
+being sent if only a small portion of it has changed.  The default block size
+is 256x256 but can be changed using the `TVNC_ICEBLOCKSIZE` environment
+variable (for instance, `TVNC_ICEBLOCKSIZE=128` would use 128x128 blocks.)
 
 11. By default, the embedded HTTP server in the TurboVNC Server will now serve
 up a JNLP (Java Web Start) file for the session instead of an applet.  You can
@@ -2521,12 +3111,12 @@ encoding received from the server rather than the requested encoding.  This is
 useful when connecting to RealVNC and other servers that do not support Tight
 encoding.
 
-21. Implemented an interframe comparison engine (ICE) in the TurboVNC Server,
-which prevents duplicate framebuffer updates from being sent as a result of an
-application drawing the same thing over and over again.  The ICE will normally
-be enabled when Compression Level 5 or above is requested by a VNC viewer, but
-you can also enable/disable it manually by passing command-line arguments to
-Xvnc.
+21. Implemented an interframe comparison feature in the TurboVNC Server, which
+prevents duplicate framebuffer updates from being sent as a result of an
+application drawing the same thing over and over again.  Interframe comparison
+will normally be enabled when Compression Level 5 or above is requested by a
+VNC viewer, but you can also enable/disable it manually by passing command-line
+arguments to Xvnc.
 
 22. Added experimental (and currently undocumented) support for the `-via` and
 `-tunnel` command-line options to the Windows TurboVNC Viewer.  These work the

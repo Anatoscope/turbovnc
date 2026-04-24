@@ -2,7 +2,7 @@
  * rfb.h - header file for RFB DDX implementation.
  */
 
-/* Copyright (C) 2010-2022 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2010-2025 D. R. Commander.  All Rights Reserved.
  * Copyright (C) 2011, 2015 Pierre Ossman for Cendio AB.  All Rights Reserved.
  * Copyright (C) 2011 Joel Martin
  * Copyright (C) 2011 Gernot Tenchio
@@ -85,11 +85,9 @@
 
 #define DEFAULT_DEFER_UPDATE_TIME 40
 
-#define DEFAULT_POINTER_LOCK_TIMEOUT_MS 5000
-
 /* Maximum number of threads to use for multithreaded encoding, regardless of
    the CPU count */
-#define MAX_ENCODING_THREADS 8
+#define MAX_ENCODING_THREADS 4
 
 /* Maximum number of client connections.  The default of 100 should be more
    than enough for most use cases.  The ceiling is set to 500 to give us plenty
@@ -99,6 +97,8 @@
 #define MAX_MAX_CONNECTIONS 500
 
 #define DEFAULT_MAX_CLIENT_WAIT 20000
+
+#define DEFAULT_POINTER_LOCK_TIMEOUT 3000
 
 /* Constants for handling the UltraVNC Viewer's multitouch GII valuator event
    format */
@@ -177,12 +177,22 @@ typedef struct {
   /* wrapped screen functions */
 
   CloseScreenProcPtr                    CloseScreen;
+#ifdef DRI3
+  SourceValidateProcPtr                 SourceValidate;
+#endif
   CreateGCProcPtr                       CreateGC;
   CopyWindowProcPtr                     CopyWindow;
   ClearToBackgroundProcPtr              ClearToBackground;
 #ifdef RENDER
   CompositeProcPtr                      Composite;
   GlyphsProcPtr                         Glyphs;
+#ifdef DRI3
+  CompositeRectsProcPtr                 CompositeRects;
+  TrapezoidsProcPtr                     Trapezoids;
+  TrianglesProcPtr                      Triangles;
+  TriStripProcPtr                       TriStrip;
+  TriFanProcPtr                         TriFan;
+#endif
 #endif
   InstallColormapProcPtr                InstallColormap;
   UninstallColormapProcPtr              UninstallColormap;
@@ -200,7 +210,6 @@ typedef struct _Res {
 typedef struct {
   RROutputPtr output;
   Bool idAssigned, used;
-  Res prefRes;
   rfbScreenDesc s;
   struct xorg_list entry;
 } rfbScreenInfo, *rfbScreenInfoPtr;
@@ -276,7 +285,7 @@ typedef struct rfbClientRec {
 
   int sock;
   char *host;
-  char *login;
+  CARD16 id;
 
   int protocol_minor_ver;       /* RFB protocol minor version in use */
   Bool protocol_tightvnc;       /* TightVNC protocol extensions enabled */
@@ -429,6 +438,8 @@ typedef struct rfbClientRec {
   Bool enableLastRectEncoding;      /* client supports LastRect encoding */
   Bool enableCursorShapeUpdates;    /* client supports cursor shape updates */
   Bool enableCursorPosUpdates;      /* client supports PointerPos updates */
+  Bool enableExtClipboard;          /* client supports Extended Clipboard
+                                       extension */
   Bool enableCU;                    /* client supports Continuous Updates */
   Bool enableFence;                 /* client supports fence extension */
   Bool enableDesktopSize;           /* client supports desktop size
@@ -436,6 +447,16 @@ typedef struct rfbClientRec {
   Bool enableExtDesktopSize;        /* client supports extended desktop size
                                        extension */
   Bool enableGII;                   /* client supports GII extension */
+  Bool enableQEMUExtKeyEvent;       /* client supports QEMU Extended Key Event
+                                       extension */
+  Bool enableQEMULEDState;          /* client supports QEMU LED State
+                                       extension */
+  Bool enableVMwareLEDState;        /* client supports VMware LED State
+                                       extension */
+  Bool enableTightWithoutZlib;      /* client supports Tight Encoding Without
+                                       Zlib extension */
+  Bool enableExtMouseButtons;       /* client supports Extended Mouse Buttons
+                                       extension */
   unsigned char warnEventMask;      /* which warning to send to client */
   Bool inactWarnWasChanged;         /* visual inactivity warning was shown/hidden */
   Bool useRichCursorEncoding;       /* rfbEncodingRichCursor is preferred */
@@ -460,8 +481,11 @@ typedef struct rfbClientRec {
 
   struct rfbClientRec *prev, *next;
 
-  char *cutText;
-  int cutTextLen;
+  /* Clipboard */
+  char *clientClipboard;
+  CARD32 clipFlags, clipSizes[16];
+  Bool hasLocalClipboard, unsolicitedClipboardAttempt;
+  struct xorg_list entry;
 
   /* flow control extensions */
 
@@ -491,6 +515,12 @@ typedef struct rfbClientRec {
 
   Bool pendingDesktopResize, pendingExtDesktopResize;
   int reason, result;
+
+  Bool pendingExtMouseButtonsRect;
+
+  /* Server-side key mapping */
+  Bool pendingQEMUExtKeyEventRect, pendingLEDState;
+  unsigned int ledState;
 
 #if USETLS
   rfbSslCtx *sslctx;
@@ -569,6 +599,13 @@ typedef struct rfbClientRec {
 }
 
 /*
+ * This macro is used to test whether either LED state extension is supported
+ * by a given client.
+ */
+#define SUPPORTS_LED_STATE(cl)  \
+  (cl->enableQEMULEDState || cl->enableVMwareLEDState)
+
+/*
  * An rfbGCRec is where we store the pointers to the original GC funcs and ops
  * which we wrap (NULL means not wrapped).
  */
@@ -615,6 +652,59 @@ static const int rfbEndianTest = 1;
 
 
 /*
+ * Macros for reading/writing data from/to clients
+ */
+
+#define READ_OR_CLOSE(addr, numBytes, failAction) {  \
+  int __n;  \
+  if ((__n = ReadExact(cl, addr, numBytes)) <= 0) {  \
+    if (__n != 0) {  \
+      char __temps[80];  \
+      snprintf(__temps, 80, "%s (%d): read error", __FUNCTION__, __LINE__);  \
+      rfbLogPerror(__temps);  \
+    }  \
+    rfbCloseClient(cl);  \
+    failAction;  \
+  }  \
+}
+
+#define READ32_OR_CLOSE(var, failAction) {  \
+  CARD32 __tmp;  \
+  READ_OR_CLOSE((char *)&__tmp, sizeof(CARD32), failAction);  \
+  var = Swap32IfLE(__tmp);  \
+}
+
+#define SKIP_OR_CLOSE(numBytes, failAction) {  \
+  int __n;  \
+  if ((__n = SkipExact(cl, numBytes)) <= 0) {  \
+    if (__n != 0) {  \
+      char __temps[80];  \
+      snprintf(__temps, 80, "%s (%d): skip error", __FUNCTION__, __LINE__);  \
+      rfbLogPerror(__temps);  \
+    }  \
+    rfbCloseClient(cl);  \
+    failAction;  \
+  }  \
+}
+
+#define WRITE_OR_CLOSE(addr, numBytes, failAction) {  \
+  if (WriteExact(cl, (char *)(addr), numBytes) < 0) {  \
+    char __temps[80];  \
+    snprintf(__temps, 80, "%s (%d): write error", __FUNCTION__, __LINE__);  \
+    rfbLogPerror(__temps);  \
+    rfbCloseClient(cl);  \
+    failAction;  \
+  }  \
+}
+
+#define WRITE32_OR_CLOSE(value, failAction) {  \
+  CARD32 __tmp = value;  \
+  __tmp = Swap32IfLE(__tmp);  \
+  WRITE_OR_CLOSE((char *)&__tmp, sizeof(CARD32), failAction);  \
+}
+
+
+/*
  * These can be used to add profiling information anywhere within the code
  */
 
@@ -651,6 +741,13 @@ extern int traceLevel;
   traceLevel--;  \
   rfbLog("- %s %s\n", __FUNCTION__, message);  \
 }
+
+
+/*
+ * Print a time-stamped message, prefixed by the client ID, to the log file
+ * (stderr or the system log.)
+ */
+#define RFBLOGID(format, ...)  rfbLog("[%u] " format, cl->id, ##__VA_ARGS__)
 
 
 /* auth.c */
@@ -747,12 +844,16 @@ extern Bool rfbSendCursorPos(rfbClientPtr cl, ScreenPtr pScreen);
 /* cutpaste.c */
 
 extern Bool rfbSyncPrimary;
+extern struct xorg_list clipboardRequestors;
 
-extern void rfbSetXCutText(char *str, int len);
-extern void rfbGotXCutText(char *str, int len);
-extern void vncClientCutText(const char *str, int len);
+extern void rfbHandleClientCutText(rfbClientPtr cl, const char *str, int len);
+extern void rfbHandleClipboardAnnounce(rfbClientPtr cl, Bool available);
+extern void rfbReadExtClipboard(rfbClientPtr cl, int len);
+extern void rfbSendClipboardCaps(rfbClientPtr cl, CARD32 caps,
+                                 const CARD32 *lengths);
 extern int vncConvertSelection(ClientPtr client, Atom selection, Atom target,
-                               Atom property, Window requestor, CARD32 time);
+                               Atom property, Window requestor, CARD32 time,
+                               const char *data);
 extern Window vncGetSelectionWindow(void);
 extern void vncHandleSelection(Atom selection, Atom target, Atom property,
                                Atom requestor, TimeStamp time);
@@ -773,20 +874,40 @@ extern Bool rfbPopupScreenInitialize(ScreenPtr pScreen);
 extern int rfbDeferUpdateTime;
 
 extern void ClipToScreen(ScreenPtr pScreen, RegionPtr pRegion);
-void PrintRegion(ScreenPtr pScreen, RegionPtr reg, const char *msg);
+void PrintRegion(ScreenPtr pScreen, RegionPtr reg, const char *msg,
+                 Bool printRects);
 
 #ifdef RENDER
 extern void rfbComposite(CARD8 op, PicturePtr pSrc, PicturePtr pMask,
                          PicturePtr pDst, INT16 xSrc, INT16 ySrc, INT16 xMask,
                          INT16 yMask, INT16 xDst, INT16 yDst, CARD16 width,
                          CARD16 height);
-
 extern void rfbGlyphs(CARD8 op, PicturePtr pSrc, PicturePtr pDst,
                       PictFormatPtr maskFormat, INT16 xSrc, INT16 ySrc,
                       int nlists, GlyphListPtr lists, GlyphPtr *glyphs);
+#ifdef DRI3
+extern void rfbCompositeRects(CARD8 op, PicturePtr pDst, xRenderColor *color,
+                              int nRect, xRectangle *rects);
+extern void rfbTrapezoids(CARD8 op, PicturePtr pSrc, PicturePtr pDst,
+                          PictFormatPtr maskFormat, INT16 xSrc, INT16 ySrc,
+                          int ntrap, xTrapezoid *traps);
+extern void rfbTriangles(CARD8 op, PicturePtr pSrc, PicturePtr pDst,
+                         PictFormatPtr maskFormat, INT16 xSrc, INT16 ySrc,
+                         int ntri, xTriangle *tris);
+extern void rfbTriStrip(CARD8 op, PicturePtr pSrc, PicturePtr pDst,
+                        PictFormatPtr maskFormat, INT16 xSrc, INT16 ySrc,
+                        int npoint, xPointFixed *points);
+extern void rfbTriFan(CARD8 op, PicturePtr pSrc, PicturePtr pDst,
+                      PictFormatPtr maskFormat, INT16 xSrc, INT16 ySrc,
+                      int npoint, xPointFixed *points);
+#endif
 #endif
 
 extern Bool rfbCloseScreen(ScreenPtr);
+#ifdef DRI3
+extern void rfbSourceValidate(DrawablePtr pDrawable, int x, int y, int width,
+                              int height, unsigned int subWindowMode);
+#endif
 extern Bool rfbCreateGC(GCPtr);
 extern void rfbPaintWindowBackground(WindowPtr, RegionPtr, int what);
 extern void rfbPaintWindowBorder(WindowPtr, RegionPtr, int what);
@@ -794,6 +915,17 @@ extern void rfbCopyWindow(WindowPtr, DDXPointRec, RegionPtr);
 extern void rfbClearToBackground(WindowPtr, int x, int y, int w, int h,
                                  Bool generateExposures);
 extern RegionPtr rfbRestoreAreas(WindowPtr, RegionPtr);
+
+
+/* dri3.c */
+
+#ifdef DRI3
+extern const char *driNode;
+
+extern Bool rfbDRI3Initialize(ScreenPtr pScreen);
+extern void rfbDRI3SyncBOToDrawable(DrawablePtr drawable);
+extern void rfbDRI3SyncDrawableToBO(DrawablePtr drawable);
+#endif
 
 
 /* flowcontrol.c */
@@ -835,6 +967,8 @@ extern struct in_addr interface;
 extern struct in6_addr interface6;
 extern int family;
 
+extern int rfbLEDState;
+
 extern int rfbBitsPerPixel(int depth);
 extern void rfbLog(char *format, ...);
 extern void rfbLogPerror(char *str);
@@ -850,19 +984,19 @@ extern void *rfbRealloc(void *ptr, size_t size);
 
 /* kbdptr.c */
 
-extern Bool compatibleKbd;
+extern Bool enableQEMUExtKeyEvent;
 extern unsigned char ptrAcceleration;
 
 extern void PtrDeviceOn(DeviceIntPtr);
 extern void PtrDeviceControl(DevicePtr, PtrCtrl *);
-extern void PtrAddEvent(int buttonMask, int x, int y, rfbClientPtr cl);
+extern void PtrAddEvent(int buttonMask, int x, int y);
 extern void ExtInputAddEvent(rfbDevInfoPtr dev, int type, int buttons);
 
 extern void KbdDeviceInit(DeviceIntPtr);
+extern void ExtKeyEvent(KeySym keySym, unsigned keycode, BOOL down);
 extern void KeyEvent(KeySym keySym, Bool down);
 extern void KbdReleaseAllKeys(void);
-
-extern char *stristr(const char *s1, const char *s2);
+extern void QEMUExtKeyboardEventInit(void);
 
 
 /* nvctrlext.c */
@@ -926,7 +1060,6 @@ extern CARD32 rfbInactWarnTimeout;
 extern Bool rfbDflInactVisWarn;
 extern void InactTimerSet(void);
 extern void InactTimerCancel(void);
-extern void PointerLockTimerFree(void);
 extern Bool InterframeOn(rfbClientPtr cl);
 extern void InterframeOff(rfbClientPtr);
 extern BOOL rfbProfile;
@@ -937,7 +1070,6 @@ extern Bool rfbAlwaysShared;
 extern Bool rfbNeverShared;
 extern Bool rfbDisconnect;
 extern Bool rfbViewOnly;  /* run server in view-only mode - Ehud Karni SW */
-extern Bool rfbSyncCutBuffer;
 extern Bool rfbCongestionControl;
 extern double rfbAutoLosslessRefresh;
 extern Bool rfbALRAll;
@@ -954,12 +1086,16 @@ extern Bool rfbVirtualTablet;
 extern Bool rfbMT;
 extern int rfbNumThreads;
 
-extern char *captureFile;
+extern char *rfbCaptureFile;
+
+extern int rfbPointerLockTimeout;
+extern OsTimerPtr pointerLockTimer;
 
 #define debugregion(r, m)  \
   rfbLog(m" %d, %d %d x %d\n", (r).extents.x1, (r).extents.y1,  \
          (r).extents.x2 - (r).extents.x1, (r).extents.y2 - (r).extents.y1)
 
+extern int rfbClientCount(void);
 extern void rfbNewClientConnection(int sock);
 extern rfbClientPtr rfbReverseConnection(char *host, int port, int id);
 extern void rfbClientConnectionGone(rfbClientPtr cl);
@@ -971,7 +1107,7 @@ extern Bool rfbSendUpdateBuf(rfbClientPtr cl);
 extern Bool rfbSendSetColourMapEntries(rfbClientPtr cl, int firstColour,
                                        int nColours);
 extern void rfbSendBell(void);
-extern void rfbSendServerCutText(char *str, int len);
+extern void rfbWriteCapture(int captureFD, char *buf, int len);
 
 
 #if USETLS
@@ -1004,6 +1140,9 @@ extern int rfbMaxClientConnections;
 extern int rfbMaxClientWait;
 
 extern int rfbPort;
+extern const char *rfbUDSPath;
+extern int rfbUDSMode;
+extern Bool rfbUDSCreated;
 extern int rfbListenSock;
 
 extern void rfbInitSockets(void);
@@ -1018,7 +1157,6 @@ extern int ReadExact(rfbClientPtr cl, char *buf, int len);
 extern int ReadExactTimeout(rfbClientPtr cl, char *buf, int len, int timeout);
 extern int SkipExact(rfbClientPtr cl, int len);
 extern int WriteExact(rfbClientPtr cl, char *buf, int len);
-extern int ListenOnTCPPort(int port);
 extern int ConnectToTcpAddr(char *host, int port);
 
 extern const char *sockaddr_string(rfbSockAddr *addr, char *buf, int len);
@@ -1044,6 +1182,8 @@ static const char subsampStr[TVNC_SAMPOPT][5] = { "1X", "4X", "2X", "Gray" };
 #define TIGHT_DEFAULT_COMPRESSION  1
 #define TIGHT_DEFAULT_SUBSAMP      TVNC_1X
 #define TIGHT_DEFAULT_QUALITY      95
+
+extern int rfbMaxTightRectSize;
 
 extern int rfbNumCodedRectsTight(rfbClientPtr cl, int x, int y, int w, int h);
 extern Bool rfbSendRectEncodingTight(rfbClientPtr cl, int x, int y, int w,

@@ -1,4 +1,4 @@
-/* Copyright (C) 2010, 2012-2013, 2015-2018, 2020-2022 D. R. Commander.
+/* Copyright (C) 2010, 2012-2013, 2015-2018, 2020-2025 D. R. Commander.
  *                                                     All Rights Reserved.
  * Copyright (C) 2011-2013 Brian P. Hinz
  * Copyright (C) 2009 Paul Donohue.  All Rights Reserved.
@@ -51,6 +51,9 @@ import com.turbovnc.rfb.Point;
 class DesktopWindow extends JPanel implements Runnable, MouseListener,
   MouseMotionListener, MouseWheelListener, KeyListener, InputMethodRequests {
 
+  private static final int BUMP_SCROLL_PIXELS = 16;
+  private static final int BUMP_SCROLL_MS = 17;
+
   // RFB thread
   DesktopWindow(int width, int height, PixelFormat serverPF, CConn cc_) {
     cc = cc_;
@@ -81,20 +84,60 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
     noCursor = tk.createCustomCursor(cursorImage, new java.awt.Point(0, 0),
                                      "noCursor");
     cursorImage.flush();
-    if (!cc.opts.cursorShape && !bestSize.equals(new Dimension(0, 0)))
+    if (!cc.params.cursorShape.get() && !bestSize.equals(new Dimension(0, 0)))
       setCursor(noCursor);
     addMouseListener(this);
     addMouseWheelListener(this);
     addMouseMotionListener(this);
     addKeyListener(this);
+
     addFocusListener(new FocusAdapter() {
+      // On Windows, Swing redirects keyboard focus to the default JMenu (or
+      // the system menu, if the component has no JMenu) when LAlt is pressed
+      // and subsequently released.  When that happens, subsequent keystrokes
+      // are consumed by the system menu and not sent to the server until Esc
+      // or LAlt is pressed to dismiss the menu.  In order to bypass that
+      // behavior, we install a custom key event dispatcher into the keyboard
+      // focus manager whenever the component gains focus.
+      private final KeyEventDispatcher keyEventDispatcher =
+        new KeyEventDispatcher() {
+        public boolean dispatchKeyEvent(KeyEvent e) {
+          if ((e.getKeyCode() == KeyEvent.VK_ALT &&
+               e.getKeyLocation() == KeyEvent.KEY_LOCATION_LEFT) ||
+              e.getKeyCode() == KeyEvent.VK_F10 ||
+              // Also send Alt-F4 to the VNC server if the keyboard is grabbed
+              // or the turbovnc.altf4 system property is disabled.
+              ((VncViewer.isKeyboardGrabbed(cc.viewport) ||
+                !Utils.getBooleanProperty("turbovnc.altf4", true)) &&
+               e.getKeyCode() == KeyEvent.VK_F4 &&
+               e.getModifiersEx() == KeyEvent.ALT_DOWN_MASK)) {
+            if (e.getID() == KeyEvent.KEY_PRESSED)
+              cc.desktop.keyPressed(e);
+            else if (e.getID() == KeyEvent.KEY_RELEASED)
+              cc.desktop.keyReleased(e);
+            return true;
+          }
+          return false;
+        }
+      };
+
       public void focusGained(FocusEvent e) {
+        KeyboardFocusManager kfm =
+          KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        if (Utils.isWindows()) kfm.addKeyEventDispatcher(keyEventDispatcher);
         if (cc.viewer.benchFile == null) checkClipboard();
+        cc.pushLEDState();
       }
+
       public void focusLost(FocusEvent e) {
+        KeyboardFocusManager kfm =
+          KeyboardFocusManager.getCurrentKeyboardFocusManager();
+        if (Utils.isWindows())
+          kfm.removeKeyEventDispatcher(keyEventDispatcher);
         cc.releasePressedKeys();
       }
     });
+
     setFocusTraversalKeysEnabled(false);
     setFocusable(true);
     enableInputMethods(false);
@@ -119,7 +162,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   // RFB thread
   public void setCursor(int w, int h, Point hotspot,
                         int[] data, byte[] mask) {
-    if (!cc.opts.cursorShape || Params.localCursor.getValue())
+    if (!cc.params.cursorShape.get() || cc.params.localCursor.get())
       return;
 
     hideLocalCursor();
@@ -170,16 +213,16 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
     Graphics2D g2 = cursorImage.createGraphics();
     g2.setRenderingHint(RenderingHints.KEY_RENDERING,
                         RenderingHints.VALUE_RENDER_SPEED);
-    g2.drawImage(srcImage, 0, 0, (int)Math.min(cw, bestSize.width),
-                 (int)Math.min(ch, bestSize.height), 0, 0, cursor.width(),
+    g2.drawImage(srcImage, 0, 0, Math.min(cw, bestSize.width),
+                 Math.min(ch, bestSize.height), 0, 0, cursor.width(),
                  cursor.height(), null);
     g2.dispose();
     srcImage.flush();
 
     int x = (int)Math.floor((float)hotspot.x * scaleWidthRatio);
     int y = (int)Math.floor((float)hotspot.y * scaleHeightRatio);
-    x = (int)Math.min(x, Math.max(bestSize.width - 1, 0));
-    y = (int)Math.min(y, Math.max(bestSize.height - 1, 0));
+    x = Math.min(x, Math.max(bestSize.width - 1, 0));
+    y = Math.min(y, Math.max(bestSize.height - 1, 0));
     java.awt.Point hs = new java.awt.Point(x, y);
     if (!bestSize.equals(new Dimension(0, 0)))
       softCursor = tk.createCustomCursor(cursorImage, hs, "softCursor");
@@ -371,12 +414,12 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   // Mostly called from the EDT, except for a couple of instances in
   // CConn.resizeFramebuffer().
   public void setScaledSize() {
-    if (cc.opts.scalingFactor != Options.SCALE_AUTO &&
-        cc.opts.scalingFactor != Options.SCALE_FIXEDRATIO) {
+    if (cc.params.scale.get() != ScaleParameter.AUTO &&
+        cc.params.scale.get() != ScaleParameter.FIXEDRATIO) {
       scaledWidth = (int)Math.floor((float)cc.cp.width *
-                                    (float)cc.opts.scalingFactor / 100.0);
+                                    (float)cc.params.scale.get() / 100.0);
       scaledHeight = (int)Math.floor((float)cc.cp.height *
-                                     (float)cc.opts.scalingFactor / 100.0);
+                                     (float)cc.params.scale.get() / 100.0);
     } else {
       if (cc.viewport == null) {
         scaledWidth = cc.cp.width;
@@ -387,7 +430,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
           availableSize.width = cc.cp.width;
           availableSize.height = cc.cp.height;
         }
-        if (cc.opts.scalingFactor == Options.SCALE_FIXEDRATIO) {
+        if (cc.params.scale.get() == ScaleParameter.FIXEDRATIO) {
           float widthRatio = (float)availableSize.width / (float)cc.cp.width;
           float heightRatio =
             (float)availableSize.height / (float)cc.cp.height;
@@ -456,20 +499,20 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
         cb = Toolkit.getDefaultToolkit().getSystemSelection();
       if (cb == null)
         cb = Toolkit.getDefaultToolkit().getSystemClipboard();
-      if (cb != null && cc.opts.sendClipboard) {
+      if (cb != null && cc.params.sendClipboard.get()) {
         Transferable t = cb.getContents(null);
         if (t == null || !t.isDataFlavorSupported(DataFlavor.stringFlavor))
           return;
         BufferedReader br =
           new BufferedReader(DataFlavor.stringFlavor.getReaderForText(t));
-        CharBuffer cbuf =
-          CharBuffer.allocate(Params.maxClipboard.getValue());
+        CharBuffer cbuf = CharBuffer.allocate(cc.params.maxClipboard.get());
         br.read(cbuf);
         ((Buffer)cbuf).flip();
         String newContents = cbuf.toString();
         if (!cc.clipboardDialog.compareContentsTo(newContents)) {
           cc.clipboardDialog.setContents(newContents);
-          cc.writeClientCutText(newContents, newContents.length());
+          vlog.debug("Local clipboard changed.  Notifying server.");
+          cc.announceClipboard(true);
         }
         br.close();
         System.gc();
@@ -480,11 +523,65 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
     }
   }
 
+  private void bumpScroll(MouseEvent e) {
+    if (!cc.params.fullScreen.get() || !cc.params.bumpScroll.get())
+      return;
+
+    Rectangle viewRect = cc.viewport.sp.getViewport().getViewRect();
+    lastScreenX = e.getXOnScreen() - cc.viewport.getLocation().x;
+    lastScreenY = e.getYOnScreen() - cc.viewport.getLocation().y;
+    int bumpScrollMarginX = (int)((double)viewRect.width / 16 + 0.5);
+    int bumpScrollMarginY = (int)((double)viewRect.height / 16 + 0.5);
+
+    if ((scaledWidth > viewRect.width &&
+         (viewRect.x > 0 && lastScreenX < bumpScrollMarginX) ||
+         (viewRect.x < scaledWidth - viewRect.width &&
+          lastScreenX > viewRect.width - bumpScrollMarginX)) ||
+        (scaledHeight > viewRect.height &&
+         (viewRect.y > 0 && lastScreenY < bumpScrollMarginY) ||
+         (viewRect.y < scaledHeight - viewRect.height &&
+          lastScreenY > viewRect.height - bumpScrollMarginY))) {
+      if (bumpScrollTimer == null || !bumpScrollTimer.isRunning()) {
+        ActionListener actionListener = new ActionListener() {
+          public void actionPerformed(ActionEvent e) {
+            Rectangle viewRect = cc.viewport.sp.getViewport().getViewRect();
+            int bumpScrollMarginX = (int)((double)viewRect.width / 16 + 0.5);
+            int bumpScrollMarginY = (int)((double)viewRect.height / 16 + 0.5);
+            int dx = 0, dy = 0;
+            java.awt.Point viewPos =
+              cc.viewport.sp.getViewport().getViewPosition();
+
+            if (viewRect.x > 0 && lastScreenX < bumpScrollMarginX)
+              dx = -Math.min(viewRect.x, BUMP_SCROLL_PIXELS);
+            if (viewRect.x < scaledWidth - viewRect.width &&
+                lastScreenX > viewRect.width - bumpScrollMarginX)
+              dx = Math.min(scaledWidth - viewRect.width - viewRect.x,
+                            BUMP_SCROLL_PIXELS);
+            if (viewRect.y > 0 && lastScreenY < bumpScrollMarginY)
+              dy = -Math.min(viewRect.y, BUMP_SCROLL_PIXELS);
+            if (viewRect.y < scaledHeight - viewRect.height &&
+                lastScreenY > viewRect.height - bumpScrollMarginY)
+              dy = Math.min(scaledHeight - viewRect.height - viewRect.y,
+                            BUMP_SCROLL_PIXELS);
+            if (dx != 0 || dy != 0) {
+              viewPos.translate(dx, dy);
+              cc.viewport.sp.getViewport().setViewPosition(viewPos);
+            } else
+              ((Timer)e.getSource()).stop();
+          }
+        };
+        bumpScrollTimer = new Timer(BUMP_SCROLL_MS, actionListener);
+        bumpScrollTimer.start();
+      }
+    } else if (bumpScrollTimer != null && bumpScrollTimer.isRunning())
+      bumpScrollTimer.stop();
+  }
+
   // EDT: Mouse motion callback function
   private void mouseMotionCB(MouseEvent e) {
     int x = (cc.viewport == null) ? 0 : cc.viewport.dx;
     int y = (cc.viewport == null) ? 0 : cc.viewport.dy;
-    if (!cc.opts.viewOnly &&
+    if (!cc.params.viewOnly.get() &&
         (!Utils.osEID() ||
          !cc.viewport.processExtInputEventHelper(cc.viewport.motionType)) &&
         e.getX() >= x &&
@@ -508,6 +605,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
     }
     lastX = e.getX();
     lastY = e.getY();
+    bumpScroll(e);
   }
   public void mouseDragged(MouseEvent e) { mouseMotionCB(e); }
   public void mouseMoved(MouseEvent e) { mouseMotionCB(e); }
@@ -516,7 +614,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   private void mouseCB(MouseEvent e, int type) {
     int x = (cc.viewport == null) ? 0 : cc.viewport.dx;
     int y = (cc.viewport == null) ? 0 : cc.viewport.dy;
-    if (!cc.opts.viewOnly &&
+    if (!cc.params.viewOnly.get() &&
         (!Utils.osEID() || !cc.viewport.processExtInputEventHelper(type)) &&
         (e.getID() == MouseEvent.MOUSE_RELEASED ||
          (e.getX() >= x &&
@@ -559,11 +657,11 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   }
   public void mouseClicked(MouseEvent e) {}
   public void mouseEntered(MouseEvent e) {}
-  public void mouseExited(MouseEvent e) {}
+  public void mouseExited(MouseEvent e) { bumpScroll(e); }
 
   // EDT: Mouse wheel callback function
   private void mouseWheelCB(MouseWheelEvent e) {
-    if (!cc.opts.viewOnly &&
+    if (!cc.params.viewOnly.get() &&
         (!Utils.osEID() ||
          !cc.viewport.processExtInputEventHelper(cc.viewport.motionType)))
       cc.writeWheelEvent(e);
@@ -578,27 +676,23 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
 
   // EDT: Handle the key released event.
   public void keyReleased(KeyEvent e) {
-    if (!cc.opts.viewOnly)
+    if (!cc.params.viewOnly.get())
       cc.writeKeyEvent(e);
   }
 
   // EDT: Handle the key pressed event.
   public void keyPressed(KeyEvent e) {
-    if (e.getKeyCode() == cc.opts.menuKeyCode && e.getModifiersEx() == 0) {
-      int sx = (scaleWidthRatio == 1.00) ?
-        lastX : (int)Math.floor(lastX * scaleWidthRatio);
-      int sy = (scaleHeightRatio == 1.00) ?
-        lastY : (int)Math.floor(lastY * scaleHeightRatio);
-      java.awt.Point ev = new java.awt.Point(lastX, lastY);
-      ev.translate(sx - lastX, sy - lastY);
-      cc.showMenu((int)ev.getX(), (int)ev.getY());
+    if (e.getKeyCode() == cc.params.menuKey.getVKeyCode() &&
+        e.getModifiersEx() == 0) {
+      cc.showMenu();
       e.consume();
       return;
     }
     int ctrlAltShiftMask = InputEvent.SHIFT_DOWN_MASK |
                            InputEvent.CTRL_DOWN_MASK |
                            InputEvent.ALT_DOWN_MASK;
-    if ((e.getModifiersEx() & ctrlAltShiftMask) == ctrlAltShiftMask &&
+    if (!cc.params.noHotkeys.get() &&
+        (e.getModifiersEx() & ctrlAltShiftMask) == ctrlAltShiftMask &&
         (!Utils.isWindows() || !e.isAltGraphDown())) {
       switch (e.getKeyCode()) {
         case KeyEvent.VK_F:
@@ -650,9 +744,9 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
         case KeyEvent.VK_9:
         case KeyEvent.VK_NUMPAD9:
         case KeyEvent.VK_ADD:
-          if (cc.opts.desktopSize.mode != Options.SIZE_AUTO &&
-              cc.opts.scalingFactor != Options.SCALE_AUTO &&
-              cc.opts.scalingFactor != Options.SCALE_FIXEDRATIO) {
+          if (cc.params.desktopSize.getMode() != DesktopSize.AUTO &&
+              cc.params.scale.get() != ScaleParameter.AUTO &&
+              cc.params.scale.get() != ScaleParameter.FIXEDRATIO) {
             cc.zoomIn();
             return;
           }
@@ -660,26 +754,30 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
         case KeyEvent.VK_8:
         case KeyEvent.VK_NUMPAD8:
         case KeyEvent.VK_SUBTRACT:
-          if (cc.opts.desktopSize.mode != Options.SIZE_AUTO &&
-              cc.opts.scalingFactor != Options.SCALE_AUTO &&
-              cc.opts.scalingFactor != Options.SCALE_FIXEDRATIO) {
+          if (cc.params.desktopSize.getMode() != DesktopSize.AUTO &&
+              cc.params.scale.get() != ScaleParameter.AUTO &&
+              cc.params.scale.get() != ScaleParameter.FIXEDRATIO) {
             cc.zoomOut();
             return;
           }
           break;
         case KeyEvent.VK_0:
         case KeyEvent.VK_NUMPAD0:
-          if (cc.opts.desktopSize.mode != Options.SIZE_AUTO &&
-              cc.opts.scalingFactor != Options.SCALE_AUTO &&
-              cc.opts.scalingFactor != Options.SCALE_FIXEDRATIO) {
+          if (cc.params.desktopSize.getMode() != DesktopSize.AUTO &&
+              cc.params.scale.get() != ScaleParameter.AUTO &&
+              cc.params.scale.get() != ScaleParameter.FIXEDRATIO) {
             cc.zoom100();
             return;
           }
           break;
         case KeyEvent.VK_LEFT:
+        case KeyEvent.VK_KP_LEFT:
         case KeyEvent.VK_RIGHT:
+        case KeyEvent.VK_KP_RIGHT:
         case KeyEvent.VK_UP:
+        case KeyEvent.VK_KP_UP:
         case KeyEvent.VK_DOWN:
+        case KeyEvent.VK_KP_DOWN:
         case KeyEvent.VK_PAGE_UP:
         case KeyEvent.VK_PAGE_DOWN:
         case KeyEvent.VK_HOME:
@@ -691,8 +789,9 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
             return;
       }
     }
-    if ((e.getModifiersEx() & InputEvent.META_DOWN_MASK) ==
-        InputEvent.META_DOWN_MASK) {
+    if (!cc.params.noMacHotkeys.get() &&
+        (e.getModifiersEx() & InputEvent.META_DOWN_MASK) ==
+         InputEvent.META_DOWN_MASK) {
       switch (e.getKeyCode()) {
         case KeyEvent.VK_P:
           if (Utils.JAVA_VERSION >= 9 && Utils.JAVA_VERSION <= 11)
@@ -716,20 +815,25 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
         case KeyEvent.VK_9:
         case KeyEvent.VK_8:
         case KeyEvent.VK_0:
-          if (cc.opts.desktopSize.mode != Options.SIZE_AUTO &&
-              cc.opts.scalingFactor != Options.SCALE_AUTO &&
-              cc.opts.scalingFactor != Options.SCALE_FIXEDRATIO)
+          if (cc.params.desktopSize.getMode() != DesktopSize.AUTO &&
+              cc.params.scale.get() != ScaleParameter.AUTO &&
+              cc.params.scale.get() != ScaleParameter.FIXEDRATIO)
             return;
       }
     }
     if ((e.getModifiersEx() & InputEvent.ALT_DOWN_MASK) ==
         InputEvent.ALT_DOWN_MASK && e.getKeyCode() == KeyEvent.VK_ENTER &&
-        cc.opts.fsAltEnter) {
+        cc.params.fsAltEnter.get()) {
       cc.toggleFullScreen();
       return;
     }
-    if (!cc.opts.viewOnly)
+    if (!cc.params.viewOnly.get()) {
+      // For some reason, Java on Windows doesn't update the lock key state
+      // until another key is pressed.
+      if (Utils.isWindows())
+        cc.pushLEDState();
       cc.writeKeyEvent(e);
+    }
   }
 
   // EDT: Save screenshot
@@ -762,9 +866,9 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   // are called.
 
   private synchronized void hideLocalCursor() {
-    if (Params.localCursor.getValue())
+    if (cc.params.localCursor.get())
       return;
-    if (!cc.opts.cursorShape)
+    if (!cc.params.cursorShape.get())
       setCursor(noCursor);
     // Blit the cursor backing store over the cursor.
     if (cursorVisible) {
@@ -775,7 +879,7 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   }
 
   private synchronized void showLocalCursor() {
-    if (Params.localCursor.getValue())
+    if (cc.params.localCursor.get())
       return;
     if (cursorAvailable && !cursorVisible) {
       if (!im.getPF().equal(cursor.getPF()) ||
@@ -931,8 +1035,10 @@ class DesktopWindow extends JPanel implements Runnable, MouseListener,
   int scaledWidth = 0, scaledHeight = 0;
   float scaleWidthRatio, scaleHeightRatio;
 
-  int lastX, lastY;  // EDT only
+  int lastX, lastY, lastScreenX, lastScreenY;  // EDT only
   Rect damage = new Rect();
+
+  Timer bumpScrollTimer;
 
   static LogWriter vlog = new LogWriter("DesktopWindow");
 }

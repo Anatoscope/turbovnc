@@ -1,5 +1,5 @@
-/* Copyright (C) 2012, 2015, 2018, 2020-2021 D. R. Commander.
- *                                           All Rights Reserved.
+/* Copyright (C) 2012, 2015, 2018, 2020-2022, 2024-2025 D. R. Commander.
+ *                                                      All Rights Reserved.
  * Copyright (C) 2012 Brian P. Hinz
  *
  * This is free software; you can redistribute it and/or modify
@@ -20,6 +20,7 @@
 
 package com.turbovnc.rfb;
 
+import javax.swing.*;
 import java.util.prefs.Preferences;
 import java.util.prefs.BackingStoreException;
 
@@ -33,41 +34,9 @@ public final class UserPreferences {
     node.put(key, val);
   }
 
-  public static void set(String nName, String key, int val) {
-    Preferences node = root.node(nName);
-    node.putInt(key, val);
-  }
-
-  public static void set(String nName, String key, boolean val) {
-    Preferences node = root.node(nName);
-    node.putBoolean(key, val);
-  }
-
   public static String get(String nName, String key) {
     Preferences node = root.node(nName);
     return node.get(key, null);
-  }
-
-  public static boolean getBool(String nName, String key, boolean defval) {
-    Preferences node = root.node(nName);
-    return node.getBoolean(key, defval);
-  }
-
-  public static int getInt(String nName, String key, int defval) {
-    Preferences node = root.node(nName);
-    return node.getInt(key, defval);
-  }
-
-  public static void save() {
-    try {
-      root.sync();
-      String[] keys = root.keys();
-      for (int i = 0; i < keys.length; i++)
-        vlog.debug(keys[i] + " = " + root.get(keys[i], null));
-    } catch (BackingStoreException e) {
-      vlog.error("Could not save preferences:");
-      vlog.error("  " + e.getMessage());
-    }
   }
 
   public static void save(String nName) {
@@ -83,11 +52,29 @@ public final class UserPreferences {
     }
   }
 
-  public static void clear() {
+  public static void clear(boolean list) {
     try {
+      if (!list) {
+        Object[] dlgOptions = {
+          UIManager.getString("OptionPane.yesButtonText"),
+          UIManager.getString("OptionPane.noButtonText")
+        };
+        JOptionPane pane = new JOptionPane("Are you sure you want to clear\n" +
+                                           "all saved per-host options?",
+                                           JOptionPane.WARNING_MESSAGE,
+                                           JOptionPane.YES_NO_OPTION, null,
+                                           dlgOptions, dlgOptions[1]);
+        JDialog dlg = pane.createDialog(null, "TurboVNC Viewer");
+        dlg.setAlwaysOnTop(true);
+        dlg.setVisible(true);
+        if (pane.getValue() == dlgOptions[1])
+          return;
+      }
       root.clear();
       String[] children = root.childrenNames();
       for (int i = 0; i < children.length; i++) {
+        if (list != children[i].equalsIgnoreCase("ServerDialog"))
+          continue;
         Preferences node = root.node(children[i]);
         node.removeNode();
       }
@@ -98,33 +85,24 @@ public final class UserPreferences {
     }
   }
 
-  public static void load(String nName) {
-    // Sets the value of any corresponding Configuration parameters
+  public static void load(String nName, Params params) {
+    // Load the value of any parameters that have not already been set on the
+    // command line or in a connection info file
     try {
-      Preferences node = root.node(nName);
+      Preferences node = root.node(nName.replaceAll("[\\[\\]]", ""));
       String[] keys = node.keys();
+      params.resetGUI();
       for (int i = 0; i < keys.length; i++) {
         String key = keys[i], paramName = key;
-
-        if (key.equalsIgnoreCase("SecTypes"))
-          paramName = "SecurityTypes";
-        else if (key.equalsIgnoreCase("Username"))
-          paramName = "User";
-        VoidParameter p = Params.get(paramName);
-        if (p == null ||
-            key.equalsIgnoreCase("AlwaysShowConnectionDialog") ||
-            key.equalsIgnoreCase("Colors") ||
-            key.equalsIgnoreCase("Encoding"))
-          continue;
-
         String valueStr = node.get(key, null);
         if (valueStr != null)
-          Params.set(paramName, valueStr);
+          params.setGUI(paramName, valueStr);
       }
     } catch (BackingStoreException e) {
       vlog.error("Could not get preferences:");
       vlog.error("  " + e.getMessage());
     }
+    params.reconcile();
   }
 
   private UserPreferences() {}

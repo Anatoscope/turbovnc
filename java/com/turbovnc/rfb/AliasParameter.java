@@ -1,4 +1,4 @@
-/* Copyright (C) 2012, 2018 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2012, 2018, 2022-2025 D. R. Commander.  All Rights Reserved.
  * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
@@ -19,20 +19,28 @@
 
 package com.turbovnc.rfb;
 
-public class AliasParameter extends VoidParameter {
-  public AliasParameter(String name_, String desc_, VoidParameter v) {
-    super(name_, desc_);
-    param = v;
+public final class AliasParameter extends VoidParameter {
+
+  public AliasParameter(String name, Params params, String desc,
+                        VoidParameter param_) {
+    super(name, params, false, param_.isAdvanced(), desc);
+    param = param_;
   }
 
-  public boolean setParam(String v) { return param.setParam(v); }
-  public boolean setParam() { return param.setParam(); }
+  public boolean set(String str) {
+    boolean retval = param.set(str);
+    param.setCommandLine(isCommandLine());
+    return retval;
+  }
 
-  public synchronized void reset() { param.reset(); }
+  public void reset() { param.reset(); }
+
+  public boolean setDefault(String str) { return param.setDefault(str); }
 
   public String getDefaultStr() { return null; }
+  public String getStr() { return null; }
   public String getValues() { return null; }
   public boolean isBool() { return param.isBool(); }
 
-  protected VoidParameter param;
+  private final VoidParameter param;
 }

@@ -4,8 +4,8 @@
  * Routines to implement Tight Encoding
  */
 
-/* Copyright (C) 2010-2012, 2014, 2017, 2022 D. R. Commander.
- *                                           All Rights Reserved.
+/* Copyright (C) 2010-2012, 2014, 2017, 2022, 2024-2025 D. R. Commander.
+ *                                                      All Rights Reserved.
  * Copyright (C) 2005-2008 Sun Microsystems, Inc.  All Rights Reserved.
  * Copyright (C) 2004 Landmark Graphics Corporation.  All Rights Reserved.
  * Copyright (C) 2000, 2001 Const Kaplinsky.  All Rights Reserved.
@@ -91,6 +91,11 @@ static TIGHT_CONF tightConf[4] = {
   { 65536, 2048,  32, 7, 7, 5,  96, 256 }  /* 9 */
 };
 
+int rfbMaxTightRectSize = 0;
+#define MAXRECTSIZE  \
+  (rfbMaxTightRectSize ? rfbMaxTightRectSize :  \
+                         tightConf[compressLevel].maxRectSize)
+
 static int compressLevel;
 static int qualityLevel;
 static int subsampLevel;
@@ -123,7 +128,7 @@ typedef struct PALETTE_s {
 /* Globals for multi-threading */
 
 static Bool threadInit = FALSE;
-static pthread_t thnd[MAX_ENCODING_THREADS] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+static pthread_t thnd[MAX_ENCODING_THREADS] = { 0, 0, 0, 0 };
 
 typedef struct _threadparam {
   rfbClientPtr cl;
@@ -220,7 +225,7 @@ int rfbNumCodedRectsTight(rfbClientPtr cl, int x, int y, int w, int h)
   if (cl->enableLastRectEncoding && w * h >= MIN_SPLIT_RECT_SIZE)
     return 0;
 
-  maxRectSize = tightConf[compressLevel].maxRectSize;
+  maxRectSize = MAXRECTSIZE;
   maxRectWidth = tightConf[compressLevel].maxRectWidth;
 
   if (w > maxRectWidth || w * h > maxRectSize) {
@@ -241,10 +246,10 @@ int rfbTightCompressLevel(rfbClientPtr cl)
 {
   int tightCompressLevel = cl->tightCompressLevel;
 
-  /* If the interframe comparison engine is set to automatic, then
-     interframe comparison will be enabled for compression levels 5 and
-     above.  Thus, we map 5-8 internally to 0-4 so that we can get
-     interframe-enabled equivalents of all of the documented TurboVNC modes.
+  /* If interframe comparison is set to automatic, then interframe comparison
+     will be enabled for compression levels 5 and above.  Thus, we map 5-8
+     internally to 0-4 so that we can get interframe-enabled equivalents of all
+     of the documented TurboVNC modes.
      */
   if (tightCompressLevel >= 5 && tightCompressLevel <= 8)
     tightCompressLevel -= 5;
@@ -400,7 +405,7 @@ Bool rfbSendRectEncodingTight(rfbClientPtr cl, int x, int y, int w, int h)
   else
     usePixelFormat24 = FALSE;
 
-  nt = min(rfbNumThreads, w * h / tightConf[compressLevel].maxRectSize);
+  nt = min(rfbNumThreads, w * h / MAXRECTSIZE);
   if (nt < 1) nt = 1;
 
   for (i = 0; i < nt; i++) {
@@ -415,6 +420,12 @@ Bool rfbSendRectEncodingTight(rfbClientPtr cl, int x, int y, int w, int h)
       REGION_INIT(pScreen, &tparam[i].lossyRegion, NullBox, 0);
       REGION_INIT(pScreen, &tparam[i].losslessRegion, NullBox, 0);
     }
+    /* Tight encoding has only a limited number of zlib streams (4).  The
+       streams must all be left open as long as the client is connected, or
+       performance suffers.  Thus, multiple threads can't use the same zlib
+       stream.  We divide the pool of 4 evenly among the available threads (up
+       to the first 4 threads), and if each thread has more than one stream, it
+       cycles between them in a round-robin fashion. */
     if (i < 4) {
       int n = min(nt, 4);
       tparam[i].baseStreamId = 4 / n * i;
@@ -444,12 +455,8 @@ Bool rfbSendRectEncodingTight(rfbClientPtr cl, int x, int y, int w, int h)
         return FALSE;
     }
     for (i = 1; i < nt; i++) {
-      if ((*tparam[i].ublen) > 0 &&
-          WriteExact(cl, tparam[i].updateBuf, *tparam[i].ublen) < 0) {
-        rfbLogPerror("rfbSendRectEncodingTight: write");
-        rfbCloseClient(cl);
-        return FALSE;
-      }
+      if ((*tparam[i].ublen) > 0)
+        WRITE_OR_CLOSE(tparam[i].updateBuf, *tparam[i].ublen, return FALSE);
       (*tparam[i].ublen) = 0;
       cl->rfbBytesSent[rfbEncodingTight] += tparam[i].bytessent;
       cl->rfbRectanglesSent[rfbEncodingTight] += tparam[i].rectsent;
@@ -501,7 +508,7 @@ static Bool SendRectEncodingTight(threadparam *t, int x, int y, int w, int h)
   {
     int maxRectSize, maxRectWidth, nMaxWidth;
 
-    maxRectSize = tightConf[compressLevel].maxRectSize;
+    maxRectSize = MAXRECTSIZE;
     maxRectWidth = tightConf[compressLevel].maxRectWidth;
     nMaxWidth = (w > maxRectWidth) ? maxRectWidth : w;
     nMaxRows = maxRectSize / nMaxWidth;
@@ -745,7 +752,7 @@ static Bool SendRectSimple(threadparam *t, int x, int y, int w, int h)
   int rw, rh;
   rfbClientPtr cl = t->cl;
 
-  maxRectSize = tightConf[compressLevel].maxRectSize;
+  maxRectSize = MAXRECTSIZE;
   maxRectWidth = tightConf[compressLevel].maxRectWidth;
 
   maxBeforeSize = maxRectSize * (cl->format.bitsPerPixel / 8);
@@ -963,7 +970,8 @@ static Bool SendMonoRect(threadparam *t, int w, int h)
   dataLen = (w + 7) / 8;
   dataLen *= h;
 
-  if (tightConf[compressLevel].monoZlibLevel == 0 || t->id > 3)
+  if (tightConf[compressLevel].monoZlibLevel == 0 &&
+      cl->enableTightWithoutZlib)
     t->updateBuf[(*t->ublen)++] =
       (char)((rfbTightNoZlib | rfbTightExplicitFilter) << 4);
   else
@@ -1031,7 +1039,7 @@ static Bool SendIndexedRect(threadparam *t, int w, int h)
   }
 
   /* Prepare tight encoding header. */
-  if (tightConf[compressLevel].idxZlibLevel == 0 || t->id > 3)
+  if (tightConf[compressLevel].idxZlibLevel == 0 && cl->enableTightWithoutZlib)
     t->updateBuf[(*t->ublen)++] =
       (char)((rfbTightNoZlib | rfbTightExplicitFilter) << 4);
   else
@@ -1097,7 +1105,7 @@ static Bool SendFullColorRect(threadparam *t, int w, int h)
       t->streamId = t->baseStreamId;
   }
 
-  if (tightConf[compressLevel].rawZlibLevel == 0 || t->id > 3)
+  if (tightConf[compressLevel].rawZlibLevel == 0 && cl->enableTightWithoutZlib)
     t->updateBuf[(*t->ublen)++] = (char)(rfbTightNoZlib << 4);
   else
     t->updateBuf[(*t->ublen)++] = streamId << 4;
@@ -1129,15 +1137,7 @@ static Bool CompressData(threadparam *t, int streamId, int dataLen,
     return TRUE;
   }
 
-  /* Tight encoding has only a limited number of Zlib streams (4).  The
-     streams must all be left open as long as the client is connected, or
-     performance suffers.  Thus, multiple threads can't use the same Zlib
-     stream.  We divide the pool of 4 evenly among the available threads (up
-     to the first 4 threads), and if each thread has more than one stream, it
-     cycles between them in a round-robin fashion.  If we have more than 4
-     threads, then threads 5 and beyond must encode their data without Zlib
-     compression. */
-  if (zlibLevel == 0 || t->id > 3)
+  if (zlibLevel == 0 && cl->enableTightWithoutZlib)
     return SendCompressedData(t, t->tightBeforeBuf, dataLen);
 
   pz = &cl->zsStruct[streamId];
@@ -1691,7 +1691,7 @@ static Bool SendJpegRect(threadparam *t, int x, int y, int w, int h,
   }
   if (!t->j) {
     if ((t->j = tjInitCompress()) == NULL) {
-      rfbLog("JPEG Error: %s\n", tjGetErrorStr());
+      RFBLOGID("JPEG Error: %s\n", tjGetErrorStr());
       return 0;
     }
   }
@@ -1727,7 +1727,7 @@ static Bool SendJpegRect(threadparam *t, int x, int y, int w, int h,
   if (tjCompress(t->j, srcbuf, w, pitch, h, ps,
                  (unsigned char *)t->tightAfterBuf, &size, subsamp, quality,
                  flags) == -1) {
-    rfbLog("JPEG Error: %s\n", tjGetErrorStr());
+    RFBLOGID("JPEG Error: %s\n", tjGetErrorStr());
     free(tmpbuf);  tmpbuf = NULL;
     return 0;
   }

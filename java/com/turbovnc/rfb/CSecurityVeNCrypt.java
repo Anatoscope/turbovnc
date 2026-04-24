@@ -1,4 +1,5 @@
-/* Copyright (C) 2012, 2017-2018, 2021 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2012, 2017-2018, 2021-2022 D. R. Commander.
+ *                                          All Rights Reserved.
  * Copyright (C) 2011 Brian P. Hinz
  * Copyright (C) 2010 TigerVNC Team
  * Copyright (C) 2005-2006 Martin Koegler
@@ -134,12 +135,12 @@ public class CSecurityVeNCrypt extends CSecurity {
         Iterator<Integer> j;
         List<Integer> secTypes = new ArrayList<Integer>();
 
-        secTypes = cc.opts.getEnabledExtSecTypes();
+        secTypes = cc.params.secTypes.getEnabledExt();
 
         /* Honor server's security type order */
         for (i = 0; i < nAvailableTypes; i++) {
           for (j = secTypes.iterator(); j.hasNext();) {
-            int refType = (Integer)j.next();
+            int refType = j.next();
             if (refType == availableTypes[i]) {
               chosenType = refType;
               break;
@@ -158,7 +159,7 @@ public class CSecurityVeNCrypt extends CSecurity {
             chosenType == RFB.SECTYPE_VENCRYPT)
           throw new AuthFailureException("No valid VeNCrypt sub-type");
 
-        csecurity = security.getCSecurity(cc.opts, chosenType);
+        csecurity = security.getCSecurity(cc.params, chosenType);
 
         /* send chosen type to server */
         os.writeU32(chosenType);

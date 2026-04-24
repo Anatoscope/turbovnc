@@ -8,14 +8,11 @@ Build Requirements
 
 ### All Systems
 
-- [CMake](http://www.cmake.org) v2.8.12 or later
-  * CMake 3.12 or later is required if it is desirable or necessary to use
-    Python 3 to run the simple web server for noVNC (part of the TurboVNC
-    Server.)
+- [CMake](http://www.cmake.org) v3.16 or later
 
 - libjpeg-turbo SDK v1.2 or later
-  * The libjpeg-turbo SDK binary packages can be downloaded from the "Files"
-    area of <http://sourceforge.net/projects/libjpeg-turbo>.
+  * The libjpeg-turbo SDK binary packages can be downloaded from
+    <https://github.com/libjpeg-turbo/libjpeg-turbo/releases>.
   * The TurboVNC build system will search for the TurboJPEG header and library
     under __/opt/libjpeg-turbo__ on Un\*x or __c:\libjpeg-turbo[64]__ (Visual
     C++) or __c:\libjpeg-turbo-gcc[64]__ (MinGW) on Windows, but you can
@@ -35,14 +32,13 @@ Build Requirements
 
 - PAM development kit [if building the TurboVNC Server]
 
-- JDK 8 or OpenJDK 1.7 or later [if building the TurboVNC Viewer]
+- JDK/OpenJDK 16 or later [if building the TurboVNC Viewer]
   * For systems that do not provide a JDK, download the
     [Oracle Java Development Kit](http://www.oracle.com/technetwork/java/javase/downloads)
     or [OpenJDK](https://jdk.java.net)
-  * [OpenJDK](https://jdk.java.net) 11 or later must be used if building
+  * [OpenJDK](https://jdk.java.net) 16 or later must be used if building
     an installer with a custom JRE (if the `TVNC_INCLUDEJRE` CMake variable is
     set to `1`)
-  * If using JDK 11 or later, CMake 3.11.x or later must also be used
 
 
 ### Windows
@@ -55,13 +51,12 @@ Build Requirements
   which includes everything necessary to build TurboVNC.
 
   * You can also download and install the standalone Windows SDK (for Windows 7
-    or later), which includes command-line versions of the 32-bit and 64-bit
-    Visual C++ compilers.
+    or later), which includes a command-line version of the Visual C++
+    compiler.
   * If you intend to build TurboVNC from the command line, then add the
     appropriate compiler and SDK directories to the `INCLUDE`, `LIB`, and
     `PATH` environment variables.  This is generally accomplished by executing
-    `vcvars32.bat` or `vcvars64.bat`, which are located in the same directory
-    as the compiler.
+    `vcvars64.bat`, which is located in the same directory as the compiler.
 
    ... OR ...
 
@@ -72,28 +67,26 @@ Build Requirements
   Start Menu link that can be used to launch a command prompt with the
   appropriate compiler paths automatically set.
 
-- JDK 8 or OpenJDK 1.8 or later
+- JDK/OpenJDK 16 or later
   * Download the
     [Oracle Java Development Kit](http://www.oracle.com/technetwork/java/javase/downloads)
     or [OpenJDK](https://jdk.java.net)
-  * [OpenJDK](https://jdk.java.net) 11 or later must be used if building
+  * [OpenJDK](https://jdk.java.net) 16 or later must be used if building
     an installer with a custom JRE (if the `TVNC_INCLUDEJRE` CMake variable is
     set to `1`)
-  * If using JDK 11 or later, CMake 3.11.x or later must also be used
 
 
 ### Mac
 
 - Xcode 4.1 or later (OS X/macOS 10.7.x or later SDK required)
 
-- JDK 8 or OpenJDK 8 or later
+- JDK/OpenJDK 16 or later
   * Download the
     [Oracle Java Development Kit](http://www.oracle.com/technetwork/java/javase/downloads)
     or [OpenJDK](https://jdk.java.net)
-  * [OpenJDK](https://jdk.java.net) 11 or later must be used if building
+  * [OpenJDK](https://jdk.java.net) 16 or later must be used if building
     a Mac package/disk image with a custom JRE (if the `TVNC_INCLUDEJRE` CMake
     variable is set to `1`)
-  * If using JDK 11 or later, CMake 3.11.x or later must also be used
 
 
 Out-of-Tree Builds
@@ -119,10 +112,8 @@ The following procedure will build the TurboVNC Viewer and some native glueware
 to support running it as a standalone application.  Additionally, if the
 TurboVNC Server build is enabled (which is the default on Un*x platforms other
 than Mac), then this procedure will build the TurboVNC Server and a handful of
-C applications that are used to interface with it.  On most 64-bit systems
-(Solaris being a notable exception), this will build a 64-bit version of
-TurboVNC.  See "Build Recipes" for specific instructions on how to build a
-32-bit or 64-bit version of TurboVNC on systems that support both.
+C applications that are used to interface with it.  On most 64-bit systems,
+this will build a 64-bit version of TurboVNC.
 
     cd {build_directory}
     cmake -G"Unix Makefiles" [additional CMake flags] {source_directory}
@@ -137,9 +128,6 @@ Replace `make` with `ninja` and `Unix Makefiles` with `Ninja` if using Ninja.
     cmake -G"NMake Makefiles" -DCMAKE_BUILD_TYPE=Release [additional CMake flags] {source_directory}
     nmake
 
-This will build either a 32-bit or a 64-bit version of TurboVNC, depending on
-which version of __cl.exe__ is in the `PATH`.
-
 Replace `nmake` with `ninja` and `NMake Makefiles` with `Ninja` if using Ninja.
 
 
@@ -150,13 +138,9 @@ Choose the appropriate CMake generator option for your version of Visual Studio
 instance:
 
     cd {build_directory}
-    cmake -G"Visual Studio 10" [additional CMake flags] {source_directory}
+    cmake -G "Visual Studio 17 2022" [additional CMake flags] {source_directory}
 
-NOTE: Add `Win64` to the generator name (for example, `Visual Studio 10 Win64`)
-to build a 64-bit version of TurboVNC.  A separate build directory must be
-used for 32-bit and 64-bit builds.
-
-You can then open __ALL_BUILD.vcproj__ in Visual Studio and build one of the
+You can then open __ALL_BUILD.vcxproj__ in Visual Studio and build one of the
 configurations in that project ("Debug", "Release", etc.) to generate a full
 build of TurboVNC.
 
@@ -193,9 +177,8 @@ CMake variables:
 - `TJPEG_INCLUDE_DIR`
 - `TJPEG_LIBRARY`
 - `TVNC_DLOPENSSL`
+- `TVNC_ZLIBNG`
 - `TVNC_STATIC_XORG_PATHS`
-- `TVNC_SYSTEMLIBS`
-- `TVNC_SYSTEMX11`
 - `XKB_BASE_DIRECTORY`
 - `XKB_BIN_DIRECTORY`
 - `XORG_DRI_DRIVER_PATH`
@@ -208,24 +191,6 @@ those variables.
 
 Build Recipes
 -------------
-
-
-### 32-bit Build on 64-bit Linux/Unix (including Mac)
-
-Use export/setenv to set the following environment variables before running
-CMake:
-
-    CFLAGS=-m32
-    LDFLAGS=-m32
-
-
-### 64-bit Build on Solaris
-
-Use export/setenv to set the following environment variables before running
-CMake:
-
-    CFLAGS=-m64
-    LDFLAGS=-m64
 
 
 ### Other Compilers
@@ -268,9 +233,6 @@ TurboVNC into a directory of your choosing.  If you don't specify
 __c:\Program Files\TurboVNC__<br>
 Windows
 
-__c:\Program Files (x86)\TurboVNC__<br>
-32-bit build on 64-bit Windows
-
 __/opt/TurboVNC__<br>
 Un*x
 
@@ -291,15 +253,6 @@ in __${CMAKE\_INSTALL\_PREFIX}/doc__.)  If a directory variable contains the
 name of another directory variable in angle brackets, then its final value will
 depend on the final value of that other variable.  For instance, the default
 value of `CMAKE_INSTALL_MANDIR` is `<CMAKE_INSTALL_DATAROOTDIR>/man`.
-
-NOTE: If setting one of these directory variables to a relative path using the
-CMake command line, you must specify that the variable is of type `PATH`.
-For example:
-
-    cmake -G"{generator type}" -DCMAKE_INSTALL_JAVADIR:PATH=java {source_directory}
-
-Otherwise, CMake will assume that the path is relative to the build directory
-rather than the install directory.
 
 
 Creating Distribution Packages
@@ -367,7 +320,7 @@ configuration you built (such as __{build_directory}\Debug__ or
 __{build_directory}\Release__).
 
 Building a Windows installer requires
-[Inno Setup](http://www.jrsoftware.org/isinfo.php).
+[Inno Setup](http://www.jrsoftware.org/isinfo.php) v6.3 or later.
 __iscc.exe__ should be in your `PATH`.
 
 A custom JRE based on OpenJDK can be included in the Windows installer package

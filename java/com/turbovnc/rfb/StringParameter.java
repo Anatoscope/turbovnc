@@ -1,4 +1,5 @@
-/* Copyright (C) 2012, 2017-2018, 2021 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2012, 2017-2018, 2021-2024 D. R. Commander.
+ *                                          All Rights Reserved.
  * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
  * This is free software; you can redistribute it and/or modify
@@ -21,41 +22,55 @@ package com.turbovnc.rfb;
 
 public class StringParameter extends VoidParameter {
 
-  public StringParameter(String name_, String desc_, String v) {
-    this(name_, desc_, v, null);
+  public StringParameter(String name, Params params, boolean isGUI,
+                         boolean advanced, String desc, String defValue_) {
+    this(name, params, isGUI, advanced, desc, defValue_, null);
   }
 
-  public StringParameter(String name_, String desc_, String v,
+  public StringParameter(String name, Params params, boolean isGUI,
+                         boolean advanced, String desc, String defValue_,
                          String values_) {
-    super(name_, desc_);
-    value = v;
-    defValue = v;
+    super(name, params, isGUI, advanced, desc);
+    value = defValue = defValue_;
     values = values_;
   }
 
-  public synchronized boolean setParam(String v) {
-    if (v != null && v.isEmpty())
-      v = null;
-    value = v;
+  public synchronized boolean set(String str) {
+    if (str != null && str.isEmpty())
+      str = null;
+    value = str;
     isDefault = false;
+    setCommandLine(false);
     return value != null;
   }
 
-  public synchronized void reset() {
+  public final synchronized void reset() {
     value = defValue;
     isDefault = true;
+    setCommandLine(false);
   }
 
-  public String getDefaultStr() { return defValue; }
-  public String getValues() { return values; }
-  public boolean isDefault() { return isDefault; }
+  public synchronized boolean setDefault(String str) {
+    if (str != null && str.isEmpty())
+      str = null;
+    value = defValue = str;
+    isDefault = true;
+    return true;
+  }
 
-  public synchronized String getValue() { return value; }
-  public synchronized String getData() { return value; }
+  public final synchronized void setDefault(boolean isDefault_) {
+    isDefault = isDefault_;
+  }
 
-  boolean isDefault = true;
+  public final synchronized String get() { return value; }
+  public final synchronized String getDefaultStr() { return defValue; }
+  public final synchronized String getStr() { return value; }
+  public final String getValues() { return values; }
+  public final synchronized boolean isDefault() { return isDefault; }
 
-  protected String value;
-  protected final String defValue;
-  protected final String values;
+  private boolean isDefault = true;
+
+  String value;
+  private String defValue;
+  private final String values;
 }

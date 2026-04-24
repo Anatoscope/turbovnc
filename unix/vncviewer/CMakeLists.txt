@@ -1,4 +1,4 @@
-if(APPLE AND TVNC_BUILDVIEWER)
+if(APPLE)
 
 find_package(JNI REQUIRED)
 
@@ -10,27 +10,29 @@ execute_process(COMMAND chmod +x vncviewer
 include_directories(${JAVA_INCLUDE_PATH} ${JAVA_INCLUDE_PATH2}
 	${TJPEG_INCLUDE_DIR})
 
-set(HELPER_SOURCES turbovnchelper.m JRSwizzle.m
+enable_language(OBJC)
+
+set(HELPER_SOURCES cocoa.m turbovnchelper.m JRSwizzle.m)
+add_library(turbovnchelper SHARED ${HELPER_SOURCES} keysym2ucs.c osx_to_qnum.c
 	${CMAKE_SOURCE_DIR}/common/turbojpeg-jni/turbojpeg-jni.c)
-add_library(turbovnchelper SHARED ${HELPER_SOURCES} usocket.c)
-set_source_files_properties(${HELPER_SOURCES} PROPERTIES LANGUAGE C)
 set_target_properties(turbovnchelper PROPERTIES
 	LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/java)
-target_link_libraries(turbovnchelper "-framework Cocoa" ${TJPEG_LIBRARY})
+target_link_libraries(turbovnchelper "-framework Carbon -framework Cocoa"
+	${TJPEG_LIBRARY})
 
 if(CPU_TYPE STREQUAL "x86_64")
 	# This is nasty, but for reasons unexplained, full-screen multi-screen
 	# spanning doesn't work with the Mac TurboVNC Viewer app unless
-	# JavaAppLauncher is built with an older OS X SDK.  Thus, we include a binary
-	# of it in the source tree, and it can only be rebuilt by building the
-	# "JavaAppLauncher" target.
-	set(MACOS_PLATFORMDIR /Applications/Xcode46.app/Contents/Developer)
+	# JavaAppLauncher is built with the macOS 10.13 or earlier SDK.  Thus, we
+	# include a binary of it in the source tree, and it can only be rebuilt by
+	# building the "JavaAppLauncher" target.
+	set(MACOS_PLATFORMDIR /Applications/Xcode94.app/Contents/Developer)
 	add_custom_command(OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/JavaAppLauncher
 		DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/JavaAppLauncher.m
 		COMMAND ${MACOS_PLATFORMDIR}/usr/bin/gcc
 			-I${JAVA_INCLUDE_PATH} -I${JAVA_INCLUDE_PATH2}
-			-isysroot ${MACOS_PLATFORMDIR}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX10.7.sdk
-			-mmacosx-version-min=10.7 -framework Cocoa
+			-isysroot ${MACOS_PLATFORMDIR}/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk
+			-mmacosx-version-min=10.9 -framework Cocoa
 			${CMAKE_CURRENT_SOURCE_DIR}/JavaAppLauncher.m
 			-o ${CMAKE_CURRENT_SOURCE_DIR}/JavaAppLauncher)
 	add_custom_target(JavaAppLauncher
@@ -40,30 +42,21 @@ else()
 	target_link_libraries(JavaAppLauncher "-framework Cocoa")
 endif()
 
-install(TARGETS turbovnchelper DESTINATION ${CMAKE_INSTALL_JAVADIR})
+install(TARGETS turbovnchelper DESTINATION ${CMAKE_INSTALL_FULL_JAVADIR})
 
-else() # APPLE AND TVNC_BUILDVIEWER
+else() # APPLE
 
 include_directories(${X11_INCLUDE_DIR})
-
-add_executable(checkshmpixmaps
-	checkshmpixmaps.c)
-
-target_link_libraries(checkshmpixmaps ${X11_LIBRARIES})
-
-install(TARGETS checkshmpixmaps DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 configure_file(vncviewer.in ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vncviewer @ONLY)
 execute_process(COMMAND chmod +x vncviewer
 	WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 
-if(TVNC_BUILDVIEWER)
-
 find_package(JNI REQUIRED)
 
 include_directories(${JAVA_INCLUDE_PATH} ${JAVA_INCLUDE_PATH2}
 	${CMAKE_SOURCE_DIR}/common/rfb ${TJPEG_INCLUDE_DIR})
-add_library(turbovnchelper SHARED turbovnchelper.c usocket.c
+add_library(turbovnchelper SHARED turbovnchelper.c
 	${CMAKE_SOURCE_DIR}/common/turbojpeg-jni/turbojpeg-jni.c)
 if(CMAKE_SYSTEM_NAME STREQUAL "SunOS")
 	set_target_properties(turbovnchelper PROPERTIES LINK_FLAGS "-lc -z defs")
@@ -78,7 +71,7 @@ endif()
 target_link_libraries(turbovnchelper ${X11_LIBRARIES} ${X11_Xi_LIB} ${LIBDL}
 	${TJPEG_LIBRARY})
 
-install(TARGETS turbovnchelper DESTINATION ${CMAKE_INSTALL_JAVADIR})
+install(TARGETS turbovnchelper DESTINATION ${CMAKE_INSTALL_FULL_JAVADIR})
 
 install(FILES ${CMAKE_SOURCE_DIR}/java/com/turbovnc/vncviewer/turbovnc-128.png
 	DESTINATION ${CMAKE_INSTALL_FULL_DATADIR}/icons/hicolor/128x128/apps
@@ -89,12 +82,16 @@ install(FILES ${CMAKE_SOURCE_DIR}/java/com/turbovnc/vncviewer/turbovnc-sm.png
 	DESTINATION ${CMAKE_INSTALL_FULL_DATADIR}/icons/hicolor/16x16/apps
 	RENAME turbovnc.png)
 
-endif()
+endif() # APPLE
 
-endif() # APPLE AND TVNC_BUILDVIEWER
+add_custom_target(javah
+	COMMAND javac -h ${CMAKE_CURRENT_SOURCE_DIR}
+		-classpath ${CMAKE_BINARY_DIR}/java -d ${CMAKE_CURRENT_BINARY_DIR}/__unused
+		${CMAKE_SOURCE_DIR}/java/com/turbovnc/rfb/Utils.java
+		${CMAKE_SOURCE_DIR}/java/com/turbovnc/vncviewer/Viewport.java)
 
 install(PROGRAMS ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/vncviewer
-	DESTINATION ${CMAKE_INSTALL_BINDIR})
+	DESTINATION ${CMAKE_INSTALL_FULL_BINDIR})
 
-install(FILES vncviewer.man DESTINATION ${CMAKE_INSTALL_MANDIR}/man1
+install(FILES vncviewer.man DESTINATION ${CMAKE_INSTALL_FULL_MANDIR}/man1
 	RENAME vncviewer.1)

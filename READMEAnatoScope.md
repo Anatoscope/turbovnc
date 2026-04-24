@@ -19,9 +19,6 @@ Main features:
   * `WRNEVENT`: to send warnings to a client
 * custom parameters to the interframe comparisons (cf `-interframeeps` /  `-interframeallowconv`)
 * tracing of the network round-trip time (cf `-congtraceintervalms`)
-* fixes / workarounds
-  * pick WebSocket subprotocol `binary` instead of `base64` when a client advertises both (for compatibility with anatostreamer)
-  * automatic release of the lock on pointer events held by a client during pointer drags (cf `TVNC_POINTER_LOCK_TIMEOUT`)
 
 There are bits of documentation in `doc/index.html`, `doc/performance.txt` and `unix/Xvnc/programs/Xserver/Xvnc.man.in`. (Tip: check out the changes from upstream.)
 

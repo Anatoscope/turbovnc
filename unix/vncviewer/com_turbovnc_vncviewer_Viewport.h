@@ -6,6 +6,13 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+/*
+ * Class:     com_turbovnc_vncviewer_Viewport
+ * Method:    macFullScreen
+ * Signature: (ZI)V
+ */
+JNIEXPORT void JNICALL Java_com_turbovnc_vncviewer_Viewport_macFullScreen
+  (JNIEnv *, jobject, jboolean, jint);
 
 /*
  * Class:     com_turbovnc_vncviewer_Viewport
@@ -26,10 +33,10 @@ JNIEXPORT void JNICALL Java_com_turbovnc_vncviewer_Viewport_grabKeyboard
 /*
  * Class:     com_turbovnc_vncviewer_Viewport
  * Method:    setupExtInput
- * Signature: ()V
+ * Signature: (Z)V
  */
 JNIEXPORT void JNICALL Java_com_turbovnc_vncviewer_Viewport_setupExtInput
-  (JNIEnv *, jobject);
+  (JNIEnv *, jobject, jboolean);
 
 /*
  * Class:     com_turbovnc_vncviewer_Viewport

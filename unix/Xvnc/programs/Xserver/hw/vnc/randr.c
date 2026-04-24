@@ -1,4 +1,5 @@
-/* Copyright (C) 2013-2019, 2021 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2013-2019, 2021, 2024-2025 D. R. Commander.
+ *                                          All Rights Reserved.
  * Copyright 2012-2015 Pierre Ossman for Cendio AB
  *
  * This is free software; you can redistribute it and/or modify
@@ -54,8 +55,9 @@
 
 static Res vncRRResolutions[] = {
   {   -1,   -1 },  /* Original resolution of the VNC server          */
-  { 3200, 1800 },  /* WQXGA+  16:9                                   */
-  { 2880, 1800 },  /*          8:5 (Mac)                             */
+  { 3840, 2160 },  /* 4K UHD  16:9                                   */
+  { 3200, 1800 },  /* QHD+    16:9                                   */
+  { 2880, 1800 },  /* WQXGA+   8:5                                   */
   { 2560, 1600 },  /* WQXGA    8:5                                   */
   { 2560, 1440 },  /* QHD     16:9                                   */
   { 2048, 1536 },  /* QXGA     4:3 (iPad)                            */
@@ -241,44 +243,27 @@ static Bool vncReconfigureOutput(rfbScreenInfo *screen)
 
 static RRModePtr vncSetModes(rfbScreenInfo *screen)
 {
-  Bool found = FALSE;
   int i;
   int numModes = sizeof(vncRRResolutions) / sizeof(Res);
-  int preferred = 0;
   RRModePtr modes[numModes];
   Res resolutions[numModes];
 
   memcpy(resolutions, vncRRResolutions, sizeof(Res) * numModes);
-  resolutions[0].w = screen->prefRes.w;
-  resolutions[0].h = screen->prefRes.h;
+  resolutions[0].w = screen->s.w;
+  resolutions[0].h = screen->s.h;
 
-  if (screen->prefRes.w < 1 || screen->prefRes.h < 1) {
-    resolutions[0].w = screen->prefRes.w = screen->s.w;
-    resolutions[0].h = screen->prefRes.h = screen->s.h;
-  }
-
-  for (i = 0; i < numModes; i++) {
-    if (resolutions[i].w == screen->s.w && resolutions[i].h == screen->s.h) {
-      found = TRUE;
-      preferred = i;
-      break;
-    }
-  }
-
-  if (!found) {
-    resolutions[0].w = screen->prefRes.w = screen->s.w;
-    resolutions[0].h = screen->prefRes.h = screen->s.h;
-    preferred = 0;
-  }
-
-  for (i = 0; i < numModes; i++) {
-    if (!(modes[i] = vncModeGet(resolutions[i].w, resolutions[i].h)))
+  numModes = 0;
+  for (i = 0; i < sizeof(vncRRResolutions) / sizeof(Res); i++) {
+    if (i > 0 && resolutions[i].w == resolutions[0].w &&
+        resolutions[i].h == resolutions[0].h)
+      continue;
+    if (!(modes[numModes++] = vncModeGet(resolutions[i].w, resolutions[i].h)))
       return FALSE;
   }
 
   if (!RROutputSetModes(screen->output, modes, numModes, 1)) return NULL;
 
-  return modes[preferred];
+  return modes[0];
 }
 
 
@@ -361,6 +346,7 @@ static int vncScreenSetSize(ScreenPtr pScreen, CARD16 width, CARD16 height,
     for (j = 0; j < crtc->numOutputs; j++) {
       rfbScreenInfo screen;
 
+      memset(&screen, 0, sizeof(rfbScreenInfo));
       screen.output = crtc->outputs[j];
       screen.s.w = min(crtc->mode->mode.width, width - crtc->x);
       screen.s.h = min(crtc->mode->mode.height, height - crtc->y);
@@ -551,13 +537,13 @@ int ResizeDesktop(ScreenPtr pScreen, rfbClientPtr cl, int w, int h,
   rfbClientPtr cl2;
 
   if (rfbAuthDisableRemoteResize) {
-    rfbLog("WARNING: Remote desktop resizing disabled per system policy.\n");
+    RFBLOGID("WARNING: Remote desktop resizing disabled per system policy.\n");
     return rfbEDSResultProhibited;
   }
 
   for (cl2 = rfbClientHead; cl2; cl2 = cl2->next) {
     if (!cl2->enableDesktopSize && !cl2->enableExtDesktopSize) {
-      rfbLog("ERROR: Not resizing desktop because one or more clients doesn't support it.\n");
+      RFBLOGID("ERROR: Not resizing desktop because one or more clients doesn't support it.\n");
       return rfbEDSResultProhibited;
     }
   }
@@ -565,19 +551,19 @@ int ResizeDesktop(ScreenPtr pScreen, rfbClientPtr cl, int w, int h,
   /* First check that we don't have any active clone modes.  That's just
      too messy to deal with. */
   if (vncHasOutputClones(pScreen)) {
-    rfbLog("Desktop resize ERROR: Cannot change screen layout when clone mode is active\n");
+    RFBLOGID("Desktop resize ERROR: Cannot change screen layout when clone mode is active\n");
     return rfbEDSResultInvalid;
   }
 
   if (w > rfbMaxWidth || h > rfbMaxHeight) {
     w = min(w, rfbMaxWidth);
     h = min(h, rfbMaxHeight);
-    rfbLog("NOTICE: desktop size clamped to %dx%d per system policy\n", w, h);
+    RFBLOGID("NOTICE: desktop size clamped to %dx%d per system policy\n", w, h);
   }
   rfbClipScreens(clientScreens, w, h);
   if (xorg_list_is_empty(clientScreens)) {
-    rfbLog("Desktop resize ERROR: All screens are outside of the framebuffer (%dx%d)\n",
-           w, h);
+    RFBLOGID("Desktop resize ERROR: All screens are outside of the framebuffer (%dx%d)\n",
+             w, h);
     return rfbEDSResultInvalid;
   }
 

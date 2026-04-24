@@ -1,4 +1,4 @@
-/* Copyright (C) 2012-2018, 2020-2022 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2012-2018, 2020-2025 D. R. Commander.  All Rights Reserved.
  * Copyright (C) 2011-2013 Brian P. Hinz
  * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
@@ -39,40 +39,41 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
   static LogWriter vlog = new LogWriter("OptionsDialog");
 
   private OptionsDialogCallback callback;
+  private String node;
+  private Params params;
   private JTabbedPane tabPane;
   private JPanel buttonPane, encodingPanel, connPanel, globalPanel, secPanel;
-  private JCheckBox allowJpeg, interframe;
+  private JCheckBox jpeg, interframe, turboVNCServer;
   private JComboBox menuKey, scalingFactor, encMethodComboBox, span,
     desktopSize, grabKeyboard;
   private JSlider jpegQualityLevel, subsamplingLevel, compressionLevel;
   private JCheckBox viewOnly, recvClipboard, sendClipboard, acceptBell,
     reverseScroll, fsAltEnter;
   private JCheckBox fullScreen, shared, cursorShape, showToolbar;
-  private JCheckBox secNone, secVnc, secPlain, secIdent, secTLSNone, secTLSVnc,
-    secTLSPlain, secTLSIdent, secX509None, secX509Vnc, secX509Plain,
-    secX509Ident, secUnixLogin;
+  private JCheckBox secNone, secVnc, secPlain, secTLSNone, secTLSVnc,
+    secTLSPlain, secX509None, secX509Vnc, secX509Plain, secUnixLogin;
   private JPanel encNonePanel, encTLSPanel, encX509Panel;
   private JCheckBox sendLocalUsername, tunnel;
-  private JTextField username, sshUser, gateway;
-  private JLabel usernameLabel, sshUserLabel, gatewayLabel;
+  private JTextField username, jump;
+  private JLabel usernameLabel, jumpLabel, jumpLabel2;
   private JButton okButton, cancelButton;
   private JButton x509caButton, x509crlButton;
   private JLabel x509caLabel, x509crlLabel;
   private JTextField x509ca, x509crl;
-  private JButton defClearButton;
+  private JButton listClearButton, defClearButton, resetButton;
   private JLabel encMethodLabel;
   private JLabel jpegQualityLabel, jpegQualityLabelLo, jpegQualityLabelHi;
   private JLabel subsamplingLabel, subsamplingLabelLo, subsamplingLabelHi;
-  private JLabel compressionLabel, compressionLabelLo, compressionLabelHi;
+  private JLabel compressionLabel;
   private String jpegQualityLabelString, subsamplingLabelString;
-  private String compressionLabelString;
   private Hashtable<Integer, String> subsamplingLabelTable;
   private String oldScalingFactor, oldDesktopSize;
   private boolean enableX509 = true;
 
-  OptionsDialog(OptionsDialogCallback callback_) {
+  OptionsDialog(OptionsDialogCallback callback_, Params params_) {
     super(true);
     callback = callback_;
+    params = params_;
 
     tabPane = new JTabbedPane();
 
@@ -103,10 +104,10 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
                           GridBagConstraints.LINE_START,
                           new Insets(2, 20, 2, 2));
 
-    allowJpeg = new JCheckBox("Allow JPEG compression");
-    allowJpeg.addItemListener(this);
+    jpeg = new JCheckBox("Allow JPEG compression");
+    jpeg.addItemListener(this);
 
-    Dialog.addGBComponent(allowJpeg, dummyPanel,
+    Dialog.addGBComponent(jpeg, dummyPanel,
                           0, 2, 3, 1, 0, 2, 0, 0,
                           GridBagConstraints.NONE,
                           GridBagConstraints.LINE_START,
@@ -116,7 +117,7 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
       new String("JPEG chrominance subsampling: ");
     subsamplingLabel = new JLabel();
     subsamplingLevel =
-      new JSlider(JSlider.HORIZONTAL, 0, Options.NUMSUBSAMPOPT - 1, 0);
+      new JSlider(JSlider.HORIZONTAL, 0, SubsampParameter.NUMOPT - 1, 0);
     subsamplingLevel.addChangeListener(this);
     subsamplingLevel.setMajorTickSpacing(1);
     subsamplingLevel.setSnapToTicks(true);
@@ -158,7 +159,7 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
       new String("JPEG image quality: ");
     jpegQualityLabel = new JLabel();
     jpegQualityLevel =
-      new JSlider(JSlider.HORIZONTAL, 1, 100, Options.DEFQUAL);
+      new JSlider(JSlider.HORIZONTAL, 1, 100, Params.DEFQUAL);
     jpegQualityLevel.addChangeListener(this);
     jpegQualityLevel.setMajorTickSpacing(10);
     jpegQualityLevel.setMinorTickSpacing(5);
@@ -191,8 +192,6 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
                           GridBagConstraints.LINE_START,
                           new Insets(2, 2, 2, 2));
 
-    compressionLabelString =
-      new String("Compression level (see docs): ");
     compressionLabel = new JLabel();
     compressionLevel =
       new JSlider(JSlider.HORIZONTAL, 0, 2, 1);
@@ -201,9 +200,7 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
     compressionLevel.setSnapToTicks(true);
     compressionLevel.setPaintTicks(true);
     compressionLevel.setPaintLabels(false);
-    compressionLabelLo = new JLabel("fast");
-    compressionLabelHi = new JLabel("best");
-    compressionLabel.setText(compressionLabelString +
+    compressionLabel.setText("Compression level (see docs): " +
                              compressionLevel.getValue());
 
     Dialog.addGBComponent(compressionLabel, dummyPanel,
@@ -211,18 +208,8 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
                           GridBagConstraints.NONE,
                           GridBagConstraints.LINE_START,
                           new Insets(2, 2, 2, 2));
-    Dialog.addGBComponent(compressionLabelLo, dummyPanel,
-                          0, 8, 1, 1, 2, 2, 0, 0,
-                          GridBagConstraints.NONE,
-                          GridBagConstraints.LINE_START,
-                          new Insets(2, 12, 2, 2));
     Dialog.addGBComponent(compressionLevel, dummyPanel,
-                          1, 8, 1, 1, 2, 2, 0, 0,
-                          GridBagConstraints.NONE,
-                          GridBagConstraints.LINE_START,
-                          new Insets(2, 2, 2, 2));
-    Dialog.addGBComponent(compressionLabelHi, dummyPanel,
-                          2, 8, 1, 1, 2, 2, 1, 1,
+                          0, 8, 3, 1, 2, 2, 0, 0,
                           GridBagConstraints.NONE,
                           GridBagConstraints.LINE_START,
                           new Insets(2, 2, 2, 2));
@@ -236,10 +223,19 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
                           GridBagConstraints.LINE_START,
                           new Insets(2, 0, 2, 2));
 
+    turboVNCServer = new JCheckBox("TurboVNC server");
+    turboVNCServer.addItemListener(this);
+
+    Dialog.addGBComponent(turboVNCServer, dummyPanel,
+                          0, 10, 3, 1, 0, 2, 0, 0,
+                          GridBagConstraints.NONE,
+                          GridBagConstraints.LINE_START,
+                          new Insets(2, 0, 2, 2));
+
     Dialog.addGBComponent(dummyPanel, encodingPanel,
                           0, 0, 1, GridBagConstraints.REMAINDER, 0, 0, 1, 1,
-                          GridBagConstraints.HORIZONTAL,
-                          GridBagConstraints.PAGE_START,
+                          GridBagConstraints.NONE,
+                          GridBagConstraints.FIRST_LINE_START,
                           new Insets(4, 4, 4, 4));
 
     // Connection tab
@@ -292,7 +288,8 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
       "2560x1440", "2560x1440+0+0,2560x1440+2560+0",
       "2560x1600", "2560x1600+0+0,2560x1600+2560+0",
       "2880x1800", "2880x1800+0+0,2880x1800+2880+0",
-      "3200x1800", "3200x1800+0+0,3200x1800+3200+0"
+      "3200x1800", "3200x1800+0+0,3200x1800+3200+0",
+      "3840x2160", "3840x2160+0+0,3840x2160+3840+0"
     };
     JLabel desktopSizeLabel = new JLabel("Remote desktop size:");
     desktopSize = new JComboBox(desktopSizeOptions);
@@ -379,7 +376,6 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
 
     viewOnly = new JCheckBox("View only (ignore mouse & keyboard)");
     viewOnly.addItemListener(this);
-    viewOnly.setEnabled(Params.viewOnlyControl.getValue());
 
     Dialog.addGBComponent(viewOnly, inputPanel,
                           0, 0, 2, 1, 2, 2, 1, 0,
@@ -406,9 +402,9 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
                           new Insets(4, 5, 0, 5));
 
     JLabel menuKeyLabel = new JLabel("Menu key:");
-    String[] menuKeys = new String[MenuKey.getMenuKeySymbolCount()];
-    for (int i = 0; i < MenuKey.getMenuKeySymbolCount(); i++)
-      menuKeys[i] = MenuKey.getMenuKeySymbols()[i].name;
+    String[] menuKeys = new String[MenuKey.getSymbolCount()];
+    for (int i = 0; i < MenuKey.getSymbolCount(); i++)
+      menuKeys[i] = MenuKey.getSymbols()[i].name;
     menuKey  = new JComboBox(menuKeys);
     menuKey.addItemListener(this);
 
@@ -427,7 +423,7 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
 
     if (enableGrab) {
       JLabel grabLabel;
-      if (Utils.isX11() && Params.grabPointer.getValue())
+      if (Utils.isX11() && params.grabPointer.get())
         grabLabel = new JLabel("Keyboard/pointer grab mode:");
       else
         grabLabel = new JLabel("Keyboard grab mode:");
@@ -503,11 +499,25 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
     // Global tab
     globalPanel = new JPanel(new GridBagLayout());
 
-    defClearButton = new JButton("Clear the list of saved connections");
+    listClearButton = new JButton("Clear the list of saved connections");
+    listClearButton.addActionListener(this);
+    defClearButton = new JButton("Clear all saved per-host options");
     defClearButton.addActionListener(this);
+    resetButton = new JButton("Reset all options to defaults");
+    resetButton.addActionListener(this);
 
+    Dialog.addGBComponent(listClearButton, globalPanel,
+                          0, 0, 2, 1, 2, 2, 1, 0,
+                          GridBagConstraints.NONE,
+                          GridBagConstraints.FIRST_LINE_START,
+                          new Insets(8, 5, 0, 5));
     Dialog.addGBComponent(defClearButton, globalPanel,
-                          0, 0, 2, GridBagConstraints.REMAINDER, 2, 2, 1, 1,
+                          0, 1, 2, 1, 2, 2, 1, 0,
+                          GridBagConstraints.NONE,
+                          GridBagConstraints.FIRST_LINE_START,
+                          new Insets(8, 5, 0, 5));
+    Dialog.addGBComponent(resetButton, globalPanel,
+                          0, 2, 2, GridBagConstraints.REMAINDER, 2, 2, 1, 1,
                           GridBagConstraints.NONE,
                           GridBagConstraints.FIRST_LINE_START,
                           new Insets(8, 5, 0, 5));
@@ -540,14 +550,9 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
                               GridBagConstraints.LINE_START,
                               GridBagConstraints.NONE,
                               new Insets(0, 0, 0, 5), 0, 0));
-    secIdent = addJCheckBox("Ident (VeNCrypt)", null, encNonePanel,
-                            new GridBagConstraints(1, 1, 1, 1, 1, 1,
-                              GridBagConstraints.LINE_START,
-                              GridBagConstraints.NONE,
-                              new Insets(0, 0, 0, 5), 0, 0));
     secUnixLogin = addJCheckBox("Unix Login (TightVNC/TurboVNC)", null,
                                 encNonePanel,
-                                new GridBagConstraints(1, 2, 1, 1, 1, 1,
+                                new GridBagConstraints(1, 1, 1, 1, 1, 1,
                                   GridBagConstraints.LINE_START,
                                   GridBagConstraints.NONE,
                                   new Insets(0, 0, 0, 5), 0, 0));
@@ -574,11 +579,6 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
                                  GridBagConstraints.LINE_START,
                                  GridBagConstraints.NONE,
                                  new Insets(0, 0, 0, 5), 0, 0));
-    secTLSIdent = addJCheckBox("Ident", null, encTLSPanel,
-                               new GridBagConstraints(1, 1, 1, 1, 1, 1,
-                                 GridBagConstraints.LINE_START,
-                                 GridBagConstraints.NONE,
-                                 new Insets(0, 0, 0, 5), 0, 0));
 
     encX509Panel = new JPanel(new GridBagLayout());
     border = BorderFactory.createLineBorder(Color.LIGHT_GRAY);
@@ -599,11 +599,6 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
                                 new Insets(0, 0, 0, 5), 0, 0));
     secX509Plain = addJCheckBox("Plain", null, encX509Panel,
                                 new GridBagConstraints(1, 0, 1, 1, 1, 1,
-                                  GridBagConstraints.LINE_START,
-                                  GridBagConstraints.NONE,
-                                  new Insets(0, 0, 0, 5), 0, 0));
-    secX509Ident = addJCheckBox("Ident", null, encX509Panel,
-                                new GridBagConstraints(1, 1, 1, 1, 1, 1,
                                   GridBagConstraints.LINE_START,
                                   GridBagConstraints.NONE,
                                   new Insets(0, 0, 0, 5), 0, 0));
@@ -672,39 +667,35 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
     sendLocalUsername = new JCheckBox("Send local username");
     sendLocalUsername.addItemListener(this);
 
-    JPanel gatewayPanel = new JPanel(new GridBagLayout());
-    gatewayPanel.setBorder(
-      BorderFactory.createTitledBorder("Gateway (SSH server or UltraVNC repeater)"));
-    gateway = new JTextField("", 1);
-    filterWhitespace(gateway);
-    gatewayLabel = new JLabel("Host:");
-    sshUser = new JTextField("", 1);
-    sshUserLabel = new JLabel("SSH user:");
-    tunnel = new JCheckBox("Use VNC server as gateway");
+    JPanel sshPanel = new JPanel(new GridBagLayout());
+    sshPanel.setBorder(BorderFactory.createTitledBorder("SSH tunneling"));
+    jumpLabel =
+      new JLabel("Tunnel VNC connection through specified SSH jump host");
+    jumpLabel2 =
+      new JLabel("([user@]host[:ssh_port]) and VNC host's SSH server");
+    jump = new JTextField("", 1);
+    filterWhitespace(jump);
+    tunnel =
+      new JCheckBox("Tunnel VNC connection through VNC host's SSH server");
     tunnel.addItemListener(this);
 
-    Dialog.addGBComponent(sshUserLabel, gatewayPanel,
-                          0, 0, 1, 1, 2, 2, 0, 0,
-                          GridBagConstraints.NONE,
-                          GridBagConstraints.FIRST_LINE_START,
-                          new Insets(8, 8, 0, 2));
-    Dialog.addGBComponent(sshUser, gatewayPanel,
-                          1, 0, 1, 1, 2, 2, 0.7, 0,
+    Dialog.addGBComponent(jumpLabel, sshPanel,
+                          0, 0, 1, 1, 0, 0, 1, 1,
                           GridBagConstraints.HORIZONTAL,
-                          GridBagConstraints.FIRST_LINE_START,
-                          new Insets(4, 2, 0, 2));
-    Dialog.addGBComponent(gatewayLabel, gatewayPanel,
-                          2, 0, 1, 1, 2, 2, 0, 0,
-                          GridBagConstraints.NONE,
-                          GridBagConstraints.FIRST_LINE_START,
-                          new Insets(8, 2, 0, 2));
-    Dialog.addGBComponent(gateway, gatewayPanel,
-                          3, 0, 1, 1, 2, 2, 1, 0,
+                          GridBagConstraints.CENTER,
+                          new Insets(0, 5, 0, 5));
+    Dialog.addGBComponent(jumpLabel2, sshPanel,
+                          0, 1, 1, 1, 0, 0, 1, 1,
+                          GridBagConstraints.HORIZONTAL,
+                          GridBagConstraints.CENTER,
+                          new Insets(0, 5, 0, 5));
+    Dialog.addGBComponent(jump, sshPanel,
+                          0, 2, 1, 1, 2, 2, 1, 0,
                           GridBagConstraints.HORIZONTAL,
                           GridBagConstraints.FIRST_LINE_START,
                           new Insets(4, 2, 0, 5));
-    Dialog.addGBComponent(tunnel, gatewayPanel,
-                          0, 1, 4, 1, 2, 2, 1, 1,
+    Dialog.addGBComponent(tunnel, sshPanel,
+                          0, 3, 4, 1, 2, 2, 1, 1,
                           GridBagConstraints.HORIZONTAL,
                           GridBagConstraints.FIRST_LINE_START,
                           new Insets(4, 5, 0, 5));
@@ -734,7 +725,7 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
                           GridBagConstraints.HORIZONTAL,
                           GridBagConstraints.FIRST_LINE_START,
                           new Insets(2, 10, 2, 5));
-    Dialog.addGBComponent(gatewayPanel, secPanel,
+    Dialog.addGBComponent(sshPanel, secPanel,
                           0, 3, 3, 1, 2, 2, 1, 1,
                           GridBagConstraints.HORIZONTAL,
                           GridBagConstraints.FIRST_LINE_START,
@@ -769,9 +760,20 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
     encMethodComboBox.setSelectedItem("Tight + Perceptually Lossless JPEG (LAN)");
   }
 
+  public void setNode(String node_) {
+    node = node_.replaceAll("[\\[\\]]", "");
+  }
+
+  public String getNode() { return node; }
+
   protected void populateDialog(JDialog dlg) {
     dlg.setResizable(false);
-    dlg.setTitle("TurboVNC Viewer Options");
+    String nodeString = "";
+    if (node != null) {
+      nodeString = (node.equalsIgnoreCase(".listen") ?
+                    " (listen mode defaults)" : " (" + node + ")");
+    }
+    dlg.setTitle("TurboVNC Viewer Options" + nodeString);
     dlg.getContentPane().setLayout(
       new BoxLayout(dlg.getContentPane(), BoxLayout.PAGE_AXIS));
     dlg.getContentPane().add(tabPane);
@@ -833,11 +835,20 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
     Object s = e.getSource();
     if (s instanceof JButton && (JButton)s == okButton) {
       if (callback != null) callback.getOptions();
+      params.save(node);
       endDialog();
     } else if (s instanceof JButton && (JButton)s == cancelButton) {
       endDialog();
+    } else if (s instanceof JButton && (JButton)s == listClearButton) {
+      UserPreferences.clear(true);
     } else if (s instanceof JButton && (JButton)s == defClearButton) {
-      UserPreferences.clear();
+      UserPreferences.clear(false);
+    } else if (s instanceof JButton && (JButton)s == resetButton) {
+      Params oldParams = params;
+      params = new Params();
+      params.loadDefaults();
+      setOptions(desktopSize.isEnabled(), !shared.isEnabled(), false, false);
+      params = oldParams;
     } else if (s instanceof JButton && (JButton)s == x509caButton) {
       File file = new File(x509ca.getText());
       JFileChooser fc = new JFileChooser(file.getParent());
@@ -863,25 +874,25 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
       String encMethod = (String)comboBox.getSelectedItem();
       if (!encMethodComboBox.isEnabled()) return;
       if (encMethod.equals("Tight + Perceptually Lossless JPEG (LAN)")) {
-        allowJpeg.setSelected(true);
+        jpeg.setSelected(true);
         subsamplingLevel.setValue(0);
         jpegQualityLevel.setValue(95);
         setCompressionLevel(1);
       } else if (encMethod.equals("Tight + Medium-Quality JPEG")) {
-        allowJpeg.setSelected(true);
+        jpeg.setSelected(true);
         subsamplingLevel.setValue(1);
         jpegQualityLevel.setValue(80);
         setCompressionLevel(6);
       } else if (encMethod.equals("Tight + Low-Quality JPEG (WAN)")) {
-        allowJpeg.setSelected(true);
+        jpeg.setSelected(true);
         subsamplingLevel.setValue(2);
         jpegQualityLevel.setValue(30);
         setCompressionLevel(7);
       } else if (encMethod.equals("Lossless Tight (Gigabit)")) {
-        allowJpeg.setSelected(false);
+        jpeg.setSelected(false);
         setCompressionLevel(0);
       } else if (encMethod.equals("Lossless Tight + Zlib (WAN)")) {
-        allowJpeg.setSelected(false);
+        jpeg.setSelected(false);
         setCompressionLevel(6);
       }
     }
@@ -889,8 +900,8 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
 
   public void itemStateChanged(ItemEvent e) {
     Object s = e.getSource();
-    if (s instanceof JCheckBox && (JCheckBox)s == allowJpeg) {
-      if (allowJpeg.isSelected()) {
+    if (s instanceof JCheckBox && (JCheckBox)s == jpeg) {
+      if (jpeg.isSelected()) {
         jpegQualityLevel.setEnabled(true);
         jpegQualityLabel.setEnabled(true);
         jpegQualityLabelLo.setEnabled(true);
@@ -899,10 +910,6 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
         subsamplingLabel.setEnabled(true);
         subsamplingLabelLo.setEnabled(true);
         subsamplingLabelHi.setEnabled(true);
-        if (compressionLevel.getMaximum() < 9) {
-          compressionLevel.setMinimum(1);
-          compressionLevel.setMaximum(2);
-        }
       } else {
         jpegQualityLevel.setEnabled(false);
         jpegQualityLabel.setEnabled(false);
@@ -912,51 +919,49 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
         subsamplingLabel.setEnabled(false);
         subsamplingLabelLo.setEnabled(false);
         subsamplingLabelHi.setEnabled(false);
-        if (compressionLevel.getMaximum() < 9) {
-          compressionLevel.setMinimum(0);
-          compressionLevel.setMaximum(1);
-        }
       }
+      if (turboVNCServer.isSelected())
+        setCompatibleGUI();
       setEncMethodComboBox();
     }
     if (s instanceof JCheckBox && (JCheckBox)s == interframe) {
+      if (turboVNCServer.isSelected())
+        setCompatibleGUI();
       setEncMethodComboBox();
-      compressionLabel.setText(compressionLabelString + getCompressionLevel());
     }
+    if (s instanceof JCheckBox && (JCheckBox)s == turboVNCServer)
+      setCompressionLevel(getCompressionLevel());
     if (s instanceof JCheckBox && (JCheckBox)s == secNone ||
         s instanceof JCheckBox && (JCheckBox)s == secVnc ||
         s instanceof JCheckBox && (JCheckBox)s == secPlain ||
-        s instanceof JCheckBox && (JCheckBox)s == secIdent ||
         s instanceof JCheckBox && (JCheckBox)s == secUnixLogin ||
         s instanceof JCheckBox && (JCheckBox)s == secTLSNone ||
         s instanceof JCheckBox && (JCheckBox)s == secTLSVnc ||
         s instanceof JCheckBox && (JCheckBox)s == secTLSPlain ||
-        s instanceof JCheckBox && (JCheckBox)s == secTLSIdent ||
         s instanceof JCheckBox && (JCheckBox)s == secX509None ||
         s instanceof JCheckBox && (JCheckBox)s == secX509Vnc ||
         s instanceof JCheckBox && (JCheckBox)s == secX509Plain ||
-        s instanceof JCheckBox && (JCheckBox)s == secX509Ident ||
         s instanceof JCheckBox && (JCheckBox)s == sendLocalUsername) {
       updateSecurityPanel();
     }
     if (s instanceof JComboBox && (JComboBox)s == scalingFactor) {
       String newScalingFactor = scalingFactor.getSelectedItem().toString();
-      int sf = Options.parseScalingFactor(newScalingFactor);
+      int sf = ScaleParameter.parse(newScalingFactor);
       if (sf == 0) {
         vlog.error("Bogus scaling factor");
         scalingFactor.setSelectedItem(oldScalingFactor);
       } else {
         String newsf;
-        if (sf == Options.SCALE_AUTO)
+        if (sf == ScaleParameter.AUTO)
           newsf = "Auto";
-        else if (sf == Options.SCALE_FIXEDRATIO)
+        else if (sf == ScaleParameter.FIXEDRATIO)
           newsf = "Fixed Aspect Ratio";
         else
           newsf = sf + "%";
         oldScalingFactor = newsf;
         if (!newsf.equals(newScalingFactor))
           scalingFactor.setSelectedItem(newsf);
-        if ((sf == Options.SCALE_AUTO || sf == Options.SCALE_FIXEDRATIO) &&
+        if ((sf == ScaleParameter.AUTO || sf == ScaleParameter.FIXEDRATIO) &&
           desktopSize.getSelectedItem().toString().equals("Auto"))
           desktopSize.setSelectedItem("Server");
         else
@@ -965,7 +970,7 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
     }
     if (s instanceof JComboBox && (JComboBox)s == desktopSize) {
       String newDesktopSize = desktopSize.getSelectedItem().toString();
-      Options.DesktopSize size = Options.parseDesktopSize(newDesktopSize);
+      DesktopSize size = DesktopSize.parse(newDesktopSize);
       if (size == null) {
         vlog.error("Bogus desktop size");
         desktopSize.setSelectedItem(oldDesktopSize);
@@ -974,7 +979,7 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
         oldDesktopSize = newsize;
         if (!newsize.equals(newDesktopSize))
           desktopSize.setSelectedItem(newsize);
-        if (size.mode == Options.SIZE_AUTO) {
+        if (size.getMode() == DesktopSize.AUTO) {
           scalingFactor.setEnabled(false);
           scalingFactor.setSelectedItem("100%");
         } else
@@ -982,8 +987,9 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
       }
     }
     if (s instanceof JCheckBox && (JCheckBox)s == tunnel) {
-      gateway.setEnabled(!tunnel.isSelected());
-      gatewayLabel.setEnabled(!tunnel.isSelected());
+      jump.setEnabled(!tunnel.isSelected());
+      jumpLabel.setEnabled(!tunnel.isSelected());
+      jumpLabel2.setEnabled(!tunnel.isSelected());
     }
   }
 
@@ -1006,25 +1012,25 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
     if (!encMethodComboBox.isEnabled()) return;
     int level = getCompressionLevel();
     if (subsamplingLevel.getValue() == 0 && level == 1 &&
-        jpegQualityLevel.getValue() == 95 && allowJpeg.isSelected()) {
+        jpegQualityLevel.getValue() == 95 && jpeg.isSelected()) {
       encMethodComboBox.setSelectedItem("Tight + Perceptually Lossless JPEG (LAN)");
       if (encMethodComboBox.getItemCount() > 5)
         encMethodComboBox.removeItem("Custom");
     } else if (subsamplingLevel.getValue() == 1 && level == 6 &&
-               jpegQualityLevel.getValue() == 80 && allowJpeg.isSelected()) {
+               jpegQualityLevel.getValue() == 80 && jpeg.isSelected()) {
       encMethodComboBox.setSelectedItem("Tight + Medium-Quality JPEG");
       if (encMethodComboBox.getItemCount() > 5)
         encMethodComboBox.removeItem("Custom");
     } else if (subsamplingLevel.getValue() == 2 && level == 7 &&
-               jpegQualityLevel.getValue() == 30 && allowJpeg.isSelected()) {
+               jpegQualityLevel.getValue() == 30 && jpeg.isSelected()) {
       encMethodComboBox.setSelectedItem("Tight + Low-Quality JPEG (WAN)");
       if (encMethodComboBox.getItemCount() > 5)
         encMethodComboBox.removeItem("Custom");
-    } else if (level == 0 && !allowJpeg.isSelected()) {
+    } else if (level == 0 && !jpeg.isSelected()) {
       encMethodComboBox.setSelectedItem("Lossless Tight (Gigabit)");
       if (encMethodComboBox.getItemCount() > 5)
         encMethodComboBox.removeItem("Custom");
-    } else if (level == 6 && !allowJpeg.isSelected()) {
+    } else if (level == 6 && !jpeg.isSelected()) {
       encMethodComboBox.setSelectedItem("Lossless Tight + Zlib (WAN)");
       if (encMethodComboBox.getItemCount() > 5)
         encMethodComboBox.removeItem("Custom");
@@ -1046,7 +1052,7 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
         jpegQualityLevel.getValue());
       setEncMethodComboBox();
     } else if (s instanceof JSlider && (JSlider)s == compressionLevel) {
-      compressionLabel.setText(compressionLabelString + getCompressionLevel());
+      setCompatibleGUI();
       setEncMethodComboBox();
     }
   }
@@ -1054,37 +1060,66 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
   public int getSubsamplingLevel() {
     switch (subsamplingLevel.getValue()) {
       case 1:
-        return Options.SUBSAMP_2X;
+        return SubsampParameter.TWOX;
       case 2:
-        return Options.SUBSAMP_4X;
+        return SubsampParameter.FOURX;
       case 3:
-        return Options.SUBSAMP_GRAY;
+        return SubsampParameter.GRAY;
     }
-    return Options.SUBSAMP_NONE;
+    return SubsampParameter.NONE;
   }
 
   boolean isTurboCompressionLevel(int level) {
-    if (allowJpeg.isSelected() &&
+    if (jpeg.isSelected() &&
         ((level >= 1 && level <= 2) || (level >= 6 && level <= 7)))
       return true;
-    if (!allowJpeg.isSelected() &&
+    if (!jpeg.isSelected() &&
         ((level >= 0 && level <= 1) || (level >= 5 && level <= 6)))
       return true;
     return false;
   }
 
-  public void setCompressionLevel(int level) {
-    boolean selectICE = false;
-    if (!isTurboCompressionLevel(level)) {
+  void setCompatibleGUI() {
+    String compressionLabelString;
+
+    if (!turboVNCServer.isSelected()) {
       compressionLevel.setMinimum(0);
       compressionLevel.setMaximum(9);
       compressionLabelString = new String("Compression level: ");
-      interframe.setEnabled(false);
+    } else {
+      if (jpeg.isSelected()) {
+        compressionLevel.setMinimum(1);
+        compressionLevel.setMaximum(2);
+      } else {
+        compressionLevel.setMinimum(0);
+        compressionLevel.setMaximum(1);
+      }
+      compressionLabelString = new String("Compression level (see docs): ");
     }
-    if (compressionLevel.getMaximum() < 9 &&
-        interframe.isEnabled()) {
-      if (level >= 5 && level <= 8) {
-        level -= 5;
+    String clString = "";
+    int cl = getCompressionLevel();
+    if (turboVNCServer.isSelected()) {
+      if (cl == 0 || cl == 5) clString = " [no zlib]";
+      else if (cl == 1 || cl == 6) clString = " [minimal]";
+      else if (cl == 2 || cl == 7) clString = " [medium]";
+    } else {
+      if (cl == 0) clString = " [none]";
+      else if (cl == 1) clString = " [minimal]";
+      else if (cl == 2) clString = " [medium]";
+      else if (cl == 6) clString = " [maximum useful]";
+    }
+    if (cl == 9) clString = " [extreme]";
+    compressionLabel.setText(compressionLabelString + cl + clString);
+    interframe.setEnabled(turboVNCServer.isSelected());
+  }
+
+  void setCompressionLevel(int level) {
+    boolean selectICE = false;
+    setCompatibleGUI();
+    if (turboVNCServer.isSelected() && interframe.isEnabled()) {
+      if (level >= 5 && level <= 9) {
+        if (level <= 8)
+          level -= 5;
         selectICE = true;
       }
     }
@@ -1101,7 +1136,7 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
 
   void setTightOptions(int encoding) {
     if (encoding != RFB.ENCODING_TIGHT) {
-      allowJpeg.setEnabled(false);
+      jpeg.setEnabled(false);
       subsamplingLevel.setEnabled(false);
       subsamplingLabel.setEnabled(false);
       subsamplingLabelLo.setEnabled(false);
@@ -1125,23 +1160,14 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
       encMethodComboBox.setSelectedItem(RFB.encodingName(encoding));
       encMethodLabel.setText("Encoding type:");
       encMethodLabel.setEnabled(false);
-    }
-    if (encoding != RFB.ENCODING_TIGHT || Params.compatibleGUI.getValue()) {
-      compressionLevel.setMinimum(0);
-      compressionLevel.setMaximum(9);
-      compressionLabelString = new String("Compression level: ");
-      compressionLabel.setText(compressionLabelString + getCompressionLevel());
-      interframe.setEnabled(false);
+      turboVNCServer.setEnabled(false);
     }
   }
 
   private void updateSecurityPanel() {
-    if (Params.noUnixLogin.getValue()) {
-      secIdent.setEnabled(false);
+    if (params.noUnixLogin.get()) {
       secPlain.setEnabled(false);
-      secTLSIdent.setEnabled(false);
       secTLSPlain.setEnabled(false);
-      secX509Ident.setEnabled(false);
       secX509Plain.setEnabled(false);
       secUnixLogin.setEnabled(false);
       sendLocalUsername.setEnabled(false);
@@ -1150,11 +1176,8 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
     }
 
     boolean unixLogin =
-      ((secIdent.isEnabled() && secIdent.isSelected()) ||
-       (secPlain.isEnabled() && secPlain.isSelected()) ||
-       (secTLSIdent.isEnabled() && secTLSIdent.isSelected()) ||
+      ((secPlain.isEnabled() && secPlain.isSelected()) ||
        (secTLSPlain.isEnabled() && secTLSPlain.isSelected()) ||
-       (secX509Ident.isEnabled() && secX509Ident.isSelected()) ||
        (secX509Plain.isEnabled() && secX509Plain.isSelected()) ||
        (secUnixLogin.isEnabled() && secUnixLogin.isSelected()));
     sendLocalUsername.setEnabled(unixLogin);
@@ -1173,8 +1196,7 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
 
     boolean x509 = (secX509None.isEnabled() && secX509None.isSelected()) ||
       (secX509Vnc.isEnabled() && secX509Vnc.isSelected()) ||
-      (secX509Plain.isEnabled() && secX509Plain.isSelected()) ||
-      (secX509Ident.isEnabled() && secX509Ident.isSelected());
+      (secX509Plain.isEnabled() && secX509Plain.isSelected());
     x509ca.setEnabled(x509 && enableX509);
     x509caButton.setEnabled(x509 && enableX509);
     x509caLabel.setEnabled(x509 && enableX509);
@@ -1189,7 +1211,6 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
       secX509None.setEnabled(false);
       secX509Vnc.setEnabled(false);
       secX509Plain.setEnabled(false);
-      secX509Ident.setEnabled(false);
       x509ca.setEnabled(false);
       x509caButton.setEnabled(false);
       x509caLabel.setEnabled(false);
@@ -1199,82 +1220,77 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
     }
   }
 
-  public void setOptions(Options opts, boolean enableDesktopSize,
-                         boolean disableShared, boolean disableSecurity,
-                         boolean disableSSH) {
+  public void setOptions(boolean enableDesktopSize, boolean disableShared,
+                         boolean disableSecurity, boolean disableSSH) {
     // Encoding
-    allowJpeg.setSelected(opts.allowJpeg);
-    subsamplingLevel.setValue(opts.getSubsamplingOrdinal());
-    jpegQualityLevel.setValue(opts.quality);
-    setCompressionLevel(opts.compressLevel);
+    jpeg.setSelected(params.jpeg.get());
+    subsamplingLevel.setValue(params.subsampling.getOrdinal());
+    jpegQualityLevel.setValue(params.quality.get());
+    turboVNCServer.setSelected(!params.compatibleGUI.get() &&
+      isTurboCompressionLevel(params.compressLevel.get()));
+    setCompressionLevel(params.compressLevel.get());
 
     // Connection: Display
-    if (opts.scalingFactor == Options.SCALE_AUTO) {
+    if (params.scale.get() == ScaleParameter.AUTO) {
       scalingFactor.setSelectedItem("Auto");
-    } else if (opts.scalingFactor == Options.SCALE_FIXEDRATIO) {
+    } else if (params.scale.get() == ScaleParameter.FIXEDRATIO) {
       scalingFactor.setSelectedItem("Fixed Aspect Ratio");
     } else {
-      scalingFactor.setSelectedItem(opts.scalingFactor + "%");
+      scalingFactor.setSelectedItem(params.scale.get() + "%");
     }
 
-    desktopSize.setSelectedItem(opts.desktopSize.getString());
-    fullScreen.setSelected(opts.fullScreen);
-    span.setSelectedIndex(opts.span);
-    acceptBell.setSelected(opts.acceptBell);
-    cursorShape.setSelected(opts.cursorShape);
-    showToolbar.setSelected(opts.showToolbar);
+    desktopSize.setSelectedItem(params.desktopSize.getStr());
+    fullScreen.setSelected(params.fullScreen.get());
+    span.setSelectedIndex(params.span.get());
+    acceptBell.setSelected(params.acceptBell.get());
+    cursorShape.setSelected(params.cursorShape.get());
+    showToolbar.setSelected(params.toolbar.get());
 
     // Connection: Input
-    viewOnly.setSelected(opts.viewOnly);
-    reverseScroll.setSelected(opts.reverseScroll);
-    fsAltEnter.setSelected(opts.fsAltEnter);
-    String menuKeyStr =
-      MenuKey.getMenuKeyName(opts.menuKeyCode, opts.menuKeySym);
+    viewOnly.setSelected(params.viewOnly.get());
+    reverseScroll.setSelected(params.reverseScroll.get());
+    fsAltEnter.setSelected(params.fsAltEnter.get());
+    String menuKeyStr = params.menuKey.getStr();
     if (menuKeyStr != null)
       menuKey.setSelectedItem(menuKeyStr);
     if (Utils.osGrab() && Helper.isAvailable())
-      grabKeyboard.setSelectedIndex(opts.grabKeyboard);
+      grabKeyboard.setSelectedIndex(params.grabKeyboard.get());
 
     // Connection: Restrictions
-    shared.setSelected(opts.shared);
-    recvClipboard.setSelected(opts.recvClipboard);
-    sendClipboard.setSelected(opts.sendClipboard);
+    shared.setSelected(params.shared.get());
+    recvClipboard.setSelected(params.recvClipboard.get());
+    sendClipboard.setSelected(params.sendClipboard.get());
 
     // Security: Security types
-    secNone.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_NONE));
-    secVnc.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_VNCAUTH));
-    secPlain.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_PLAIN));
-    secIdent.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_IDENT));
-    secTLSNone.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_TLS_NONE));
-    secTLSVnc.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_TLS_VNC));
-    secTLSPlain.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_TLS_PLAIN));
-    secTLSIdent.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_TLS_IDENT));
-    secX509None.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_X509_NONE));
-    secX509Vnc.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_X509_VNC));
-    secX509Plain.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_X509_PLAIN));
-    secX509Ident.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_X509_IDENT));
-    secUnixLogin.setSelected(opts.isSecTypeSupported(RFB.SECTYPE_UNIX_LOGIN));
+    secNone.setSelected(params.secTypes.isSupported(RFB.SECTYPE_NONE));
+    secVnc.setSelected(params.secTypes.isSupported(RFB.SECTYPE_VNCAUTH));
+    secPlain.setSelected(params.secTypes.isSupported(RFB.SECTYPE_PLAIN));
+    secTLSNone.setSelected(params.secTypes.isSupported(RFB.SECTYPE_TLS_NONE));
+    secTLSVnc.setSelected(params.secTypes.isSupported(RFB.SECTYPE_TLS_VNC));
+    secTLSPlain.setSelected(
+      params.secTypes.isSupported(RFB.SECTYPE_TLS_PLAIN));
+    secX509None.setSelected(
+      params.secTypes.isSupported(RFB.SECTYPE_X509_NONE));
+    secX509Vnc.setSelected(params.secTypes.isSupported(RFB.SECTYPE_X509_VNC));
+    secX509Plain.setSelected(
+      params.secTypes.isSupported(RFB.SECTYPE_X509_PLAIN));
+    secUnixLogin.setSelected(
+      params.secTypes.isSupported(RFB.SECTYPE_UNIX_LOGIN));
 
     // Security
-    if (opts.user != null)
-      username.setText(opts.user);
-    sendLocalUsername.setSelected(opts.sendLocalUsername);
+    username.setText(params.user.get());
+    sendLocalUsername.setSelected(params.sendLocalUsername.get());
 
     // Security: X.509 certificate validation
-    if (opts.x509ca != null)
-      x509ca.setText(opts.x509ca);
-    if (opts.x509crl != null)
-      x509crl.setText(opts.x509crl);
+    x509ca.setText(params.x509ca.get());
+    x509crl.setText(params.x509crl.get());
 
-    // Security: Gateway
-    if (opts.sshUser != null)
-      sshUser.setText(opts.sshUser);
-    if (opts.via != null)
-      gateway.setText(opts.via);
-    tunnel.setSelected(opts.tunnel);
+    // Security: SSH tunneling
+    jump.setText(params.jump.get());
+    tunnel.setSelected(params.tunnel.get());
 
     desktopSize.setEnabled(enableDesktopSize);
-    if (opts.desktopSize.mode == Options.SIZE_AUTO)
+    if (params.desktopSize.getMode() == DesktopSize.AUTO)
       scalingFactor.setEnabled(false);
     else
       scalingFactor.setEnabled(true);
@@ -1284,16 +1300,13 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
       secNone.setEnabled(false);
       secVnc.setEnabled(false);
       secPlain.setEnabled(false);
-      secIdent.setEnabled(false);
       secUnixLogin.setEnabled(false);
       secTLSNone.setEnabled(false);
       secTLSVnc.setEnabled(false);
       secTLSPlain.setEnabled(false);
-      secTLSIdent.setEnabled(false);
       secX509None.setEnabled(false);
       secX509Vnc.setEnabled(false);
       secX509Plain.setEnabled(false);
-      secX509Ident.setEnabled(false);
       username.setEnabled(false);
       usernameLabel.setEnabled(false);
       sendLocalUsername.setEnabled(false);
@@ -1305,102 +1318,89 @@ class OptionsDialog extends Dialog implements ActionListener, ChangeListener,
       x509crlLabel.setEnabled(false);
     }
     if (disableSSH) {
-      sshUser.setEnabled(false);
-      sshUserLabel.setEnabled(false);
-      gateway.setEnabled(false);
-      gatewayLabel.setEnabled(false);
+      jumpLabel.setEnabled(false);
+      jumpLabel2.setEnabled(false);
+      jump.setEnabled(false);
       tunnel.setEnabled(false);
     }
   }
 
-  public void getOptions(Options opts) {
+  public void getOptions() {
     // Encoding
-    opts.allowJpeg = allowJpeg.isSelected();
-    opts.subsampling = getSubsamplingLevel();
-    opts.quality = jpegQualityLevel.getValue();
-    opts.compressLevel = getCompressionLevel();
+    params.jpeg.set(jpeg.isSelected());
+    params.subsampling.set(getSubsamplingLevel());
+    params.quality.set(jpegQualityLevel.getValue());
+    params.compressLevel.set(getCompressionLevel());
+    params.compatibleGUI.set(!turboVNCServer.isSelected());
 
     // Connection: Display
-    opts.setScalingFactor(scalingFactor.getSelectedItem().toString());
-    opts.setDesktopSize(desktopSize.getSelectedItem().toString());
-    opts.fullScreen = fullScreen.isSelected();
-    int index = span.getSelectedIndex();
-    if (index >= 0 && index < Options.NUMSPANOPT)
-      opts.span = index;
-    opts.acceptBell = acceptBell.isSelected();
-    opts.cursorShape = cursorShape.isSelected();
-    opts.showToolbar = showToolbar.isSelected();
+    params.scale.set(scalingFactor.getSelectedItem().toString());
+    params.desktopSize.set(desktopSize.getSelectedItem().toString());
+    params.fullScreen.set(fullScreen.isSelected());
+    params.span.set(span.getSelectedIndex());
+    params.acceptBell.set(acceptBell.isSelected());
+    params.cursorShape.set(cursorShape.isSelected());
+    params.toolbar.set(showToolbar.isSelected());
 
     // Connection: Input
-    opts.viewOnly = viewOnly.isSelected();
-    opts.reverseScroll = reverseScroll.isSelected();
-    opts.fsAltEnter = fsAltEnter.isSelected();
-    opts.menuKeyCode =
-      MenuKey.getMenuKeySymbols()[menuKey.getSelectedIndex()].keycode;
-    opts.menuKeySym =
-      MenuKey.getMenuKeySymbols()[menuKey.getSelectedIndex()].keysym;
+    params.viewOnly.set(viewOnly.isSelected());
+    params.reverseScroll.set(reverseScroll.isSelected());
+    params.fsAltEnter.set(fsAltEnter.isSelected());
+    params.menuKey.set(MenuKey.getSymbols()[menuKey.getSelectedIndex()].name);
     if (Utils.osGrab() && Helper.isAvailable())
-      opts.grabKeyboard = grabKeyboard.getSelectedIndex();
+      params.grabKeyboard.set(grabKeyboard.getSelectedIndex());
 
     // Connection: Restrictions
-    opts.shared = shared.isSelected();
-    opts.recvClipboard = recvClipboard.isSelected();
-    opts.sendClipboard = sendClipboard.isSelected();
+    params.shared.set(shared.isSelected());
+    params.recvClipboard.set(recvClipboard.isSelected());
+    params.sendClipboard.set(sendClipboard.isSelected());
 
     // Security
-    opts.user = (username.getText().isEmpty() ? null : username.getText());
-    opts.sendLocalUsername = sendLocalUsername.isSelected();
+    params.user.set(username.getText().isEmpty() ? null : username.getText());
+    params.sendLocalUsername.set(sendLocalUsername.isSelected());
 
     // Security: Security types
-    opts.disableSecType(RFB.SECTYPE_NONE);
-    opts.disableSecType(RFB.SECTYPE_VNCAUTH);
-    opts.disableSecType(RFB.SECTYPE_PLAIN);
-    opts.disableSecType(RFB.SECTYPE_IDENT);
-    opts.disableSecType(RFB.SECTYPE_TLS_NONE);
-    opts.disableSecType(RFB.SECTYPE_TLS_VNC);
-    opts.disableSecType(RFB.SECTYPE_TLS_PLAIN);
-    opts.disableSecType(RFB.SECTYPE_TLS_IDENT);
-    opts.disableSecType(RFB.SECTYPE_X509_NONE);
-    opts.disableSecType(RFB.SECTYPE_X509_VNC);
-    opts.disableSecType(RFB.SECTYPE_X509_PLAIN);
-    opts.disableSecType(RFB.SECTYPE_X509_IDENT);
-    opts.disableSecType(RFB.SECTYPE_UNIX_LOGIN);
+    params.secTypes.disable(RFB.SECTYPE_NONE);
+    params.secTypes.disable(RFB.SECTYPE_VNCAUTH);
+    params.secTypes.disable(RFB.SECTYPE_PLAIN);
+    params.secTypes.disable(RFB.SECTYPE_TLS_NONE);
+    params.secTypes.disable(RFB.SECTYPE_TLS_VNC);
+    params.secTypes.disable(RFB.SECTYPE_TLS_PLAIN);
+    params.secTypes.disable(RFB.SECTYPE_X509_NONE);
+    params.secTypes.disable(RFB.SECTYPE_X509_VNC);
+    params.secTypes.disable(RFB.SECTYPE_X509_PLAIN);
+    params.secTypes.disable(RFB.SECTYPE_UNIX_LOGIN);
 
     if (secNone.isSelected())
-      opts.enableSecType(RFB.SECTYPE_NONE);
+      params.secTypes.enable(RFB.SECTYPE_NONE);
     if (secVnc.isSelected())
-      opts.enableSecType(RFB.SECTYPE_VNCAUTH);
+      params.secTypes.enable(RFB.SECTYPE_VNCAUTH);
     if (secPlain.isSelected())
-      opts.enableSecType(RFB.SECTYPE_PLAIN);
-    if (secIdent.isSelected())
-      opts.enableSecType(RFB.SECTYPE_IDENT);
+      params.secTypes.enable(RFB.SECTYPE_PLAIN);
     if (secTLSNone.isSelected())
-      opts.enableSecType(RFB.SECTYPE_TLS_NONE);
+      params.secTypes.enable(RFB.SECTYPE_TLS_NONE);
     if (secTLSVnc.isSelected())
-      opts.enableSecType(RFB.SECTYPE_TLS_VNC);
+      params.secTypes.enable(RFB.SECTYPE_TLS_VNC);
     if (secTLSPlain.isSelected())
-      opts.enableSecType(RFB.SECTYPE_TLS_PLAIN);
-    if (secTLSIdent.isSelected())
-      opts.enableSecType(RFB.SECTYPE_TLS_IDENT);
+      params.secTypes.enable(RFB.SECTYPE_TLS_PLAIN);
     if (secX509None.isSelected())
-      opts.enableSecType(RFB.SECTYPE_X509_NONE);
+      params.secTypes.enable(RFB.SECTYPE_X509_NONE);
     if (secX509Vnc.isSelected())
-      opts.enableSecType(RFB.SECTYPE_X509_VNC);
+      params.secTypes.enable(RFB.SECTYPE_X509_VNC);
     if (secX509Plain.isSelected())
-      opts.enableSecType(RFB.SECTYPE_X509_PLAIN);
-    if (secX509Ident.isSelected())
-      opts.enableSecType(RFB.SECTYPE_X509_IDENT);
+      params.secTypes.enable(RFB.SECTYPE_X509_PLAIN);
     if (secUnixLogin.isSelected())
-      opts.enableSecType(RFB.SECTYPE_UNIX_LOGIN);
+      params.secTypes.enable(RFB.SECTYPE_UNIX_LOGIN);
 
     // Security: X.509 certificate validation
-    opts.x509ca = (x509ca.getText().isEmpty() ? null : x509ca.getText());
-    opts.x509crl = (x509crl.getText().isEmpty() ? null : x509crl.getText());
+    params.x509ca.set(x509ca.getText().isEmpty() ? null : x509ca.getText());
+    params.x509crl.set(x509crl.getText().isEmpty() ? null : x509crl.getText());
 
-    // Security: Gateway
-    opts.sshUser = (sshUser.getText().isEmpty() ? null : sshUser.getText());
-    opts.via = (gateway.getText().isEmpty() ? null : gateway.getText());
-    opts.tunnel = tunnel.isSelected();
+    // Security: SSH tunneling
+    params.jump.set(jump.getText().isEmpty() ? null : jump.getText());
+    params.tunnel.set(tunnel.isSelected());
+
+    params.reconcile();
   }
 
 }

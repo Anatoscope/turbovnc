@@ -69,12 +69,13 @@ platforms and Windows GDI on Windows platforms.
 Acknowledgements
 ----------------
 
-Screenshot icon in the TurboVNC Viewer toolbar is by VisualPharm and is used
-under the terms of the Creative Commons Attributon license:
-<https://www.shareicon.net/screenshot-586081>
+Icons in the TurboVNC Viewer toolbar are derived from UltraVNC v1.2.4, which
+was made available under the GNU General Public License v2+ and is thus
+license-compatible with TurboVNC.  (Later versions of UltraVNC were made
+available under the GNU GPL v3.)
 
 Lock/unlock icons in the TurboVNC Viewer authentication dialog are from
-[Open Iconic](https://useiconic.com/open), which is:
+[Open Iconic](https://github.com/iconic/open-iconic), which is:
 
     Copyright (c) 2014 Waybury
 

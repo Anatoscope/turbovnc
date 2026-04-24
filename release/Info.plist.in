@@ -30,6 +30,7 @@
 			<key>CFBundleTypeExtensions</key>
 			<array>
 				<string>vnc</string>
+				<string>turbovnc</string>
 			</array>
 			<key>CFBundleTypeIconFile</key>
 			<string>vncviewer.icns</string>
@@ -45,5 +46,7 @@
 	<array>
 		<string>-server</string>@EAWT_ADD_MODULES@
 	</array>
+	<key>NSHighResolutionCapable</key>
+	<true/>
 </dict>
 </plist>

@@ -1,5 +1,5 @@
-/* Copyright (C) 2012-2015, 2017-2018, 2020-2022 D. R. Commander.
- *                                               All Rights Reserved.
+/* Copyright (C) 2012-2015, 2017-2018, 2020-2022, 2024-2025
+ *           D. R. Commander.  All Rights Reserved.
  * Copyright (C) 2011, 2013 Brian P. Hinz
  * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
@@ -28,84 +28,104 @@ import javax.swing.event.*;
 
 import com.turbovnc.rfb.*;
 
-public class F8Menu extends JPopupMenu implements ActionListener {
+public final class F8Menu extends JPopupMenu implements ActionListener {
   public F8Menu(CConn cc_) {
     super("VNC Menu");
     setLightWeightPopupEnabled(false);
     cc = cc_;
 
-    if (!Params.noNewConn.getValue()) {
+    if (!cc.params.noNewConn.get()) {
       exit = addMenuItem("Close Connection", KeyEvent.VK_C);
       addSeparator();
     }
-    options = addMenuItem("Options...   (Ctrl-Alt-Shift-O)", KeyEvent.VK_O);
-    info = addMenuItem("Connection Info...  (Ctrl-Alt-Shift-I)",
-                       KeyEvent.VK_I);
+    options = addMenuItem("Options..." +
+                          (cc.params.noHotkeys.get() ? "" :
+                           "   (Ctrl-Alt-Shift-O)"), KeyEvent.VK_O);
+    info = addMenuItem("Connection Info..." +
+                       (cc.params.noHotkeys.get() ? "" :
+                        "  (Ctrl-Alt-Shift-I)"), KeyEvent.VK_I);
     info.setDisplayedMnemonicIndex(11);
-    profile = new JCheckBoxMenuItem("Performance Info...  (Ctrl-Alt-Shift-P)");
+    profile = new JCheckBoxMenuItem("Performance Info..." +
+                                    (cc.params.noHotkeys.get() ? "" :
+                                     "  (Ctrl-Alt-Shift-P)"));
     profile.setMnemonic(KeyEvent.VK_P);
     profile.setSelected(cc.profileDialog.isVisible());
     profile.addActionListener(this);
     add(profile);
     addSeparator();
-    refresh = addMenuItem("Request Screen Refresh   (Ctrl-Alt-Shift-R)",
-                          KeyEvent.VK_R);
+    refresh = addMenuItem("Request Screen Refresh" +
+                          (cc.params.noHotkeys.get() ? "" :
+                           "   (Ctrl-Alt-Shift-R)"), KeyEvent.VK_R);
     refresh.setDisplayedMnemonicIndex(15);
-    losslessRefresh =
-      addMenuItem("Request Lossless Refresh   (Ctrl-Alt-Shift-L)",
-                  KeyEvent.VK_L);
+    losslessRefresh = addMenuItem("Request Lossless Refresh" +
+                                  (cc.params.noHotkeys.get() ? "" :
+                                   "   (Ctrl-Alt-Shift-L)"), KeyEvent.VK_L);
     losslessRefresh.setDisplayedMnemonicIndex(8);
-    screenshot =
-      addMenuItem("Save Remote Desktop Image...   (Ctrl-Alt-Shift-M)",
-                  KeyEvent.VK_M);
+    screenshot = addMenuItem("Save Remote Desktop Image..." +
+                             (cc.params.noHotkeys.get() ? "" :
+                              "   (Ctrl-Alt-Shift-M)"), KeyEvent.VK_M);
     screenshot.setDisplayedMnemonicIndex(21);
     addSeparator();
-    fullScreen = new JCheckBoxMenuItem("Full Screen   (Ctrl-Alt-Shift-F)");
+    fullScreen = new JCheckBoxMenuItem("Full Screen" +
+                                       (cc.params.noHotkeys.get() ? "" :
+                                        "   (Ctrl-Alt-Shift-F)"));
     fullScreen.setMnemonic(KeyEvent.VK_F);
-    fullScreen.setSelected(cc.opts.fullScreen);
+    fullScreen.setSelected(cc.params.fullScreen.get());
     fullScreen.addActionListener(this);
     add(fullScreen);
-    defaultSize =
-      addMenuItem("Default Window Size/Position   (Ctrl-Alt-Shift-Z)",
-                  KeyEvent.VK_Z);
-    zoomIn = addMenuItem("Zoom In   (Ctrl-Alt-Shift-9)", KeyEvent.VK_9);
-    zoomOut = addMenuItem("Zoom Out   (Ctrl-Alt-Shift-8)", KeyEvent.VK_8);
-    zoom100 = addMenuItem("Zoom 100%   (Ctrl-Alt-Shift-0)", KeyEvent.VK_0);
-    showToolbar = new JCheckBoxMenuItem("Show Toolbar   (Ctrl-Alt-Shift-T)");
+    defaultSize = addMenuItem("Default Window Size/Position" +
+                              (cc.params.noHotkeys.get() ? "" :
+                               "   (Ctrl-Alt-Shift-Z)"), KeyEvent.VK_Z);
+    zoomIn = addMenuItem("Zoom In" +
+                         (cc.params.noHotkeys.get() ? "" :
+                          "   (Ctrl-Alt-Shift-9)"), KeyEvent.VK_9);
+    zoomOut = addMenuItem("Zoom Out" +
+                          (cc.params.noHotkeys.get() ? "" :
+                           "   (Ctrl-Alt-Shift-8)"), KeyEvent.VK_8);
+    zoom100 = addMenuItem("Zoom 100%" +
+                          (cc.params.noHotkeys.get() ? "" :
+                           "   (Ctrl-Alt-Shift-0)"), KeyEvent.VK_0);
+    showToolbar = new JCheckBoxMenuItem("Show Toolbar" +
+                                        (cc.params.noHotkeys.get() ? "" :
+                                         "   (Ctrl-Alt-Shift-T)"));
     showToolbar.setMnemonic(KeyEvent.VK_T);
-    showToolbar.setSelected(cc.opts.showToolbar);
+    showToolbar.setSelected(cc.params.toolbar.get());
     showToolbar.addActionListener(this);
     add(showToolbar);
-    tileWindows = addMenuItem("Tile All Viewer Windows   (Ctrl-Alt-Shift-X)",
-                              KeyEvent.VK_X);
+    tileWindows = addMenuItem("Tile All Viewer Windows" +
+                              (cc.params.noHotkeys.get() ? "" :
+                               "   (Ctrl-Alt-Shift-X)"), KeyEvent.VK_X);
     addSeparator();
-    viewOnly = new JCheckBoxMenuItem("View Only   (Ctrl-Alt-Shift-V)");
+    viewOnly = new JCheckBoxMenuItem("View Only" +
+                                     (cc.params.noHotkeys.get() ? "" :
+                                      "   (Ctrl-Alt-Shift-V)"));
     viewOnly.setMnemonic(KeyEvent.VK_V);
-    viewOnly.setSelected(cc.opts.viewOnly);
+    viewOnly.setSelected(cc.params.viewOnly.get());
     viewOnly.addActionListener(this);
     add(viewOnly);
     if (Utils.osGrab() && Helper.isAvailable()) {
-      grabKeyboard =
-        new JCheckBoxMenuItem("Grab Keyboard   (Ctrl-Alt-Shift-G)");
+      grabKeyboard = new JCheckBoxMenuItem("Grab Keyboard" +
+                                           (cc.params.noHotkeys.get() ? "" :
+                                            "   (Ctrl-Alt-Shift-G)"));
       grabKeyboard.setMnemonic(KeyEvent.VK_G);
       grabKeyboard.setSelected(VncViewer.isKeyboardGrabbed());
       grabKeyboard.addActionListener(this);
       add(grabKeyboard);
     }
-    f8 = addMenuItem("Send " + MenuKey.getMenuKeyName(cc.opts.menuKeyCode,
-                                                      cc.opts.menuKeySym));
-    KeyStroke ks = KeyStroke.getKeyStroke(cc.opts.menuKeyCode, 0);
+    f8 = addMenuItem("Send " + cc.params.menuKey.getStr());
+    KeyStroke ks = KeyStroke.getKeyStroke(cc.params.menuKey.getVKeyCode(), 0);
     f8.setAccelerator(ks);
-    if (!Params.restricted.getValue()) {
+    if (!cc.params.restricted.get()) {
       ctrlAltDel = addMenuItem("Send Ctrl-Alt-Del");
       ctrlEsc = addMenuItem("Send Ctrl-Esc");
     }
     addSeparator();
     clipboard = addMenuItem("Clipboard...");
     addSeparator();
-    if (!Params.noNewConn.getValue()) {
-      newConn = addMenuItem("New Connection...   (Ctrl-Alt-Shift-N)",
-                            KeyEvent.VK_N);
+    if (!cc.params.noNewConn.get()) {
+      newConn = addMenuItem("New Connection..." +
+                            (cc.params.noHotkeys.get() ? "" :
+                             "   (Ctrl-Alt-Shift-N)"), KeyEvent.VK_N);
       addSeparator();
     }
     about = addMenuItem("About TurboVNC Viewer...", KeyEvent.VK_A);
@@ -140,9 +160,9 @@ public class F8Menu extends JPopupMenu implements ActionListener {
     return item;
   }
 
-  void updateMenuKey(int keyCode, int keySym) {
-    f8.setText("Send " + MenuKey.getMenuKeyName(keyCode, keySym));
-    KeyStroke ks = KeyStroke.getKeyStroke(keyCode, 0);
+  void updateMenuKey() {
+    f8.setText("Send " + cc.params.menuKey.getStr());
+    KeyStroke ks = KeyStroke.getKeyStroke(cc.params.menuKey.getVKeyCode(), 0);
     f8.setAccelerator(ks);
   }
 
@@ -153,13 +173,13 @@ public class F8Menu extends JPopupMenu implements ActionListener {
   }
 
   public void actionPerformed(ActionEvent ev) {
-    if (!Params.noNewConn.getValue() && actionMatch(ev, exit)) {
+    if (!cc.params.noNewConn.get() && actionMatch(ev, exit)) {
       cc.close();
     } else if (actionMatch(ev, fullScreen)) {
       cc.toggleFullScreen();
     } else if (actionMatch(ev, showToolbar)) {
       cc.toggleToolbar();
-      showToolbar.setSelected(cc.opts.showToolbar);
+      showToolbar.setSelected(cc.params.toolbar.get());
     } else if (actionMatch(ev, defaultSize)) {
       cc.sizeWindow();
       firePopupMenuCanceled();
@@ -182,8 +202,8 @@ public class F8Menu extends JPopupMenu implements ActionListener {
       if (cc.viewport != null)
         cc.viewport.grabKeyboardHelper(grabKeyboard.isSelected());
     } else if (actionMatch(ev, f8)) {
-      cc.writeKeyEvent(cc.opts.menuKeySym, true);
-      cc.writeKeyEvent(cc.opts.menuKeySym, false);
+      cc.writeKeyEvent(cc.params.menuKey.getKeySym(), true);
+      cc.writeKeyEvent(cc.params.menuKey.getKeySym(), false);
       firePopupMenuCanceled();
     } else if (actionMatch(ev, ctrlAltDel)) {
       cc.writeKeyEvent(Keysyms.CONTROL_L, true);
@@ -207,7 +227,7 @@ public class F8Menu extends JPopupMenu implements ActionListener {
       firePopupMenuCanceled();
     } else if (actionMatch(ev, screenshot)) {
       cc.screenshot();
-    } else if (!Params.noNewConn.getValue() && actionMatch(ev, newConn)) {
+    } else if (!cc.params.noNewConn.get() && actionMatch(ev, newConn)) {
       VncViewer.newViewer(cc.viewer);
     } else if (actionMatch(ev, options)) {
       cc.options.showDialog(cc.viewport);
@@ -227,9 +247,9 @@ public class F8Menu extends JPopupMenu implements ActionListener {
   }
 
   void updateZoom() {
-    if (cc.opts.desktopSize.mode == Options.SIZE_AUTO ||
-        cc.opts.scalingFactor == Options.SCALE_AUTO ||
-        cc.opts.scalingFactor == Options.SCALE_FIXEDRATIO) {
+    if (cc.params.desktopSize.getMode() == DesktopSize.AUTO ||
+        cc.params.scale.get() == ScaleParameter.AUTO ||
+        cc.params.scale.get() == ScaleParameter.FIXEDRATIO) {
       zoomIn.setEnabled(false);
       zoomOut.setEnabled(false);
       zoom100.setEnabled(false);

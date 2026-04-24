@@ -1,5 +1,5 @@
-/* Copyright (C) 2009-2010, 2012-2013, 2015, 2022 D. R. Commander.
- *                                                All Rights Reserved.
+/* Copyright (C) 2009-2010, 2012-2013, 2015, 2022, 2024-2025
+ *           D. R. Commander.  All Rights Reserved.
  * Copyright (C) 2009 Vic Lee.  All Rights Reserved.
  * Copyright (C) 2004-2008 Sun Microsystems, Inc. All Rights Reserved.
  * Copyright (C) 2000-2006 Constantin Kaplinsky. All Rights Reserved.
@@ -472,6 +472,7 @@ typedef struct _rfbInteractionCapsMsg {
  */
 
 #define rfbFence 248
+#define rfbQEMU 255
 
 
 /*****************************************************************************
@@ -505,16 +506,24 @@ typedef struct _rfbInteractionCapsMsg {
 
 /*
  * Special encoding numbers:
+ *   0x574D5668               -- VMware LED state
+ *   0xC0A1E5CE               -- extended clipboard
  *   0xFFFFFD00 .. 0xFFFFFD05 -- subsampling level
  *         -768 .. -763
  *   0xFFFFFE00 .. 0xFFFFFE64 -- fine-grained quality level (0-100 scale)
  *         -512 .. -412
+ *   0xFFFFFEC3               -- Tight encoding without zlib
+ *   0xFFFFFEC4               -- Extended mouse buttons
  *   0xFFFFFEC7 .. 0xFFFFFEC8 -- flow control extensions
  *         -313 .. -312
  *   0xFFFFFECC               -- extended desktop size
  *         -308
  *   0xFFFFFECF               -- GII
  *         -305
+ *   0xFFFFFEFB               -- QEMU LED state
+ *         -261
+ *   0xFFFFFEFE               -- QEMU extended key event
+ *         -258
  *   0xFFFFFF00 .. 0xFFFFFF0F -- encoding-specific compression levels
  *         -256 .. -241
  *   0xFFFFFF10 .. 0xFFFFFF1F -- mouse cursor shape data
@@ -529,67 +538,78 @@ typedef struct _rfbInteractionCapsMsg {
  *          -16 .. -1
  */
 
-#define rfbEncodingSubsamp1X            0xFFFFFD00
-#define rfbEncodingSubsamp4X            0xFFFFFD01
-#define rfbEncodingSubsamp2X            0xFFFFFD02
-#define rfbEncodingSubsampGray          0xFFFFFD03
-#define rfbEncodingSubsamp8X            0xFFFFFD04
-#define rfbEncodingSubsamp16X           0xFFFFFD05
-#define rfbEncodingFineQualityLevel0    0xFFFFFE00
-#define rfbEncodingFineQualityLevel100  0xFFFFFE64
+#define rfbEncodingVMwareLEDState       0x574D5668
 
-#define rfbEncodingContinuousUpdates    0xFFFFFEC7
-#define rfbEncodingFence                0xFFFFFEC8
+#define rfbEncodingExtendedClipboard    0xC0A1E5CE
 
-#define rfbEncodingExtendedDesktopSize  0xFFFFFECC
+#define rfbEncodingSubsamp1X            0xFFFFFD00  /* -768 */
+#define rfbEncodingSubsamp4X            0xFFFFFD01  /* -767 */
+#define rfbEncodingSubsamp2X            0xFFFFFD02  /* -766 */
+#define rfbEncodingSubsampGray          0xFFFFFD03  /* -765 */
+#define rfbEncodingSubsamp8X            0xFFFFFD04  /* -764 */
+#define rfbEncodingSubsamp16X           0xFFFFFD05  /* -763 */
+#define rfbEncodingFineQualityLevel0    0xFFFFFE00  /* -512 */
+#define rfbEncodingFineQualityLevel100  0xFFFFFE64  /* -412 */
 
-#define rfbEncodingGII                  0xFFFFFECF
+#define rfbEncodingTightWithoutZlib     0xFFFFFEC3  /* -317 */
 
-#define rfbEncodingCompressLevel0       0xFFFFFF00
-#define rfbEncodingCompressLevel1       0xFFFFFF01
-#define rfbEncodingCompressLevel2       0xFFFFFF02
-#define rfbEncodingCompressLevel3       0xFFFFFF03
-#define rfbEncodingCompressLevel4       0xFFFFFF04
-#define rfbEncodingCompressLevel5       0xFFFFFF05
-#define rfbEncodingCompressLevel6       0xFFFFFF06
-#define rfbEncodingCompressLevel7       0xFFFFFF07
-#define rfbEncodingCompressLevel8       0xFFFFFF08
-#define rfbEncodingCompressLevel9       0xFFFFFF09
+#define rfbEncodingExtendedMouseButtons 0xFFFFFEC4  /* -316 */
 
-#define rfbEncodingXCursor              0xFFFFFF10
-#define rfbEncodingRichCursor           0xFFFFFF11
-#define rfbEncodingPointerPos           0xFFFFFF18
+#define rfbEncodingContinuousUpdates    0xFFFFFEC7  /* -313 */
+#define rfbEncodingFence                0xFFFFFEC8  /* -312 */
 
-#define rfbEncodingLastRect             0xFFFFFF20
-#define rfbEncodingNewFBSize            0xFFFFFF21
+#define rfbEncodingExtendedDesktopSize  0xFFFFFECC  /* -308 */
 
-#define rfbEncodingMaxDelay20           0xFFFFFCF0
-#define rfbEncodingMaxDelay40           0xFFFFFCF1
-#define rfbEncodingMaxDelay60           0xFFFFFCF2
-#define rfbEncodingMaxDelay80           0xFFFFFCF3
-#define rfbEncodingMaxDelay100          0xFFFFFCF4
-#define rfbEncodingMaxDelay120          0xFFFFFCF5
-#define rfbEncodingMaxDelay140          0xFFFFFCF6
-#define rfbEncodingMaxDelay160          0xFFFFFCF7
-#define rfbEncodingMaxDelay180          0xFFFFFCF8
-#define rfbEncodingMaxDelay200          0xFFFFFCF9
-#define rfbEncodingMaxDelay220          0xFFFFFCFA
-#define rfbEncodingMaxDelay240          0xFFFFFCFB
-#define rfbEncodingMaxDelay260          0xFFFFFCFC
-#define rfbEncodingMaxDelay280          0xFFFFFCFD
-#define rfbEncodingMaxDelay300          0xFFFFFCFE
-#define rfbEncodingMaxDelay320          0xFFFFFCFF
+#define rfbEncodingGII                  0xFFFFFECF  /* -305 */
 
-#define rfbEncodingQualityLevel0        0xFFFFFFE0
-#define rfbEncodingQualityLevel1        0xFFFFFFE1
-#define rfbEncodingQualityLevel2        0xFFFFFFE2
-#define rfbEncodingQualityLevel3        0xFFFFFFE3
-#define rfbEncodingQualityLevel4        0xFFFFFFE4
-#define rfbEncodingQualityLevel5        0xFFFFFFE5
-#define rfbEncodingQualityLevel6        0xFFFFFFE6
-#define rfbEncodingQualityLevel7        0xFFFFFFE7
-#define rfbEncodingQualityLevel8        0xFFFFFFE8
-#define rfbEncodingQualityLevel9        0xFFFFFFE9
+#define rfbEncodingQEMULEDState         0xFFFFFEFB  /* -261 */
+#define rfbEncodingQEMUExtendedKeyEvent 0xFFFFFEFE  /* -258 */
+
+#define rfbEncodingCompressLevel0       0xFFFFFF00  /* -256 */
+#define rfbEncodingCompressLevel1       0xFFFFFF01  /* -255 */
+#define rfbEncodingCompressLevel2       0xFFFFFF02  /* -254 */
+#define rfbEncodingCompressLevel3       0xFFFFFF03  /* -253 */
+#define rfbEncodingCompressLevel4       0xFFFFFF04  /* -252 */
+#define rfbEncodingCompressLevel5       0xFFFFFF05  /* -251 */
+#define rfbEncodingCompressLevel6       0xFFFFFF06  /* -250 */
+#define rfbEncodingCompressLevel7       0xFFFFFF07  /* -249 */
+#define rfbEncodingCompressLevel8       0xFFFFFF08  /* -248 */
+#define rfbEncodingCompressLevel9       0xFFFFFF09  /* -247 */
+
+#define rfbEncodingXCursor              0xFFFFFF10  /* -240 */
+#define rfbEncodingRichCursor           0xFFFFFF11  /* -239 */
+#define rfbEncodingPointerPos           0xFFFFFF18  /* -232 */
+
+#define rfbEncodingLastRect             0xFFFFFF20  /* -224 */
+#define rfbEncodingNewFBSize            0xFFFFFF21  /* -223 */
+
+#define rfbEncodingMaxDelay20           0xFFFFFCF0  /* -784 */
+#define rfbEncodingMaxDelay40           0xFFFFFCF1  /* -783 */
+#define rfbEncodingMaxDelay60           0xFFFFFCF2  /* -782 */
+#define rfbEncodingMaxDelay80           0xFFFFFCF3  /* -781 */
+#define rfbEncodingMaxDelay100          0xFFFFFCF4  /* -780 */
+#define rfbEncodingMaxDelay120          0xFFFFFCF5  /* -779 */
+#define rfbEncodingMaxDelay140          0xFFFFFCF6  /* -778 */
+#define rfbEncodingMaxDelay160          0xFFFFFCF7  /* -777 */
+#define rfbEncodingMaxDelay180          0xFFFFFCF8  /* -776 */
+#define rfbEncodingMaxDelay200          0xFFFFFCF9  /* -775 */
+#define rfbEncodingMaxDelay220          0xFFFFFCFA  /* -774 */
+#define rfbEncodingMaxDelay240          0xFFFFFCFB  /* -773 */
+#define rfbEncodingMaxDelay260          0xFFFFFCFC  /* -772 */
+#define rfbEncodingMaxDelay280          0xFFFFFCFD  /* -771 */
+#define rfbEncodingMaxDelay300          0xFFFFFCFE  /* -770 */
+#define rfbEncodingMaxDelay320          0xFFFFFCFF  /* -769 */
+
+#define rfbEncodingQualityLevel0        0xFFFFFFE0  /* -32 */
+#define rfbEncodingQualityLevel1        0xFFFFFFE1  /* -31 */
+#define rfbEncodingQualityLevel2        0xFFFFFFE2  /* -30 */
+#define rfbEncodingQualityLevel3        0xFFFFFFE3  /* -29 */
+#define rfbEncodingQualityLevel4        0xFFFFFFE4  /* -28 */
+#define rfbEncodingQualityLevel5        0xFFFFFFE5  /* -27 */
+#define rfbEncodingQualityLevel6        0xFFFFFFE6  /* -26 */
+#define rfbEncodingQualityLevel7        0xFFFFFFE7  /* -25 */
+#define rfbEncodingQualityLevel8        0xFFFFFFE8  /* -24 */
+#define rfbEncodingQualityLevel9        0xFFFFFFE9  /* -23 */
 
 #define rfbEncodingWarnEventAllOff      0xFFFFFA00
 #define rfbEncodingWarnEventAllOn       0xFFFFFAFF
@@ -645,6 +665,27 @@ typedef struct _rfbFenceMsg {
 } rfbFenceMsg;
 
 #define sz_rfbFenceMsg 9
+
+
+/*-----------------------------------------------------------------------------
+ * Extended Clipboard
+ */
+
+/* formats */
+
+#define rfbExtClipUTF8    0x00000001
+#define rfbExtClipRTF     0x00000002
+#define rfbExtClipHTML    0x00000004
+#define rfbExtClipDIB     0x00000008
+#define rfbExtClipFiles   0x00000010
+
+/* actions */
+
+#define rfbExtClipCaps    0x01000000
+#define rfbExtClipRequest 0x02000000
+#define rfbExtClipPeek    0x04000000
+#define rfbExtClipNotify  0x08000000
+#define rfbExtClipProvide 0x10000000
 
 
 /*-----------------------------------------------------------------------------
@@ -1032,6 +1073,16 @@ typedef struct {
 
 #define rfbZRLETileWidth 64
 #define rfbZRLETileHeight 64
+
+
+/*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ * LED states
+ */
+
+#define rfbLEDScrollLock (1 << 0)
+#define rfbLEDNumLock    (1 << 1)
+#define rfbLEDCapsLock   (1 << 2)
+#define rfbLEDUnknown    0xFFFFFFFF  /* -1 */
 
 
 /*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -1742,6 +1793,24 @@ typedef struct _rfbGIIEventMsg {
 
 
 /*-----------------------------------------------------------------------------
+ * QEMU Extended Key Event
+ */
+
+/* message subtypes */
+#define rfbQEMUExtendedKeyEvent 0
+
+typedef struct _rfbQEMUExtendedKeyEventMsg {
+    CARD8 type;                 /* always rfbQEMU */
+    CARD8 subType;              /* always rfbQEMUExtendedKeyEvent */
+    CARD16 down;                /* true if down (press), false if up */
+    CARD32 keysym;              /* X11 keysym */
+    CARD32 keycode;             /* RFB keycode */
+} rfbQEMUExtendedKeyEventMsg;
+
+#define sz_rfbQEMUExtendedKeyEventMsg 12
+
+
+/*-----------------------------------------------------------------------------
  * Union of all client->server messages.
  */
 
@@ -1768,4 +1837,5 @@ typedef union _rfbClientToServerMsg {
     rfbGIIDeviceCreateMsg giidc;
     rfbGIIDeviceDestroyMsg giidd;
     rfbGIIEventMsg giie;
+    rfbQEMUExtendedKeyEventMsg qemueke;
 } rfbClientToServerMsg;

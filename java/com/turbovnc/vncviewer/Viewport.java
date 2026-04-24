@@ -1,4 +1,5 @@
-/* Copyright (C) 2012-2013, 2015-2022 D. R. Commander.  All Rights Reserved.
+/* Copyright (C) 2012-2013, 2015-2022, 2024-2025 D. R. Commander.
+ *                                               All Rights Reserved.
  * Copyright (C) 2011-2013 Brian P. Hinz
  * Copyright (C) 2002-2005 RealVNC Ltd.  All Rights Reserved.
  *
@@ -33,7 +34,7 @@ import com.turbovnc.rfb.*;
 import com.turbovnc.rfb.Cursor;
 import com.turbovnc.rfb.Point;
 
-public class Viewport extends JFrame implements Runnable {
+public final class Viewport extends JFrame implements Runnable {
 
   public Viewport(CConn cc_) {
     cc = cc_;
@@ -43,7 +44,7 @@ public class Viewport extends JFrame implements Runnable {
     setIconImage(VncViewer.FRAME_IMAGE);
     UIManager.getDefaults().put("ScrollPane.ancestorInputMap",
       new UIDefaults.LazyInputMap(new Object[]{}));
-    if (Params.confirmClose.getValue())
+    if (cc.params.confirmClose.get())
       setDefaultCloseOperation(WindowConstants.DO_NOTHING_ON_CLOSE);
     sp = new JScrollPane();
     sp.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 0));
@@ -59,10 +60,7 @@ public class Viewport extends JFrame implements Runnable {
       if (Utils.getBooleanProperty("turbovnc.lionfs", true))
         enableLionFS();
     }
-    // NOTE: If Lion FS mode is enabled, then the viewport is only created once
-    // as a non-full-screen viewport, so we tell showToolbar() to ignore the
-    // full-screen state.
-    showToolbar(cc.opts.showToolbar, canDoLionFS);
+    showToolbar(cc.params.toolbar.get());
 
     final Viewport vp = this;
     addWindowFocusListener(new WindowAdapter() {
@@ -101,8 +99,8 @@ public class Viewport extends JFrame implements Runnable {
 
     addComponentListener(new ComponentAdapter() {
       public void componentResized(ComponentEvent e) {
-        if (cc.opts.scalingFactor == Options.SCALE_AUTO ||
-            cc.opts.scalingFactor == Options.SCALE_FIXEDRATIO) {
+        if (cc.params.scale.get() == ScaleParameter.AUTO ||
+            cc.params.scale.get() == ScaleParameter.FIXEDRATIO) {
           if ((sp.getSize().width != cc.desktop.scaledWidth) ||
               (sp.getSize().height != cc.desktop.scaledHeight)) {
             cc.desktop.setScaledSize();
@@ -112,7 +110,7 @@ public class Viewport extends JFrame implements Runnable {
               ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER);
             sp.validate();
             if (getExtendedState() != JFrame.MAXIMIZED_BOTH &&
-                !cc.opts.fullScreen) {
+                !cc.params.fullScreen.get()) {
               sp.setSize(new Dimension(cc.desktop.scaledWidth,
                                        cc.desktop.scaledHeight));
               int w = cc.desktop.scaledWidth + VncViewer.insets.left +
@@ -121,19 +119,23 @@ public class Viewport extends JFrame implements Runnable {
                       VncViewer.insets.bottom;
               if (tb.isVisible())
                 h += tb.getHeight();
-              if (cc.opts.scalingFactor == Options.SCALE_FIXEDRATIO)
+              if (cc.params.scale.get() == ScaleParameter.FIXEDRATIO)
                 setSize(w, h);
             }
           }
-        } else if (cc.opts.desktopSize.mode == Options.SIZE_AUTO &&
+        } else if (cc.params.desktopSize.getMode() == DesktopSize.AUTO &&
                    !cc.firstUpdate && !cc.pendingServerResize) {
           Dimension availableSize = cc.viewport.getAvailableSize();
           if (availableSize.width >= 1 && availableSize.height >= 1 &&
               (availableSize.width != cc.desktop.scaledWidth ||
                availableSize.height != cc.desktop.scaledHeight)) {
             sp.setHorizontalScrollBarPolicy(
+              cc.params.fullScreen.get() && cc.params.bumpScroll.get() ?
+              ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER :
               ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
             sp.setVerticalScrollBarPolicy(
+              cc.params.fullScreen.get() && cc.params.bumpScroll.get() ?
+              ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER :
               ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
             sp.validate();
             if (timer != null)
@@ -153,8 +155,12 @@ public class Viewport extends JFrame implements Runnable {
           }
         } else {
           sp.setHorizontalScrollBarPolicy(
+            cc.params.fullScreen.get() && cc.params.bumpScroll.get() ?
+            ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER :
             ScrollPaneConstants.HORIZONTAL_SCROLLBAR_AS_NEEDED);
           sp.setVerticalScrollBarPolicy(
+            cc.params.fullScreen.get() && cc.params.bumpScroll.get() ?
+            ScrollPaneConstants.VERTICAL_SCROLLBAR_NEVER :
             ScrollPaneConstants.VERTICAL_SCROLLBAR_AS_NEEDED);
           sp.validate();
         }
@@ -171,7 +177,7 @@ public class Viewport extends JFrame implements Runnable {
         }
         if (((sp.getSize().width > cc.desktop.scaledWidth) ||
              (sp.getSize().height > cc.desktop.scaledHeight)) &&
-            cc.opts.desktopSize.mode != Options.SIZE_AUTO) {
+            cc.params.desktopSize.getMode() != DesktopSize.AUTO) {
           int w = sp.getSize().width - adjustWidth;
           int h = sp.getSize().height - adjustHeight;
           dx = (w <= cc.desktop.scaledWidth) ? 0 :
@@ -185,7 +191,7 @@ public class Viewport extends JFrame implements Runnable {
       }
 
       public void componentMoved(ComponentEvent e) {
-        if (cc.opts.desktopSize.mode == Options.SIZE_AUTO &&
+        if (cc.params.desktopSize.getMode() == DesktopSize.AUTO &&
             !cc.firstUpdate && !cc.pendingServerResize && cc.checkLayout) {
           Dimension availableSize = cc.viewport.getAvailableSize();
           int w = availableSize.width, h = availableSize.height;
@@ -202,6 +208,8 @@ public class Viewport extends JFrame implements Runnable {
   }
 
   private void setScrollBarHotkeysEnabled(boolean enable) {
+    if (cc.params.noHotkeys.get())
+      return;
     InputMap im = sp.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
     int ctrlAltShiftMask = InputEvent.SHIFT_DOWN_MASK |
                            InputEvent.CTRL_DOWN_MASK |
@@ -210,11 +218,19 @@ public class Viewport extends JFrame implements Runnable {
     if (enable) {
       im.put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, ctrlAltShiftMask),
              "unitScrollUp");
+      im.put(KeyStroke.getKeyStroke(KeyEvent.VK_KP_UP, ctrlAltShiftMask),
+             "unitScrollUp");
       im.put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, ctrlAltShiftMask),
+             "unitScrollDown");
+      im.put(KeyStroke.getKeyStroke(KeyEvent.VK_KP_DOWN, ctrlAltShiftMask),
              "unitScrollDown");
       im.put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, ctrlAltShiftMask),
              "unitScrollLeft");
+      im.put(KeyStroke.getKeyStroke(KeyEvent.VK_KP_LEFT, ctrlAltShiftMask),
+             "unitScrollLeft");
       im.put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, ctrlAltShiftMask),
+             "unitScrollRight");
+      im.put(KeyStroke.getKeyStroke(KeyEvent.VK_KP_RIGHT, ctrlAltShiftMask),
              "unitScrollRight");
       im.put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, ctrlAltShiftMask),
              "scrollUp");
@@ -226,9 +242,14 @@ public class Viewport extends JFrame implements Runnable {
              "scrollRight");
     } else {
       im.remove(KeyStroke.getKeyStroke(KeyEvent.VK_UP, ctrlAltShiftMask));
+      im.remove(KeyStroke.getKeyStroke(KeyEvent.VK_KP_UP, ctrlAltShiftMask));
       im.remove(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, ctrlAltShiftMask));
+      im.remove(KeyStroke.getKeyStroke(KeyEvent.VK_KP_DOWN, ctrlAltShiftMask));
       im.remove(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, ctrlAltShiftMask));
+      im.remove(KeyStroke.getKeyStroke(KeyEvent.VK_KP_LEFT, ctrlAltShiftMask));
       im.remove(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, ctrlAltShiftMask));
+      im.remove(KeyStroke.getKeyStroke(KeyEvent.VK_KP_RIGHT,
+                                       ctrlAltShiftMask));
       im.remove(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, ctrlAltShiftMask));
       im.remove(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_DOWN,
                                        ctrlAltShiftMask));
@@ -239,7 +260,7 @@ public class Viewport extends JFrame implements Runnable {
 
   public Dimension getAvailableSize() {
     Dimension availableSize = getSize();
-    if (!cc.opts.fullScreen) {
+    if (!cc.params.fullScreen.get()) {
       Insets vpInsets = VncViewer.insets;
       availableSize.width -= vpInsets.left + vpInsets.right;
       availableSize.height -= vpInsets.top + vpInsets.bottom;
@@ -254,13 +275,13 @@ public class Viewport extends JFrame implements Runnable {
   }
 
   public Dimension getBorderSize() {
-    if (cc.opts.fullScreen)
+    if (cc.params.fullScreen.get())
       return new Dimension(0, 0);
     Insets vpInsets = VncViewer.insets;
     Dimension borderSize = new Dimension(vpInsets.left + vpInsets.right,
                                          vpInsets.top + vpInsets.bottom);
-    if (cc.opts.showToolbar)
-      borderSize.height += 22;
+    if (cc.params.toolbar.get())
+      borderSize.height += 26;
     return borderSize;
   }
 
@@ -271,15 +292,13 @@ public class Viewport extends JFrame implements Runnable {
 
     public Object invoke(Object proxy, Method method, Object[] args) {
       if (method.getName().equals("windowEnteringFullScreen")) {
-        cc.opts.fullScreen = true;
-        cc.menu.fullScreen.setSelected(cc.opts.fullScreen);
+        cc.params.fullScreen.set(true);
+        cc.menu.fullScreen.setSelected(cc.params.fullScreen.get());
         updateMacMenuFS();
-        showToolbar(cc.opts.showToolbar);
       } else if (method.getName().equals("windowExitingFullScreen")) {
-        cc.opts.fullScreen = false;
-        cc.menu.fullScreen.setSelected(cc.opts.fullScreen);
+        cc.params.fullScreen.set(false);
+        cc.menu.fullScreen.setSelected(cc.params.fullScreen.get());
         updateMacMenuFS();
-        showToolbar(cc.opts.showToolbar);
       } else if (method.getName().equals("windowEnteredFullScreen")) {
         cc.sizeWindow();
       }
@@ -353,7 +372,7 @@ public class Viewport extends JFrame implements Runnable {
 
   public void updateMacMenuViewOnly() {
     if (macMenu != null)
-      macMenu.viewOnly.setSelected(cc.opts.viewOnly);
+      macMenu.viewOnly.setSelected(cc.params.viewOnly.get());
   }
 
   public void updateMacMenuZoom() {
@@ -368,7 +387,7 @@ public class Viewport extends JFrame implements Runnable {
   public void setGeometry(int x, int y, int w, int h) {
     // Re-transmit full-screen multi-screen spanning information to the X
     // server, in case it changed since the viewport was created.
-    if (Utils.isX11() && cc.opts.fullScreen && isVisible() &&
+    if (Utils.isX11() && cc.params.fullScreen.get() && isVisible() &&
         (x != getLocation().x || y != getLocation().y ||
          w != getSize().width || h != getSize().height))
       x11FullScreenHelper(true);
@@ -395,29 +414,28 @@ public class Viewport extends JFrame implements Runnable {
     }
   }
 
-  public void showToolbar(boolean show) { showToolbar(show, false); }
-
-  private void showToolbar(boolean show, boolean force) {
-    tb.setVisible(show && (!cc.opts.fullScreen || force));
+  public void showToolbar(boolean show) {
+    tb.setVisible(show && !cc.params.fullScreen.get());
   }
 
   public void updateTitle() {
     String scaleString = new String("");
-    if (cc.opts.scalingFactor != 100 &&
-        cc.opts.scalingFactor != Options.SCALE_AUTO &&
-        cc.opts.scalingFactor != Options.SCALE_FIXEDRATIO)
-      scaleString = new String("- " + cc.opts.scalingFactor + "%");
+    if (cc.params.scale.get() != 100 &&
+        cc.params.scale.get() != ScaleParameter.AUTO &&
+        cc.params.scale.get() != ScaleParameter.FIXEDRATIO)
+      scaleString = new String("- " + cc.params.scale.get() + "%");
     int enc = cc.lastServerEncoding;
     if (enc < 0) enc = cc.currentEncoding;
     if (enc == RFB.ENCODING_TIGHT) {
-      if (cc.opts.allowJpeg) {
+      if (cc.params.jpeg.get()) {
         String[] subsampStr = { "1X", "4X", "2X", "Gray" };
         setTitle(cc.cp.name() + " [Tight + JPEG " +
-                 subsampStr[cc.opts.subsampling] + " Q" + cc.opts.quality +
-                 " + CL " + cc.opts.compressLevel + "]" + scaleString);
+                 subsampStr[cc.params.subsampling.get()] +
+                 " Q" + cc.params.quality.get() +
+                 " + CL " + cc.params.compressLevel.get() + "]" + scaleString);
       } else {
         setTitle(cc.cp.name() + " [Lossless Tight" +
-                 " + CL " + cc.opts.compressLevel + "]" + scaleString);
+                 " + CL " + cc.params.compressLevel.get() + "]" + scaleString);
       }
     } else {
       setTitle(cc.cp.name() + " [" + RFB.encodingName(enc) + "]" +
@@ -444,6 +462,23 @@ public class Viewport extends JFrame implements Runnable {
       cc.primaryGD.setFullScreenWindow(on ? this : null);
   }
 
+  static final int NS_APPLICATION_PRESENTATION_HIDE_DOCK = (1 << 1);
+  static final int NS_APPLICATION_PRESENTATION_HIDE_MENU_BAR = (1 << 3);
+
+  private native void macFullScreen(boolean on, int presentationOptions);
+
+  public void macFullScreenHelper(boolean on) {
+    if (!Helper.isAvailable()) return;
+    int presentationOptions = 0;
+    boolean hide;
+    if (Utils.getBooleanProperty("turbovnc.fshidedock",
+                                 cc.params.bumpScroll.get()))
+      presentationOptions |= NS_APPLICATION_PRESENTATION_HIDE_DOCK |
+                             NS_APPLICATION_PRESENTATION_HIDE_MENU_BAR;
+    if (presentationOptions != 0)
+      macFullScreen(on, presentationOptions);
+  }
+
   public void grabKeyboardHelper(boolean on) {
     grabKeyboardHelper(on, false);
   }
@@ -454,7 +489,7 @@ public class Viewport extends JFrame implements Runnable {
         if (((on && VncViewer.isKeyboardGrabbed(this)) ||
              (!on && !VncViewer.isKeyboardGrabbed())) && !force)
           return;
-        grabKeyboard(on, Params.grabPointer.getValue());
+        grabKeyboard(on, cc.params.grabPointer.get());
         VncViewer.setGrabOwner(on ? this : null);
         setScrollBarHotkeysEnabled((sp.getHorizontalScrollBar().isVisible() ||
                                     sp.getVerticalScrollBar().isVisible()) &&
@@ -472,14 +507,15 @@ public class Viewport extends JFrame implements Runnable {
   }
 
   public void setupExtInputHelper() {
-    if (Helper.isAvailable() && cc.cp.supportsGII && x11dpy == 0) {
+    if (Helper.isAvailable() && x11dpy == 0 &&
+        (cc.cp.supportsGII || Utils.isMac())) {
       try {
         if (Utils.isMac()) {
-          synchronized(VncViewer.class) {
-            setupExtInput();
+          synchronized (VncViewer.class) {
+            setupExtInput(cc.params.serverKeyMap.get());
           }
         } else
-          setupExtInput();
+          setupExtInput(false);
       } catch (UnsatisfiedLinkError e) {
         vlog.info("WARNING: Could not invoke setupExtInput() from TurboVNC Helper.");
         vlog.info("  Extended input device support will be disabled.");
@@ -489,7 +525,7 @@ public class Viewport extends JFrame implements Runnable {
         vlog.info("  " + e.toString());
         vlog.info("  Extended input device support may not work correctly.");
       }
-      if (Utils.isMac() && devices == null) {
+      if (Utils.isMac() && devices == null && cc.cp.supportsGII) {
         // Create default devices for Wacom tablet
         for (int i = 0; i < 2; i++) {
           ExtInputDevice dev = new ExtInputDevice();
@@ -583,7 +619,7 @@ public class Viewport extends JFrame implements Runnable {
       }
       try {
         if (Utils.isMac()) {
-          synchronized(VncViewer.class) {
+          synchronized (VncViewer.class) {
             cleanupExtInput();
           }
         } else
@@ -614,7 +650,7 @@ public class Viewport extends JFrame implements Runnable {
       return;
     }
     for (Iterator<ExtInputDevice> i = devices.iterator(); i.hasNext();) {
-      ExtInputDevice dev = (ExtInputDevice)i.next();
+      ExtInputDevice dev = i.next();
       if (dev.remoteID == 0) {
         dev.remoteID = deviceOrigin;
         vlog.info("Successfully created device " + deviceOrigin + " (" +
@@ -628,7 +664,7 @@ public class Viewport extends JFrame implements Runnable {
     boolean retval = false;
     if (Helper.isAvailable() && cc.cp.supportsGII && !Utils.isMac()) {
       boolean isExtEvent = false;
-      synchronized(lastEvent) {
+      synchronized (lastEvent) {
         try {
           isExtEvent = processExtInputEvent(type);
         } catch (UnsatisfiedLinkError e) {
@@ -647,7 +683,7 @@ public class Viewport extends JFrame implements Runnable {
           return false;
         }
         for (Iterator<ExtInputDevice> i = devices.iterator(); i.hasNext();) {
-          ExtInputDevice dev = (ExtInputDevice)i.next();
+          ExtInputDevice dev = i.next();
           if (lastEvent.deviceID == dev.id && dev.remoteID != 0) {
             if (dev.absolute && lastEvent.type == RFB.GII_VALUATOR_RELATIVE)
               lastEvent.type = RFB.GII_VALUATOR_ABSOLUTE;
@@ -677,14 +713,52 @@ public class Viewport extends JFrame implements Runnable {
     vlog.eidebug("Multitouch listener exited");
   }
 
-  // At the moment, these two methods are used only by the Mac TurboVNC Helper.
+  static final int NS_SHIFT_KEY_MASK = 1 << 17;
+  static final int NS_CTRL_KEY_MASK = 1 << 18;
+  static final int NS_ALT_KEY_MASK = 1 << 19;
+  static final int NS_COMMAND_KEY_MASK = 1 << 20;
+
+  // At the moment, these four methods are used only by the Mac TurboVNC
+  // Helper.
+  boolean handleKeyPress(int keysym, int rfbKeyCode, int modifiers,
+                         long windowID) {
+    if (windowID != x11win || rfbKeyCode <= 0 || cc.isMenuVisible())
+      return false;
+
+    if (rfbKeyCode == cc.params.menuKey.getRFBKeyCode() &&
+        (modifiers & (NS_SHIFT_KEY_MASK | NS_CTRL_KEY_MASK |
+                      NS_ALT_KEY_MASK | NS_COMMAND_KEY_MASK)) == 0) {
+      cc.showMenu();
+      return true;
+    }
+
+    String debugStr = "key PRESS, RFB keycode 0x" +
+                      Integer.toHexString(rfbKeyCode);
+
+    cc.writeKeyPress(keysym, rfbKeyCode, debugStr);
+
+    return true;
+  }
+
+  boolean handleKeyRelease(int rfbKeyCode, long windowID) {
+    if (windowID != x11win || rfbKeyCode <= 0 || cc.isMenuVisible())
+      return false;
+
+    String debugStr = "key release, RFB keycode 0x" +
+                      Integer.toHexString(rfbKeyCode);
+
+    cc.writeKeyRelease(rfbKeyCode, debugStr);
+
+    return true;
+  }
+
   void handleTabletProximityEvent(final boolean enteringProximity,
                                   final int pointingDeviceType,
                                   long windowID) {
-    if (devices == null)
+    if (devices == null || !cc.cp.supportsGII)
       return;
 
-    synchronized(lastEvent) {
+    synchronized (lastEvent) {
       if (enteringProximity) {
         switch (pointingDeviceType) {
           case 1:  // pen
@@ -713,10 +787,10 @@ public class Viewport extends JFrame implements Runnable {
   boolean handleTabletEvent(final int type, final double x, final double y,
                             final float pressure, final float tiltX,
                             final float tiltY, long windowID) {
-    if (devices == null || windowID != x11win)
+    if (devices == null || windowID != x11win || !cc.cp.supportsGII)
       return false;
 
-    synchronized(lastEvent) {
+    synchronized (lastEvent) {
       if (lastEvent.deviceID < 0)
         // No prior proximity event was received, so we don't know which
         // tablet device is generating this event.  Punt to the regular
@@ -733,7 +807,7 @@ public class Viewport extends JFrame implements Runnable {
       SwingUtilities.invokeLater(
         new Runnable() {
           public void run() {
-            synchronized(lastEvent) {
+            synchronized (lastEvent) {
               Dimension winSize = sp.getSize();
               java.awt.Point spOffset = sp.getViewport().getViewPosition();
               ExtInputDevice dev = null;
@@ -766,7 +840,7 @@ public class Viewport extends JFrame implements Runnable {
               lastEvent.firstValuator = 0;
               lastEvent.numValuators = 5;
 
-              double xtmp = (double)x;
+              double xtmp = x;
               if (dx > 0)
                 xtmp -= (double)dx;
               xtmp += spOffset.x;
@@ -774,8 +848,7 @@ public class Viewport extends JFrame implements Runnable {
                 xtmp = (cc.desktop.scaleWidthRatio == 1.00) ? xtmp :
                         xtmp / cc.desktop.scaleWidthRatio;
               }
-              ExtInputDevice.Valuator v =
-                (ExtInputDevice.Valuator)dev.valuators.get(0);
+              ExtInputDevice.Valuator v = dev.valuators.get(0);
               lastEvent.valuators[0] = (int)(xtmp / (double)(cc.cp.width - 1) *
                                        (double)(v.rangeMax - v.rangeMin) +
                                        (double)v.rangeMin + 0.5);
@@ -792,7 +865,7 @@ public class Viewport extends JFrame implements Runnable {
                 ytmp = (cc.desktop.scaleHeightRatio == 1.00) ? ytmp :
                        ytmp / cc.desktop.scaleHeightRatio;
               }
-              v = (ExtInputDevice.Valuator)dev.valuators.get(1);
+              v = dev.valuators.get(1);
               lastEvent.valuators[1] =
                 (int)(ytmp / (double)(cc.cp.height - 1) *
                         (double)(v.rangeMax - v.rangeMin) +
@@ -818,9 +891,11 @@ public class Viewport extends JFrame implements Runnable {
     return true;
   }
 
+  int getXkbRules() { return xkbRules; }
+
   private native void x11FullScreen(boolean on);
   private native void grabKeyboard(boolean on, boolean pointer);
-  private native void setupExtInput();
+  private native void setupExtInput(boolean serverKeyMap);
   private synchronized native boolean processExtInputEvent(int type);
   private native void cleanupExtInput();
 
@@ -844,6 +919,7 @@ public class Viewport extends JFrame implements Runnable {
   int buttonPressType, buttonReleaseType, motionType;
   ArrayList<ExtInputDevice> devices;
   ExtInputEvent lastEvent = new ExtInputEvent();
+  private int xkbRules;
   Point deferredPosition;
   int leftMon, rightMon, topMon, bottomMon;
 

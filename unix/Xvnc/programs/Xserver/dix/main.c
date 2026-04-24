@@ -118,9 +118,6 @@ Equipment Corporation.
 #include "dpmsproc.h"
 #endif
 
-void InactTimerCancel(void);
-void PointerLockTimerFree(void);
-
 extern void Dispatch(void);
 
 CallbackListPtr RootWindowFinalizeCallback = NULL;
@@ -238,6 +235,8 @@ dix_main(int argc, char *argv[], char *envp[])
                        defaultCursorFont);
         }
 
+        rootCursor = RefCursor(rootCursor);
+
 #ifdef PANORAMIX
         /*
          * Consolidate window and colourmap information for each screen
@@ -278,8 +277,9 @@ dix_main(int argc, char *argv[], char *envp[])
 
         Dispatch();
 
+        UnrefCursor(rootCursor);
+
         InactTimerCancel();
-        PointerLockTimerFree();
 
         UndisplayDevices();
         DisableAllDevices();

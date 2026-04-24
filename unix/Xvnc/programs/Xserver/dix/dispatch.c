@@ -447,9 +447,10 @@ Dispatch(void)
 
                 /* now, finally, deal with client requests */
                 result = ReadRequestFromClient(client);
-                if (result <= 0) {
-                    if (result < 0)
-                        CloseDownClient(client);
+                if (result == 0)
+                    break;
+                else if (result == -1) {
+                    CloseDownClient(client);
                     break;
                 }
 
@@ -470,7 +471,7 @@ Dispatch(void)
                                           client->index,
                                           client->requestBuffer);
 #endif
-                if (result > (maxBigRequestSize << 2))
+                if (result < 0 || result > (maxBigRequestSize << 2))
                     result = BadLength;
                 else {
                     result = XaceHookDispatch(client, client->majorOp);
@@ -3039,6 +3040,10 @@ ProcFreeCursor(ClientPtr client)
     rc = dixLookupResourceByType((void **) &pCursor, stuff->id, RT_CURSOR,
                                  client, DixDestroyAccess);
     if (rc == Success) {
+        if (pCursor == rootCursor) {
+            client->errorValue = stuff->id;
+            return BadCursor;
+        }
         FreeResource(stuff->id, RT_NONE);
         return Success;
     }
