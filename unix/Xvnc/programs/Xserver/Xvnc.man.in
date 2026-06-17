@@ -92,6 +92,11 @@ argument has no effect if the \fImax-idle-timeout\fR directive is specified in
 the security configuration file and if that value is lower than \fItime\fR.
 
 .TP
+\fB\-idlefile\fR \fIname\fR
+File to create when no VNC viewer connected and delete it when there is a
+connection.
+
+.TP
 \fB\-inactsignal\fR \fsignal\fR
 Signal to send to the parent process after timeout of no input was reached.
 (default: TERM.) This argument has no effect if the \fI-inacttimeout\fR

@@ -35,6 +35,7 @@
 #include <dix-config.h>
 #endif
 
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -201,6 +202,7 @@ static CARD32 PointerLockTimerCallback(OsTimerPtr timer, CARD32 time,
 
 CARD32 rfbMaxIdleTimeout = 0;
 CARD32 rfbIdleTimeout = 0;
+char *rfbIdleFile = NULL;
 static double idleTimeout = -1.0;
 
 void IdleTimerSet(void)
@@ -208,9 +210,23 @@ void IdleTimerSet(void)
   idleTimeout = gettime() + (double)rfbIdleTimeout;
 }
 
+void IdleFileCreate(void)
+{
+  int fd = open(rfbIdleFile, O_WRONLY | O_CREAT | O_TRUNC, 0666);
+  if (fd < 0)
+    FatalError("Unable to create the idlefile.  Exiting.");
+  close(fd);
+}
+
 static void IdleTimerCancel(void)
 {
   idleTimeout = -1.0;
+}
+
+static void IdleFileDelete(void)
+{
+  if (unlink(rfbIdleFile) != 0 && errno != ENOENT)
+    FatalError("Unable to delete the idlefile.  Exiting.");
 }
 
 void IdleTimerCheck(void)
@@ -837,6 +853,8 @@ static rfbClientPtr rfbNewClient(int sock)
 
   if (rfbIdleTimeout > 0)
     IdleTimerCancel();
+  if (rfbIdleFile)
+    IdleFileDelete();
 
   cl->baseRTT = cl->minRTT = cl->minCongestedRTT = (unsigned)-1;
 
@@ -959,6 +977,8 @@ void rfbClientConnectionGone(rfbClientPtr cl)
 
   if (rfbClientHead == NULL && rfbIdleTimeout > 0)
     IdleTimerSet();
+  if (rfbClientHead == NULL && rfbIdleFile)
+    IdleFileCreate();
 }
 
 

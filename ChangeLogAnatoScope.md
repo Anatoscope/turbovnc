@@ -1,3 +1,8 @@
+3.2.2-anatoscope-1.16.0
+====
+
+The idlefile option to notify when no VNC clients are connected https://gitlab.com/anatoscope/circle/dev/orchestrator/gestion/-/work_items/899
+
 3.2.2-anatoscope-1.15.0
 ====
 
