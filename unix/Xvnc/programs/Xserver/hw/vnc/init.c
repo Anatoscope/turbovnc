@@ -282,6 +282,12 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     return 2;
   }
 
+  if (strcasecmp(argv[i], "-idlefile") == 0) {  /* -idlefile stampfile-name */
+    REQUIRE_ARG();
+    rfbIdleFile = strdup(argv[i + 1]);
+    return 2;
+  }
+
   if (strcasecmp(argv[i], "-inactsignal") == 0) {
     if (i + 1 >= argc) UseMsg();
     if (strcmp(argv[i + 1], "HUP") == 0)
@@ -315,7 +321,7 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     return 2;
   }
 
-  if (strcasecmp(argv[i], "-inacttimeout") == 0) {  /* -idletimeout sec */
+  if (strcasecmp(argv[i], "-inacttimeout") == 0) {  /* -inacttimeout sec */
     if (i + 1 >= argc) UseMsg();
     rfbInactTimeout = atoi(argv[i + 1]);
     if (rfbInactTimeout > (CARD32)-1 / 1000) UseMsg();
@@ -1848,6 +1854,8 @@ void OsVendorInit(void)
   }
   if (rfbIdleTimeout > 0)
     IdleTimerSet();
+  if (rfbIdleFile)
+    IdleFileCreate();
   if (rfbInactTimeout > 0 || rfbInactWarnTimeout > 0)
     InactTimerSet();
   if (rfbFB.width > rfbMaxWidth || rfbFB.height > rfbMaxHeight) {
@@ -1903,6 +1911,7 @@ void ddxUseMsg(void)
          "                       connection comes in, rather than refusing the new\n"
          "                       connection\n");
   ErrorF("-idletimeout S         exit if S seconds elapse with no VNC viewer connections\n");
+  ErrorF("-idlefile file         create file if no VNC viewer connections, delete it when connected\n");
   ErrorF("-inactsignal signal    signal to send to parent after timeout of no input (default: TERM)\n");
   ErrorF("-inacttimeout S        send signal to parent after S seconds of no input\n");
   ErrorF("-inactwarntimeout S    after S seconds of no input warn clients using WRNEVENT\n");
