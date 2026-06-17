@@ -92,6 +92,13 @@ argument has no effect if the \fImax-idle-timeout\fR directive is specified in
 the security configuration file and if that value is lower than \fItime\fR.
 
 .TP
+\fB\-initialidletimeout\fR \fItime\fR
+Amount of time, in seconds, that the TurboVNC session can sit idle initially
+(without VNC connection) before it automatically exits [default: no timeout].
+This argument has no effect if the \fImax-idle-timeout\fR directive is specified
+in the security configuration file and if that value is lower than \fItime\fR.
+
+.TP
 \fB\-inactsignal\fR \fsignal\fR
 Signal to send to the parent process after timeout of no input was reached.
 (default: TERM.) This argument has no effect if the \fI-inacttimeout\fR

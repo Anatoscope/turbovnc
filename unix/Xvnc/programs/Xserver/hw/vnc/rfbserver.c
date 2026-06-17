@@ -201,10 +201,15 @@ static CARD32 PointerLockTimerCallback(OsTimerPtr timer, CARD32 time,
 
 CARD32 rfbMaxIdleTimeout = 0;
 CARD32 rfbIdleTimeout = 0;
+CARD32 rfbInitialIdleTimeout = 0;
 static double idleTimeout = -1.0;
 
 void IdleTimerSet(void)
 {
+  if (rfbInitialIdleTimeout > 0) {
+    idleTimeout = gettime() + (double)rfbInitialIdleTimeout;
+    return;
+  }
   idleTimeout = gettime() + (double)rfbIdleTimeout;
 }
 
@@ -803,7 +808,7 @@ static rfbClientPtr rfbNewClient(int sock)
     rfbNumThreads = np;
   }
 
-  if (rfbIdleTimeout > 0)
+  if (rfbIdleTimeout > 0 || rfbInitialIdleTimeout > 0)
     IdleTimerCancel();
 
   cl->baseRTT = cl->minRTT = cl->minCongestedRTT = (unsigned)-1;
@@ -925,8 +930,10 @@ void rfbClientConnectionGone(rfbClientPtr cl)
 
   rfbLog("Number of connected clients: %d\n", rfbClientCount());
 
-  if (rfbClientHead == NULL && rfbIdleTimeout > 0)
+  if (rfbClientHead == NULL && rfbIdleTimeout > 0) {
+    rfbInitialIdleTimeout = 0;
     IdleTimerSet();
+  }
 }
 
 
