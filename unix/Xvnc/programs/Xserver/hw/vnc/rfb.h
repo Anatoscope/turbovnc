@@ -1052,6 +1052,7 @@ int rfbParseClSrvVerOpts(const char* optsFileName);
 
 extern CARD32 rfbMaxIdleTimeout;
 extern CARD32 rfbIdleTimeout;
+extern char *rfbIdleFile;
 extern void IdleTimerSet(void);
 extern void IdleTimerCheck(void);
 extern int rfbInactSignal;
