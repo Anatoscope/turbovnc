@@ -271,6 +271,7 @@ static void rfbPaintInactWarningWithVal(DrawablePtr drawable, void *userData)
 int rfbInactSignal = SIGTERM;
 CARD32 rfbInactTimeout = 0;
 CARD32 rfbInactWarnTimeout = 0;
+CARD32 rfbInactLogTimeout = 0;
 Bool rfbDflInactVisWarn = TRUE;
 
 static const unsigned char INACT_WARN_VIS_EVENT_MASK = 1;
@@ -279,6 +280,9 @@ static double inactTimeout = -1.0;
 static Bool inact;
 static double inactWarnTimeout = -1.0;
 static Bool inactWarn;
+static double inactLogTimeout = -1.0;
+static Bool inactLog;
+static double actLogTime = -1.0;
 
 static Bool seenInput;
 static OsTimerPtr inactRearm;
@@ -314,7 +318,8 @@ static void InactTimerRearm(void);
 static void InactTimerCheck(void)
 {
   const Bool needGetTime = (inactTimeout >= 0.0 && !inact) ||
-                           inactWarnTimeout >= 0.0;
+                           inactWarnTimeout >= 0.0 ||
+                           (inactLogTimeout >= 0.0 && !inactLog);
   const double currTime = needGetTime ? gettime() : 0.0;
 
   if (inactTimeout >= 0.0 && !inact && currTime >= inactTimeout) {
@@ -366,6 +371,14 @@ static void InactTimerCheck(void)
       if (cl->visEventMask & INACT_WARN_VIS_EVENT_MASK)
         if (!cl->deferredUpdateScheduled)
           rfbSendFramebufferUpdate(cl);
+  }
+
+  if (inactLogTimeout >= 0.0 && !inactLog && currTime >= inactLogTimeout) {
+    inactLog = TRUE; // Start of inactivity.
+    if (actLogTime >= 0.0) {
+      rfbLog("type=activity duration_ms=%d\n", (int)(((currTime - (double)rfbInactLogTimeout) - actLogTime) * 1000));
+      actLogTime = -1.0;
+    }
   }
 }
 
@@ -422,14 +435,34 @@ void InactTimerSet(void)
     }
   }
 
+  if (rfbInactLogTimeout > 0) {
+    if (inactLog) { // End of inactivity.
+      rfbLog("type=inactivity duration_ms=%d\n", (int)((currTime - (inactLogTimeout - (double)rfbInactLogTimeout)) * 1000));
+      inactLog = FALSE;
+      actLogTime = currTime;
+    }
+
+    inactLogTimeout = currTime + (double)rfbInactLogTimeout;
+  }
+
   InactTimerRearm();
 }
 
 void InactTimerCancel(void)
 {
+  rfbLog("InactTimerCancel inactLog: %d actLogTime: %f\n", inactLog, actLogTime);
+  if (rfbInactLogTimeout > 0) { // Timer is being destroyed, log the current state.
+    const double currTime = gettime();
+    if (actLogTime >= 0.0) {
+      rfbLog("type=activity dbg2 duration_ms=%d\n", (int)((currTime - actLogTime) * 1000));
+    } else {
+      rfbLog("type=inactivity dbg2 duration_ms=%d\n", (int)((currTime - (inactLogTimeout - (double)rfbInactLogTimeout)) * 1000));
+    }
+  }
   TimerFree(inactRearm);
   inactTimeout = -1.0;
   inactWarnTimeout = -1.0;
+  inactLogTimeout = -1.0;
 }
 
 

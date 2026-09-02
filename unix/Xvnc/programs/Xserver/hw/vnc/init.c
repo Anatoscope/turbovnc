@@ -329,6 +329,13 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     return 2;
   }
 
+  if (strcasecmp(argv[i], "-inactlogtimeout") == 0) {  /* -inactlogtimeout sec */
+    if (i + 1 >= argc) UseMsg();
+    rfbInactLogTimeout = atoi(argv[i + 1]);
+    if (rfbInactLogTimeout > (CARD32)-1 / 1000) UseMsg();
+    return 2;
+  }
+
   if (strcasecmp(argv[i], "-inetd") == 0) {  /* -inetd */
     int n, nullFD;
 
@@ -1848,7 +1855,7 @@ void OsVendorInit(void)
   }
   if (rfbIdleTimeout > 0)
     IdleTimerSet();
-  if (rfbInactTimeout > 0 || rfbInactWarnTimeout > 0)
+  if (rfbInactTimeout > 0 || rfbInactWarnTimeout > 0 || rfbInactLogTimeout > 0)
     InactTimerSet();
   if (rfbFB.width > rfbMaxWidth || rfbFB.height > rfbMaxHeight) {
     rfbFB.width = min(rfbFB.width, rfbMaxWidth);
@@ -1906,6 +1913,7 @@ void ddxUseMsg(void)
   ErrorF("-inactsignal signal    signal to send to parent after timeout of no input (default: TERM)\n");
   ErrorF("-inacttimeout S        send signal to parent after S seconds of no input\n");
   ErrorF("-inactwarntimeout S    after S seconds of no input warn clients using WRNEVENT\n");
+  ErrorF("-inactlogtimeout S     after S seconds of no input log the inactivity\n");
   ErrorF("-inetd                 Xvnc is launched by inetd\n");
   ErrorF("-interface ipaddr      only bind to specified interface address\n");
   ErrorF("-ipv6                  enable IPv6 support\n");
