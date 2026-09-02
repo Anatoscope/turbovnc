@@ -12,6 +12,7 @@ Main features:
   * sending a signal to the parent process
   * sending a warning to clients via `WRNEVENT`
   * cf `-inactwarntimeout` / `-inacttimeout` / `-inactsignal`
+  * tracing inactivity in the logs (`-inactlogtimeout`)
 * extensions to the RFB protocol
   * `CLSRVVER`: to allow client / server to exchange their respective version numbers (cf `-clsrvverfile`)
   * `MAXDELAY`: an alternative to `JPEGQLVL` for *automatic* image quality adaptation

@@ -1057,6 +1057,7 @@ extern void IdleTimerCheck(void);
 extern int rfbInactSignal;
 extern CARD32 rfbInactTimeout;
 extern CARD32 rfbInactWarnTimeout;
+extern CARD32 rfbInactLogTimeout;
 extern Bool rfbDflInactVisWarn;
 extern void InactTimerSet(void);
 extern void InactTimerCancel(void);

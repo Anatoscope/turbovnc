@@ -108,6 +108,11 @@ Amount of time, in seconds, after which to send a warning to the clients
 using the AnatoScope WRNEVENT extension of the RFB protocol.
 
 .TP
+\fB\-inactlogtimeout\fR \ftime\fR
+Amount of time, in seconds, after which to consider an inactivity worthy
+of logging.
+
+.TP
 \fB\-inetd\fR
 If Xvnc is launched by inetd, this option causes Xvnc to redirect network
 input/output to stdin/stdout.
