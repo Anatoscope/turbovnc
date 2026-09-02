@@ -426,12 +426,16 @@ Dispatch(void)
 	*  each round
 	*****************/
 
+        fprintf(stderr, "Handle events\n");
+        fflush(stderr);
         if (!dispatchException && clients_are_ready()) {
             client = SmartScheduleClient();
 
             isItTimeToYield = FALSE;
 
             start_tick = SmartScheduleTime;
+            fprintf(stderr, "Handle events loop\n");
+            fflush(stderr);
             while (!isItTimeToYield) {
                 if (InputCheckPending())
                     ProcessInputEvents();
@@ -450,10 +454,14 @@ Dispatch(void)
                 if (result == 0)
                     break;
                 else if (result == -1) {
+                    fprintf(stderr, "dispatch CloseDownClient\n");
+                    fflush(stderr);
                     CloseDownClient(client);
                     break;
                 }
 
+                fprintf(stderr, "dispatch seq\n");
+                fflush(stderr);
                 client->sequence++;
                 client->majorOp = ((xReq *) client->requestBuffer)->reqType;
                 client->minorOp = 0;
@@ -471,6 +479,8 @@ Dispatch(void)
                                           client->index,
                                           client->requestBuffer);
 #endif
+                fprintf(stderr, "dispatch result %d\n", result);
+                fflush(stderr);
                 if (result < 0 || result > (maxBigRequestSize << 2))
                     result = BadLength;
                 else {
@@ -489,7 +499,11 @@ Dispatch(void)
                                          client->index, result);
 #endif
 
+                fprintf(stderr, "dispatch check\n");
+                fflush(stderr);
                 if (client->noClientException != Success) {
+                    fprintf(stderr, "dispatch CloseDownClient\n");
+                    fflush(stderr);
                     CloseDownClient(client);
                     break;
                 }
@@ -500,12 +514,16 @@ Dispatch(void)
                     break;
                 }
             }
+            fprintf(stderr, "dispatch FlushAllOutput\n");
+            fflush(stderr);
             FlushAllOutput();
             if (client == SmartLastClient)
                 client->smart_stop_tick = SmartScheduleTime;
         }
         dispatchException &= ~DE_PRIORITYCHANGE;
     }
+    fprintf(stderr, "KillAllClients\n");
+    fflush(stderr);
 #if defined(DDXBEFORERESET)
     ddxBeforeReset();
 #endif

@@ -413,6 +413,8 @@ AutoResetServer(int sig)
 void
 GiveUp(int sig)
 {
+    fprintf(stderr, "Got signal %d\n", sig);
+    fflush(stderr);
     int olderrno = errno;
 
     dispatchException |= DE_TERMINATE;
