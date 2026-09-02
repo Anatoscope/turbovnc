@@ -299,6 +299,8 @@ CreateWellKnownSockets(void)
     OsSignal(SIGPIPE, SIG_IGN);
     OsSignal(SIGHUP, AutoResetServer);
 #endif
+    fprintf(stderr, "Signals set SIGINT SIGTERM\n");
+    fflush(stderr);
     OsSignal(SIGINT, GiveUp);
     OsSignal(SIGTERM, GiveUp);
     ResetHosts(display);

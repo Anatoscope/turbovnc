@@ -275,11 +275,19 @@ dix_main(int argc, char *argv[], char *envp[])
 
         InputThreadInit();
 
+        fprintf(stderr, "Dispatch called\n");
+        fflush(stderr);
         Dispatch();
+        fprintf(stderr, "Dispatch done\n");
+        fflush(stderr);
 
         UnrefCursor(rootCursor);
 
+        fprintf(stderr, "InactTimerCancel called\n");
+        fflush(stderr);
         InactTimerCancel();
+        fprintf(stderr, "InactTimerCancel done\n");
+        fflush(stderr);
 
         UndisplayDevices();
         DisableAllDevices();
