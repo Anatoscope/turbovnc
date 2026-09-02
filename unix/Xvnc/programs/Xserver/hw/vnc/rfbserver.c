@@ -276,6 +276,8 @@ Bool rfbDflInactVisWarn = TRUE;
 
 static const unsigned char INACT_WARN_VIS_EVENT_MASK = 1;
 
+static const CARD32 INACT_REARM_TIME_MS = 500;
+
 static double inactTimeout = -1.0;
 static Bool inact;
 static double inactWarnTimeout = -1.0;
@@ -376,7 +378,7 @@ static void InactTimerCheck(void)
   if (inactLogTimeout >= 0.0 && !inactLog && currTime >= inactLogTimeout) {
     inactLog = TRUE; // Start of inactivity.
     if (actLogTime >= 0.0) {
-      rfbLog("type=activity duration_ms=%d\n", (int)((actLogTime - (double)rfbInactLogTimeout) * 1000));
+      rfbLog("type=activity duration_ms=%d\n", (int)(((currTime - (double)rfbInactLogTimeout) - actLogTime) * 1000));
     }
   }
 }
@@ -398,7 +400,7 @@ static CARD32 InactTimerRearmCallback(OsTimerPtr timer, CARD32 time, void *arg)
 
 static void InactTimerRearm(void)
 {
-  inactRearm = TimerSet(inactRearm, 0, (CARD32)500, InactTimerRearmCallback, NULL);
+  inactRearm = TimerSet(inactRearm, 0, INACT_REARM_TIME_MS, InactTimerRearmCallback, NULL);
 }
 
 void InactTimerSet(void)
@@ -436,7 +438,7 @@ void InactTimerSet(void)
 
   if (rfbInactLogTimeout > 0) {
     if (inactLog) { // End of inactivity.
-      rfbLog("type=inactivity duration_ms=%d\n", (int)((inactLogTimeout - (double)rfbInactLogTimeout) * 1000));
+      rfbLog("type=inactivity duration_ms=%d\n", (int)((currTime - (inactLogTimeout - (double)rfbInactLogTimeout) - INACT_REARM_TIME_MS / 1000.) * 1000));
       inactLog = FALSE;
       actLogTime = currTime;
     }
