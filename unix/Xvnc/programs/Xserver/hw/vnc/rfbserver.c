@@ -376,7 +376,7 @@ static void InactTimerCheck(void)
   if (inactLogTimeout >= 0.0 && !inactLog && currTime >= inactLogTimeout) {
     inactLog = TRUE; // Start of inactivity.
     if (actLogTime >= 0.0) {
-      rfbLog("type=activity duration_ms=%d\n", (int)((actLogTime - (double)rfbInactLogTimeout) * 1000));
+      rfbLog("type=activity duration_ms=%d\n", (int)(((currTime - (double)rfbInactLogTimeout) - actLogTime) * 1000));
     }
   }
 }
@@ -436,7 +436,7 @@ void InactTimerSet(void)
 
   if (rfbInactLogTimeout > 0) {
     if (inactLog) { // End of inactivity.
-      rfbLog("type=inactivity duration_ms=%d\n", (int)((inactLogTimeout - (double)rfbInactLogTimeout) * 1000));
+      rfbLog("type=inactivity duration_ms=%d\n", (int)((currTime - (inactLogTimeout - (double)rfbInactLogTimeout)) * 1000));
       inactLog = FALSE;
       actLogTime = currTime;
     }
