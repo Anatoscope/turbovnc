@@ -1,3 +1,8 @@
+3.2.2-anatoscope-1.15.0
+====
+
+Trace user inactivity in the logs https://gitlab.com/anatoscope/circle/dev/orchestrator/gestion/-/work_items/1050
+
 3.2.2-anatoscope-1.14.2
 ====
 
