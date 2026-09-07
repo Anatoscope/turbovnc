@@ -450,9 +450,10 @@ void InactTimerSet(void)
 
 void InactTimerCancel(void)
 {
+  rfbLog("InactTimerCancel\n");
   if (rfbInactLogTimeout > 0) { // Timer is being destroyed, log the current state.
     const double currTime = gettime();
-    rfbLog("Tracing");
+    rfbLog("Tracing\n");
     if (actLogTime >= 0.0) {
       rfbLog("type=activity duration_ms=%d\n", (int)((currTime - actLogTime) * 1000));
     } else {
