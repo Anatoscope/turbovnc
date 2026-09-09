@@ -376,7 +376,7 @@ static void InactTimerCheck(void)
   if (inactLogTimeout >= 0.0 && !inactLog && currTime >= inactLogTimeout) {
     inactLog = TRUE; // Start of inactivity.
     if (actLogTime >= 0.0) {
-      rfbLog("type=activity duration_ms=%d\n", (int)(((currTime - (double)rfbInactLogTimeout) - actLogTime) * 1000));
+      rfbLog("type=activity duration_ms=%d logdelay_ms=%d\n", (int)(((currTime - (double)rfbInactLogTimeout) - actLogTime) * 1000), (int)rfbInactLogTimeout * 1000);
       actLogTime = -1.0;
     }
   }
@@ -437,7 +437,7 @@ void InactTimerSet(void)
 
   if (rfbInactLogTimeout > 0) {
     if (inactLog) { // End of inactivity.
-      rfbLog("type=inactivity duration_ms=%d\n", (int)((currTime - (inactLogTimeout - (double)rfbInactLogTimeout)) * 1000));
+      rfbLog("type=inactivity duration_ms=%d logdelay_ms=%d\n", (int)((currTime - (inactLogTimeout - (double)rfbInactLogTimeout)) * 1000), 0);
       inactLog = FALSE;
       actLogTime = currTime;
     }
@@ -453,9 +453,9 @@ void InactTimerCancel(void)
   if (rfbInactLogTimeout > 0) { // Timer is being destroyed, log the current state.
     const double currTime = gettime();
     if (actLogTime >= 0.0) {
-      rfbLog("type=activity duration_ms=%d\n", (int)((currTime - actLogTime) * 1000));
+      rfbLog("type=activity duration_ms=%d logdelay_ms=%d\n", (int)((currTime - actLogTime) * 1000), 0);
     } else {
-      rfbLog("type=inactivity duration_ms=%d\n", (int)((currTime - (inactLogTimeout - (double)rfbInactLogTimeout)) * 1000));
+      rfbLog("type=inactivity duration_ms=%d logdelay_ms=%d\n", (int)((currTime - (inactLogTimeout - (double)rfbInactLogTimeout)) * 1000), 0);
     }
   }
   TimerFree(inactRearm);
