@@ -1,3 +1,8 @@
+3.2.2-anatoscope-1.17.0
+====
+
+The hardstopsignal option for the hard timeout https://gitlab.com/anatoscope/circle/dev/orchestrator/gestion/-/work_items/900
+
 3.2.2-anatoscope-1.16.1
 ====
 
