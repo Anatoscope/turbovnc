@@ -280,6 +280,7 @@ dix_main(int argc, char *argv[], char *envp[])
         UnrefCursor(rootCursor);
 
         InactTimerCancel();
+        HardStopTimerCancel();
 
         UndisplayDevices();
         DisableAllDevices();

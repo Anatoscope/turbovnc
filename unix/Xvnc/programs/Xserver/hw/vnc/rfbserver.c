@@ -110,7 +110,7 @@ static const CARD32 ADAPT_REASSES_TIME_MS = 1000;
  */
 static const CARD32 BEFORE_FIRST_ADAPT_TIME_MS = 2000;
 
-static const unsigned char INACT_WARN_EVENT_MASK = 1;
+static const unsigned char TIMED_WARN_EVENT_MASK = 1;
 static const unsigned char QUAL_WARN_EVENT_MASK = 2;
 
 /*
@@ -247,10 +247,16 @@ void LastConnFileCreate(void)
 
 
 /*
- * Inactivity timeout
+ * Inactivity and hard stop timeouts
  */
 
-static Bool rfbSendInactWarnTimeout(rfbClientPtr cl, CARD32 timeLeftMs, CARD32 reasonCode)
+enum TimedReasonCode {
+  INACT_TIMEOUT_ACT = 0,
+  INACT_TIMEOUT_DEACT = 1,
+  HARD_STOP_TIMEOUT_ACT = 2,
+};
+
+static Bool rfbSendWarnEvent(rfbClientPtr cl, double totalTimeout, double totalWarnTimeout, CARD32 timeLeftMs, CARD32 reasonCode)
 {
   struct {
     rfbFramebufferUpdateMsg fu;
@@ -258,29 +264,29 @@ static Bool rfbSendInactWarnTimeout(rfbClientPtr cl, CARD32 timeLeftMs, CARD32 r
     rfbWarnEventTimedHeader e;
   } fbu;
 
-#define STATIC_ASSERT_InactWarn(cond) switch(0){case 0:case (cond):;}
-  STATIC_ASSERT_InactWarn(sizeof(fbu) ==
+#define STATIC_ASSERT_TimedWarn(cond) switch(0){case 0:case (cond):;}
+  STATIC_ASSERT_TimedWarn(sizeof(fbu) ==
     sz_rfbFramebufferUpdateMsg + sz_rfbFramebufferUpdateRectHeader + sz_rfbWarnEventTimed)
-#undef STATIC_ASSERT_InactWarn
+#undef STATIC_ASSERT_TimedWarn
 
   memset(&fbu.fu, 0, sz_rfbFramebufferUpdateMsg);
   fbu.fu.type = rfbFramebufferUpdate;
   fbu.fu.nRects = Swap16IfLE(1);
 
   memset(&fbu.rh, 0, sz_rfbFramebufferUpdateRectHeader);
-  fbu.rh.encoding = Swap32IfLE(rfbEncodingWarnEventAllOff | INACT_WARN_EVENT_MASK);
+  fbu.rh.encoding = Swap32IfLE(rfbEncodingWarnEventAllOff | TIMED_WARN_EVENT_MASK);
 
-  const CARD32 inactTimeoutMs = rfbInactTimeout * 1000;
-  const CARD32 inactWarnTimeoutMs = rfbInactWarnTimeout * 1000;
+  const CARD32 totalTimeoutMs = totalTimeout * 1000;
+  const CARD32 totalWarnTimeoutMs = totalWarnTimeout * 1000;
 
   fbu.e.header.infoLength = Swap32IfLE(sz_rfbWarnEventTimed - sizeof(CARD32));
   fbu.e.header.infoKind = Swap32IfLE(reasonCode);
   fbu.e.timeLeftMs = Swap32IfLE(timeLeftMs);
-  fbu.e.totalTimeoutMs = Swap32IfLE(inactTimeoutMs);
-  fbu.e.totalWarnTimeoutMs = Swap32IfLE(inactWarnTimeoutMs);
+  fbu.e.totalTimeoutMs = Swap32IfLE(totalTimeoutMs);
+  fbu.e.totalWarnTimeoutMs = Swap32IfLE(totalWarnTimeoutMs);
 
   if (WriteExact(cl, (char *)&fbu, sizeof(fbu)) < 0) {
-    rfbLogPerror("rfbSendInactWarnTimeout: write");
+    rfbLogPerror("rfbSendWarnEvent: write");
     rfbCloseClient(cl);
     return FALSE;
   }
@@ -368,8 +374,8 @@ static void InactTimerCheck(void)
 
     rfbClientPtr cl;
     for (cl = rfbClientHead; cl; cl = cl->next)
-      if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
-        rfbSendInactWarnTimeout(cl, timeLeftMs, 0);
+      if (cl->warnEventMask & TIMED_WARN_EVENT_MASK)
+        rfbSendWarnEvent(cl, rfbInactTimeout, rfbInactWarnTimeout, timeLeftMs, INACT_TIMEOUT_ACT);
   }
 
   if (inactWarn) {
@@ -446,8 +452,8 @@ void InactTimerSet(void)
 
       rfbClientPtr cl;
       for (cl = rfbClientHead; cl; cl = cl->next) {
-        if (cl->warnEventMask & INACT_WARN_EVENT_MASK)
-          rfbSendInactWarnTimeout(cl, 0, 1);
+        if (cl->warnEventMask & TIMED_WARN_EVENT_MASK)
+          rfbSendWarnEvent(cl, rfbInactTimeout, rfbInactWarnTimeout, 0, INACT_TIMEOUT_DEACT);
 
         cl->inactWarnWasChanged = TRUE;
 
@@ -487,6 +493,84 @@ void InactTimerCancel(void)
   inactTimeout = -1.0;
   inactWarnTimeout = -1.0;
   inactLogTimeout = -1.0;
+}
+
+
+int rfbHardStopSignal = SIGTERM;
+CARD32 rfbHardStopTimeout = 0;
+CARD32 rfbHardStopWarnTimeout = 0;
+static Bool hardStopWarn;
+
+static double hardStopTimeout = -1.0;
+static double hardStopWarnTimeout = -1.0;
+
+static OsTimerPtr hardStopRearm;
+
+static void HardStopTimerRearm(double currTime);
+
+static double HardStopTimerCheck(void)
+{
+  const double currTime = gettime();
+
+  if (hardStopTimeout >= 0.0 && currTime >= hardStopTimeout) {
+    rfbLog("Hard stop time has come after %u seconds. Sending signal %d to parent process.\n",
+           (unsigned int)rfbHardStopTimeout, rfbHardStopSignal);
+
+    kill(getppid(), rfbHardStopSignal);
+  }
+
+  if (hardStopWarnTimeout >= 0.0 && !hardStopWarn && currTime >= hardStopWarnTimeout) {
+
+    hardStopWarn = TRUE;
+
+    rfbLog("Hard stop warning time has come after %u seconds. Sending warnings to clients.\n",
+           (unsigned int)rfbHardStopWarnTimeout);
+
+    const CARD32 timeLeftMs = hardStopTimeout > 0.0 ? (hardStopTimeout - currTime) * 1000 : 0;
+
+    rfbClientPtr cl;
+    for (cl = rfbClientHead; cl; cl = cl->next)
+      if (cl->warnEventMask & TIMED_WARN_EVENT_MASK)
+        rfbSendWarnEvent(cl, rfbHardStopTimeout, rfbHardStopWarnTimeout, timeLeftMs, HARD_STOP_TIMEOUT_ACT);
+  }
+
+  return currTime;
+}
+
+static CARD32 HardStopTimerRearmCallback(OsTimerPtr timer, CARD32 time, void *arg)
+{
+  HardStopTimerRearm(HardStopTimerCheck());
+  return 0;
+}
+
+static void HardStopTimerRearm(double currTime)
+{
+  double nextTimeout = hardStopTimeout < 0 ? hardStopWarnTimeout : hardStopWarnTimeout < 0 ? hardStopTimeout : min(hardStopTimeout, hardStopWarnTimeout);
+  if (nextTimeout > currTime) {
+    hardStopRearm = TimerSet(hardStopRearm, 0, (CARD32)ceil((nextTimeout - currTime) * 1000), HardStopTimerRearmCallback, NULL);
+  }
+}
+
+void HardStopTimerSet(void)
+{
+  const double currTime = gettime();
+
+  if (rfbHardStopTimeout > 0) {
+    hardStopTimeout = currTime + (double)rfbHardStopTimeout;
+  }
+
+  if (rfbHardStopWarnTimeout > 0) {
+    hardStopWarnTimeout = currTime + (double)rfbHardStopWarnTimeout;
+  }
+
+  HardStopTimerRearm(currTime);
+}
+
+void HardStopTimerCancel(void)
+{
+  TimerFree(hardStopRearm);
+  hardStopTimeout = -1.0;
+  hardStopWarnTimeout = -1.0;
 }
 
 
@@ -1593,7 +1677,7 @@ static void rfbProcessClientNormalMessage(rfbClientPtr cl)
                        enc <= (CARD32)rfbEncodingWarnEventAllOn) {
               RFBLOGID("Setting WarnEvent mask 0x%x\n", enc & 0xFF);
               cl->warnEventMask = enc & 0xFF;
-              cl->needSendFirstInactWarn = cl->warnEventMask & INACT_WARN_EVENT_MASK;
+              cl->needSendFirstInactWarn = cl->warnEventMask & TIMED_WARN_EVENT_MASK;
               cl->needSendFirstAutoQualityInfo = cl->warnEventMask & QUAL_WARN_EVENT_MASK;
             } else if (enc >= (CARD32)rfbEncodingVisEventAllOff &&
                        enc <= (CARD32)rfbEncodingVisEventAllOn) {
@@ -2875,10 +2959,10 @@ Bool rfbSendFramebufferUpdate(rfbClientPtr cl)
    * a separate FBU about inactivity.
    */
 
-  if (cl->needSendFirstInactWarn && (cl->warnEventMask & INACT_WARN_EVENT_MASK) && inactWarn) {
+  if (cl->needSendFirstInactWarn && (cl->warnEventMask & TIMED_WARN_EVENT_MASK) && inactWarn) {
     const double currTime = gettime();
     const CARD32 timeLeftMs = inactTimeout > currTime ? (inactTimeout - currTime) * 1000 : 0;
-    rfbSendInactWarnTimeout(cl, timeLeftMs, 0);
+    rfbSendWarnEvent(cl, rfbInactTimeout, rfbInactWarnTimeout, timeLeftMs, INACT_TIMEOUT_ACT);
   }
 
   cl->needSendFirstInactWarn = FALSE;
