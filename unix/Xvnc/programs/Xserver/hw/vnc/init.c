@@ -206,6 +206,37 @@ static void InitRFB(void)
 }
 
 
+static int parseSignal(char *s)
+{
+    if (strcmp(s, "HUP") == 0)
+        return SIGHUP;
+    else if (strcmp(s, "INT") == 0)
+        return SIGINT;
+    else if (strcmp(s, "QUIT") == 0)
+        return SIGQUIT;
+    else if (strcmp(s, "ABRT") == 0)
+        return SIGABRT;
+    else if (strcmp(s, "BUS") == 0)
+        return SIGBUS;
+    else if (strcmp(s, "KILL") == 0)
+        return SIGKILL;
+    else if (strcmp(s, "USR1") == 0)
+        return SIGUSR1;
+    else if (strcmp(s, "USR2") == 0)
+        return SIGUSR2;
+    else if (strcmp(s, "PIPE") == 0)
+        return SIGPIPE;
+    else if (strcmp(s, "ALRM") == 0)
+        return SIGALRM;
+    else if (strcmp(s, "TERM") == 0)
+        return SIGTERM;
+    else if (strcmp(s, "CHLD") == 0)
+        return SIGCHLD;
+
+    return 0;
+}
+
+
 /*
  * ddxProcessArgument is our first entry point and will be called at the
  * very start for each argument.  It is not called again on server reset.
@@ -295,33 +326,13 @@ int ddxProcessArgument(int argc, char *argv[], int i)
   }
 
   if (strcasecmp(argv[i], "-inactsignal") == 0) {
-    if (i + 1 >= argc) UseMsg();
-    if (strcmp(argv[i + 1], "HUP") == 0)
-      rfbInactSignal = SIGHUP;
-    else if (strcmp(argv[i + 1], "INT") == 0)
-      rfbInactSignal = SIGINT;
-    else if (strcmp(argv[i + 1], "QUIT") == 0)
-      rfbInactSignal = SIGQUIT;
-    else if (strcmp(argv[i + 1], "ABRT") == 0)
-      rfbInactSignal = SIGABRT;
-    else if (strcmp(argv[i + 1], "BUS") == 0)
-      rfbInactSignal = SIGBUS;
-    else if (strcmp(argv[i + 1], "KILL") == 0)
-      rfbInactSignal = SIGKILL;
-    else if (strcmp(argv[i + 1], "USR1") == 0)
-      rfbInactSignal = SIGUSR1;
-    else if (strcmp(argv[i + 1], "USR2") == 0)
-      rfbInactSignal = SIGUSR2;
-    else if (strcmp(argv[i + 1], "USR2") == 0)
-      rfbInactSignal = SIGUSR2;
-    else if (strcmp(argv[i + 1], "PIPE") == 0)
-      rfbInactSignal = SIGPIPE;
-    else if (strcmp(argv[i + 1], "ALRM") == 0)
-      rfbInactSignal = SIGALRM;
-    else if (strcmp(argv[i + 1], "TERM") == 0)
-      rfbInactSignal = SIGTERM;
-    else if (strcmp(argv[i + 1], "CHLD") == 0)
-      rfbInactSignal = SIGCHLD;
+    if (i + 1 >= argc) {
+      UseMsg();
+      return 1;
+    }
+    int inactSignal = parseSignal(argv[i + 1]);
+    if (inactSignal)
+      rfbInactSignal = inactSignal;
     else
       UseMsg();
     return 2;
@@ -345,6 +356,33 @@ int ddxProcessArgument(int argc, char *argv[], int i)
     if (i + 1 >= argc) UseMsg();
     rfbInactLogTimeout = atoi(argv[i + 1]);
     if (rfbInactLogTimeout > (CARD32)-1 / 1000) UseMsg();
+    return 2;
+  }
+
+  if (strcasecmp(argv[i], "-hardstopsignal") == 0) {
+    if (i + 1 >= argc) {
+      UseMsg();
+      return 1;
+    }
+    int hardStopSignal = parseSignal(argv[i + 1]);
+    if (hardStopSignal)
+      rfbHardStopSignal = hardStopSignal;
+    else
+      UseMsg();
+    return 2;
+  }
+
+  if (strcasecmp(argv[i], "-hardstoptimeout") == 0) {  /* -hardstoptimeout sec */
+    if (i + 1 >= argc) UseMsg();
+    rfbHardStopTimeout = atoi(argv[i + 1]);
+    if (rfbHardStopTimeout > (CARD32)-1 / 1000) UseMsg();
+    return 2;
+  }
+
+  if (strcasecmp(argv[i], "-hardstopwarntimeout") == 0) {  /* -hardstopwarntimeout sec */
+    if (i + 1 >= argc) UseMsg();
+    rfbHardStopWarnTimeout = atoi(argv[i + 1]);
+    if (rfbHardStopWarnTimeout > (CARD32)-1 / 1000) UseMsg();
     return 2;
   }
 
@@ -1871,6 +1909,8 @@ void OsVendorInit(void)
     IdleFileCreate();
   if (rfbInactTimeout > 0 || rfbInactWarnTimeout > 0 || rfbInactLogTimeout > 0)
     InactTimerSet();
+  if (rfbHardStopTimeout > 0 || rfbHardStopWarnTimeout > 0)
+    HardStopTimerSet();
   if (rfbFB.width > rfbMaxWidth || rfbFB.height > rfbMaxHeight) {
     rfbFB.width = min(rfbFB.width, rfbMaxWidth);
     rfbFB.height = min(rfbFB.height, rfbMaxHeight);
@@ -1929,6 +1969,9 @@ void ddxUseMsg(void)
   ErrorF("-inacttimeout S        send signal to parent after S seconds of no input\n");
   ErrorF("-inactwarntimeout S    after S seconds of no input warn clients using WRNEVENT\n");
   ErrorF("-inactlogtimeout S     after S seconds of no input log the inactivity\n");
+  ErrorF("-hardstopsignal signal signal to send to parent after timeout (default: TERM)\n");
+  ErrorF("-hardstoptimeout S     send signal to parent after S seconds\n");
+  ErrorF("-hardstopwarntimeout S after S seconds warn clients using WRNEVENT\n");
   ErrorF("-inetd                 Xvnc is launched by inetd\n");
   ErrorF("-interface ipaddr      only bind to specified interface address\n");
   ErrorF("-ipv6                  enable IPv6 support\n");
