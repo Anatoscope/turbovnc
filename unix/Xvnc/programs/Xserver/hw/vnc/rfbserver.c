@@ -511,6 +511,7 @@ static void HardStopTimerRearm(double currTime);
 static double HardStopTimerCheck(void)
 {
   const double currTime = gettime();
+  rfbLog("HardStopTimerCheck %f %f %f.\n", currTime, hardStopTimeout, hardStopWarnTimeout);
 
   if (hardStopTimeout >= 0.0 && currTime >= hardStopTimeout) {
     rfbLog("Hard stop time has come after %u seconds. Sending signal %d to parent process.\n",
@@ -545,8 +546,10 @@ static CARD32 HardStopTimerRearmCallback(OsTimerPtr timer, CARD32 time, void *ar
 
 static void HardStopTimerRearm(double currTime)
 {
+  rfbLog("Arming hard stop %f %f.\n", hardStopTimeout, hardStopWarnTimeout);
   double nextTimeout = hardStopTimeout < 0 ? hardStopWarnTimeout : hardStopWarnTimeout < 0 ? hardStopTimeout : min(hardStopTimeout, hardStopWarnTimeout);
   if (nextTimeout > currTime) {
+    rfbLog("Arming hard stop for %f.\n", nextTimeout);
     hardStopRearm = TimerSet(hardStopRearm, 0, (CARD32)ceil((nextTimeout - currTime) * 1000), HardStopTimerRearmCallback, NULL);
   }
 }
@@ -554,6 +557,8 @@ static void HardStopTimerRearm(double currTime)
 void HardStopTimerSet(void)
 {
   const double currTime = gettime();
+  rfbLog("HardStopTimerSet %u seconds. signal %d, warn %u seconds.\n",
+         (unsigned int)rfbHardStopTimeout, rfbHardStopSignal, (unsigned int)rfbHardStopWarnTimeout);
 
   if (rfbHardStopTimeout > 0) {
     hardStopTimeout = currTime + (double)rfbHardStopTimeout;
