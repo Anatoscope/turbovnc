@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.16...3.28)
 
 project(TurboVNC NONE)
 string(TOLOWER ${CMAKE_PROJECT_NAME} CMAKE_PROJECT_NAME_LC)
-set(VERSION 3.2.2-anatoscope-1.17.0)
+set(VERSION 3.2.2-anatoscope-1.17.0-rc2)
 set(DOCVERSION 3.2.2-anatoscope-1.17.0)
 set(COPYRIGHT_YEAR "1999-2026")
 set(COPYRIGHT "The VirtualGL Project and many others (see README.md)")
