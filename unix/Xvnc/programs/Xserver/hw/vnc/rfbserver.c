@@ -247,6 +247,12 @@ void LastConnFileCreate(void)
 
 
 /*
+ * First connection
+ */
+
+Bool rfbGotFirstConnection;
+
+/*
  * Inactivity timeout
  */
 
@@ -866,6 +872,10 @@ static rfbClientPtr rfbNewClient(int sock)
     IdleFileDelete();
   if (rfbLastConnFile)
     LastConnFileCreate();
+
+  if (!rfbGotFirstConnection && (rfbInactTimeout > 0 || rfbInactWarnTimeout > 0 || rfbInactLogTimeout > 0))
+    InactTimerSet();
+  rfbGotFirstConnection = TRUE;
 
   cl->baseRTT = cl->minRTT = cl->minCongestedRTT = (unsigned)-1;
 

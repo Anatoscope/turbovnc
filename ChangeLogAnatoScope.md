@@ -1,3 +1,8 @@
+3.2.2-anatoscope-1.16.1
+====
+
+Start inactivity timer only after the first connection https://gitlab.com/anatoscope/circle/dev/orchestrator/gestion/-/work_items/1107
+
 3.2.2-anatoscope-1.16.0
 ====
 

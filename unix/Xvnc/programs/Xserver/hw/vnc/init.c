@@ -1869,8 +1869,6 @@ void OsVendorInit(void)
     IdleTimerSet();
   if (rfbIdleFile)
     IdleFileCreate();
-  if (rfbInactTimeout > 0 || rfbInactWarnTimeout > 0 || rfbInactLogTimeout > 0)
-    InactTimerSet();
   if (rfbFB.width > rfbMaxWidth || rfbFB.height > rfbMaxHeight) {
     rfbFB.width = min(rfbFB.width, rfbMaxWidth);
     rfbFB.height = min(rfbFB.height, rfbMaxHeight);
