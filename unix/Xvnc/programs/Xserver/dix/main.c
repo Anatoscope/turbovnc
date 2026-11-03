@@ -122,6 +122,9 @@ extern void Dispatch(void);
 
 CallbackListPtr RootWindowFinalizeCallback = NULL;
 
+void InactTimerCancel(void);
+void HardStopTimerCancel(void);
+
 int
 dix_main(int argc, char *argv[], char *envp[])
 {
@@ -280,6 +283,7 @@ dix_main(int argc, char *argv[], char *envp[])
         UnrefCursor(rootCursor);
 
         InactTimerCancel();
+        HardStopTimerCancel();
 
         UndisplayDevices();
         DisableAllDevices();
